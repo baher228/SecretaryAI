@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import String, Integer, DateTime, Text, JSON, ForeignKey
+from sqlalchemy import String, Integer, DateTime, Text, JSON, ForeignKey, Boolean
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -47,4 +47,37 @@ class UserContext(Base):
     kind: Mapped[str] = mapped_column(String(32))
     content: Mapped[str] = mapped_column(Text)
     file_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class Contact(Base):
+    __tablename__ = "contacts"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(128))
+    phone_number: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    company: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    role: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class UserProfile(Base):
+    __tablename__ = "user_profile"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    full_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    role: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    timezone: Mapped[str] = mapped_column(String(64), default="Europe/London")
+    working_hours: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    preferred_language: Mapped[str] = mapped_column(String(8), default="en")
+    communication_style: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class StandingInstruction(Base):
+    __tablename__ = "standing_instructions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    instruction: Mapped[str] = mapped_column(Text)
+    priority: Mapped[int] = mapped_column(Integer, default=0)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

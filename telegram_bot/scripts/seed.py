@@ -1,7 +1,7 @@
 import asyncio
 from datetime import datetime, timedelta
 from db.session import AsyncSessionLocal, init_db
-from db.models import Call, Task
+from db.models import Call, Task, Contact, UserProfile, StandingInstruction
 
 
 async def main():
@@ -37,8 +37,42 @@ async def main():
             Task(description="Follow up with Maria on Q2 proposal", due_at=now + timedelta(days=2)),
             Task(description="Prepare slides for Tuesday meeting with John", due_at=now + timedelta(days=6)),
         ])
+        s.add(UserProfile(
+            full_name="Vladimir Sukhachyov",
+            role="Founder, VELURO",
+            timezone="Europe/London",
+            working_hours="10:00-19:00 Mon-Fri",
+            preferred_language="en",
+            communication_style="Direct and concise. Skip pleasantries. Ask clarifying questions before assuming.",
+        ))
+        s.add_all([
+            Contact(
+                name="Maria Lopez",
+                phone_number="+447700900123",
+                company="Lopez Capital",
+                role="Investment Partner",
+                notes="Handles Q2 budget review. Prefers email for documents.",
+            ),
+            Contact(
+                name="John Chen",
+                phone_number="+447700900456",
+                company="Chen & Co",
+                role="Client lead",
+                notes="Reschedules frequently. Confirm meetings 24h in advance.",
+            ),
+        ])
+        s.add_all([
+            StandingInstruction(
+                instruction="Never disclose the owner's personal phone number or home address to callers.",
+                priority=100,
+            ),
+            StandingInstruction(
+                instruction="If a caller claims urgency, ask for the specific deadline and reason before escalating.",
+                priority=50,
+            ),
+        ])
         await s.commit()
-    print("Seeded 3 calls and 2 tasks.")
+    print("Seeded 3 calls, 2 tasks, 1 profile, 2 contacts, 2 standing instructions.")
 
 
 if __name__ == "__main__":

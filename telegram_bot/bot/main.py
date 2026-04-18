@@ -1,4 +1,5 @@
 import asyncio
+import time
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import CommandStart
 from aiogram.types import Message
@@ -25,20 +26,54 @@ async def cmd_start(message: Message):
     await message.answer("Ready. Ask about your calls or tasks.")
 
 
+async def _keep_typing(chat_id: int):
+    while True:
+        await bot.send_chat_action(chat_id, "typing")
+        await asyncio.sleep(4)
+
+
 @dp.message(F.text)
 async def handle_text(message: Message):
     if not is_owner(message):
         return
     uid = message.from_user.id
     history = sessions.setdefault(uid, [])
-    await bot.send_chat_action(message.chat.id, "typing")
+
+    typing_task = asyncio.create_task(_keep_typing(message.chat.id))
+    placeholder = await message.answer("…")
+
+    accumulated = ""
+    last_edit = 0.0
+    new_history = None
+
     try:
-        reply, new_history = await run_agent(message.text, history)
+        async for chunk, maybe_history in run_agent(message.text, history):
+            if maybe_history is not None:
+                new_history = maybe_history
+                break
+            accumulated += chunk
+            now = time.perf_counter()
+            if now - last_edit > 0.5 and accumulated.strip():
+                try:
+                    await placeholder.edit_text(accumulated)
+                    last_edit = now
+                except Exception:
+                    pass
+        if accumulated.strip():
+            try:
+                await placeholder.edit_text(accumulated)
+            except Exception:
+                pass
+        else:
+            await placeholder.edit_text("(empty response)")
     except Exception as e:
-        await message.answer(f"Error: {e}")
+        await placeholder.edit_text(f"Error: {e}")
         return
-    sessions[uid] = new_history[-20:]
-    await message.answer(reply or "(empty response)")
+    finally:
+        typing_task.cancel()
+
+    if new_history is not None:
+        sessions[uid] = new_history[-20:]
 
 
 async def main():
