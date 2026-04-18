@@ -744,6 +744,7 @@ class SecretaryService:
         delays = [0.0, 0.7, 1.4]
         last_status = "unknown"
         last_detail = "no detail"
+        ffmpeg_missing = False
         for i in range(attempts):
             if delays[i] > 0:
                 await asyncio.sleep(delays[i])
@@ -763,6 +764,22 @@ class SecretaryService:
             )
             if last_status == "streaming_out":
                 return {"status": last_status, "detail": last_detail}
+
+            if "ffmpeg" in last_detail.lower() and "not found" in last_detail.lower():
+                ffmpeg_missing = True
+                break
+
+        if ffmpeg_missing:
+            self.telegram._append_event(  # type: ignore[attr-defined]
+                call_id,
+                "greeting_stream_aborted",
+                {
+                    "source": source,
+                    "reason": "ffmpeg_missing",
+                    "detail": last_detail,
+                    "audio_path": tts_audio_path,
+                },
+            )
 
         return {"status": last_status, "detail": last_detail}
 

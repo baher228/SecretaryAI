@@ -1,6 +1,7 @@
 import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
+import shutil
 from typing import Any
 
 from secretary_ai.core.config import Settings
@@ -74,12 +75,17 @@ class TelegramCallService:
                 False,
                 "Missing dependencies. Install telethon and py-tgcalls in this environment.",
             )
+        if not self._ffmpeg_available():
+            return (
+                False,
+                "Missing ffmpeg binary. Install ffmpeg in the runtime image/host for Telegram call audio streaming.",
+            )
         if not self._credentials_ready():
             return (
                 False,
                 "Missing TELEGRAM_API_ID or TELEGRAM_API_HASH in environment.",
             )
-        return True, "Telegram MTProto dependencies and credentials are available."
+        return True, "Telegram MTProto dependencies, ffmpeg, and credentials are available."
 
     async def auth_status(self) -> dict[str, Any]:
         ready, detail = self.readiness()
@@ -317,10 +323,11 @@ class TelegramCallService:
                 "detail": "Audio file is being streamed into the call.",
             }
         except Exception as exc:
+            detail = str(exc) or "no message"
             return {
                 "call_id": call_id,
                 "status": "error",
-                "detail": f"Could not stream outgoing audio: {exc.__class__.__name__}",
+                "detail": f"Could not stream outgoing audio: {exc.__class__.__name__}: {detail}",
             }
 
     async def stream_audio_in(self, call_id: str, output_path: str) -> dict[str, Any]:
@@ -354,10 +361,11 @@ class TelegramCallService:
                 "detail": "Incoming call audio recording started.",
             }
         except Exception as exc:
+            detail = str(exc) or "no message"
             return {
                 "call_id": call_id,
                 "status": "error",
-                "detail": f"Could not start recording: {exc.__class__.__name__}",
+                "detail": f"Could not start recording: {exc.__class__.__name__}: {detail}",
             }
 
     def get_call(self, call_id: str) -> dict[str, Any] | None:
@@ -591,6 +599,10 @@ class TelegramCallService:
 
     def _credentials_ready(self) -> bool:
         return bool(self.settings.telegram_api_id and self.settings.telegram_api_hash)
+
+    @staticmethod
+    def _ffmpeg_available() -> bool:
+        return shutil.which("ffmpeg") is not None
 
     @staticmethod
     def _call_id(chat_id: int) -> str:
