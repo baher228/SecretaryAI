@@ -1,0 +1,15 @@
+[project]
+name = "secretary-bot"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "aiogram>=3.13.0",
+    "openai>=1.50.0",
+    "sqlalchemy>=2.0.0",
+    "aiosqlite>=0.20.0",
+    "python-dotenv>=1.0.0",
+    "greenlet>=3.0.0",
+]
+
+[tool.setuptools]
+packages = ["bot", "db", "scripts"]
