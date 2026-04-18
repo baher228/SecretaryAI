@@ -16,3 +16,6 @@ dist/
 .telegram/audio/
 *.wav
 *.mp3
+# Local Telegram auth/session artifacts
+.telegram/*.session
+.telegram/*.session-journal
