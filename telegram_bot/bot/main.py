@@ -9,7 +9,7 @@ from aiogram.types import Message, BotCommand, CallbackQuery, InlineKeyboardMark
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.exceptions import TelegramBadRequest
 
-from bot.config import TELEGRAM_BOT_TOKEN, OWNER_TELEGRAM_ID
+from bot.config import TELEGRAM_BOT_TOKEN, OWNER_TELEGRAM_ID, ZAI_MAX_TOTAL_SECONDS
 from bot.agent import run_agent
 from bot.files import (
     UPLOAD_DIR, extract_pdf_text, summarize_document,
@@ -143,27 +143,28 @@ async def handle_text_internal(
     placeholder = initial_message or await message.answer("<i>Thinking…</i>", parse_mode="HTML")
 
     accumulated = ""
-    last_edit = 0.0
     new_history = None
 
-    try:
+    async def _run_agent_collect():
+        nonlocal accumulated, new_history
         async for chunk, maybe_history in run_agent(text, history):
             if maybe_history is not None:
                 new_history = maybe_history
                 break
             accumulated += chunk
-            now = time.perf_counter()
-            if now - last_edit > 0.5:
-                display = strip_button_marker_for_streaming(accumulated)
-                if display.strip():
-                    await _safe_edit(placeholder, display)
-                    last_edit = now
-        if accumulated.strip():
-            clean_text, contextual_kb = extract_buttons(accumulated)
-            keyboard = contextual_kb if contextual_kb else build_default_keyboard()
-            await _safe_edit(placeholder, clean_text or "(empty response)", reply_markup=keyboard)
-        else:
-            await _safe_edit(placeholder, "(empty response)", reply_markup=build_default_keyboard())
+
+    try:
+        await asyncio.wait_for(_run_agent_collect(), timeout=ZAI_MAX_TOTAL_SECONDS)
+        clean_text, contextual_kb = extract_buttons(accumulated.strip() or "(empty response)")
+        keyboard = contextual_kb if contextual_kb else build_default_keyboard()
+        await _safe_edit(placeholder, clean_text or "(empty response)", reply_markup=keyboard)
+    except asyncio.TimeoutError:
+        await _safe_edit(
+            placeholder,
+            "Sorry, that took too long. Please send a shorter follow-up and I’ll answer fast.",
+            reply_markup=build_default_keyboard(),
+        )
+        return
     except Exception as e:
         await _safe_edit(placeholder, f"Error: {e}")
         return

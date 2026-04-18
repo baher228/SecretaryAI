@@ -11,3 +11,7 @@ ZAI_MODEL = os.environ.get("ZAI_MODEL", "glm-5.1")
 DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite+aiosqlite:///./data/secretary.db")
 GOOGLE_SERVICE_ACCOUNT_JSON = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "./data/service_account.json")
 GOOGLE_CALENDAR_ID = os.environ.get("GOOGLE_CALENDAR_ID", "primary")
+
+ZAI_TIMEOUT_SECONDS = float(os.environ.get("ZAI_TIMEOUT_SECONDS", "18"))
+ZAI_MAX_TOOL_ROUNDS = int(os.environ.get("ZAI_MAX_TOOL_ROUNDS", "2"))
+ZAI_MAX_TOTAL_SECONDS = float(os.environ.get("ZAI_MAX_TOTAL_SECONDS", "28"))
