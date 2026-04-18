@@ -1,74 +1,70 @@
-# Secretary AI (Scaffold)
+# Secretary AI (Telegram MTProto MVP)
 
-This repository is intentionally initialized as architecture only.
-Core business logic and external integrations are not implemented yet.
-Model connectivity check for Z.AI GLM is implemented.
+Experimental Python backend for a hackathon AI secretary using a real Telegram user account (MTProto), not the Bot API.
 
-## Current scope
+## What it does now
 
-- Folder structure and module boundaries.
-- API contracts (request/response models).
-- Route skeletons for inbound/outbound/post-call workflows.
-- A service layer interface (`SecretaryService`) with TODO methods.
-- A working Z.AI GLM connectivity check endpoint.
-- Architecture endpoint for quick project orientation.
+- Telegram user-session auth (`send-code`, `sign-in`, persisted session file).
+- Outbound private Telegram call trigger.
+- Inbound private call state capture (and optional auto-answer).
+- Call event store for state tracking.
+- Best-effort audio tools:
+  - stream local audio file into a call,
+  - record incoming call audio to file.
+- Local API for your main AI agent:
+  - push transcript snippets,
+  - request AI reply + action items from Z.AI GLM.
+- Dashboard for manual testing and hackathon demos.
 
-## Architecture
+## Stack
 
-1. `API Layer` receives requests and exposes contracts.
-2. `SecretaryService` is the orchestrator boundary.
-3. `Adapters` (planned): telephony, intent, calendar, notifications, storage.
+- FastAPI
+- Telethon (MTProto user account)
+- py-tgcalls (Telegram call/media layer)
+- Z.AI GLM (`https://api.z.ai/api/coding/paas/v4`)
 
-## Project layout
-
-```text
-src/secretary_ai/
-  api/routes.py
-  core/config.py
-  domain/models.py
-  services/secretary.py
-  main.py
-tests/
-```
-
-## Quick start (Docker)
+## Quick start
 
 ```bash
 copy .env.example .env
 docker compose up --build
 ```
 
-Detailed run instructions: [LAUNCH.md](./LAUNCH.md)
+- Dashboard: `http://127.0.0.1:8000/dashboard`
+- Swagger: `http://127.0.0.1:8000/docs`
 
-## Endpoints
+Detailed launch guide: [LAUNCH.md](./LAUNCH.md)
 
-- `GET /api/v1/health` - service health + scaffold mode
-- `GET /api/v1/architecture` - architecture summary
-- `POST /api/v1/model/check` - verify Z.AI GLM API connectivity
-- `POST /api/v1/calls/inbound` - placeholder (`501`)
-- `POST /api/v1/calls/outbound` - placeholder (`501`)
-- `POST /api/v1/calls/post-call` - placeholder (`501`)
-- `GET /api/v1/calls/{call_id}` - placeholder (`501`)
-- `GET /dashboard` - interactive API dashboard for manual testing
-- `GET /docs` - Swagger/OpenAPI explorer
+## API overview
 
-## Connect Z.AI GLM
+- `GET /api/v1/health`
+- `GET /api/v1/architecture`
+- `POST /api/v1/model/check`
 
-1. Add your key in `.env`:
-   `ZAI_API_KEY=...`
-2. Keep defaults or change model/base URL:
-   `ZAI_MODEL=glm-5.1`
-   `ZAI_BASE_URL=https://api.z.ai/api/coding/paas/v4`
-3. Start API:
-   `uvicorn secretary_ai.main:app --reload`
-4. Test connection:
-   `POST /api/v1/model/check`
-   body: `{"prompt":"Reply with connection_ok"}`
+Telegram auth:
 
-## Next implementation steps
+- `GET /api/v1/telegram/auth/status`
+- `POST /api/v1/telegram/auth/send-code`
+- `POST /api/v1/telegram/auth/sign-in`
 
-1. Implement intent classification contract.
-2. Add telephony adapter (inbound/outbound + transfer/voicemail).
-3. Add calendar adapter (book/reschedule/cancel).
-4. Add summary dispatcher (Telegram/email/CRM).
-5. Add persistence for calls and actions.
+Calls:
+
+- `POST /api/v1/calls/outbound`
+- `POST /api/v1/calls/{call_id}/hangup`
+- `POST /api/v1/calls/{call_id}/audio/play`
+- `POST /api/v1/calls/{call_id}/audio/record`
+- `POST /api/v1/calls/{call_id}/transcript`
+- `POST /api/v1/calls/post-call`
+- `GET /api/v1/calls`
+- `GET /api/v1/calls/{call_id}`
+- `GET /api/v1/calls/events`
+
+Agent reasoning:
+
+- `POST /api/v1/agent/reply`
+
+## Notes
+
+- This is experimental infrastructure, not production telecom.
+- Telegram call behavior may vary by account/region/client constraints.
+- Keep this provider behind an adapter so you can swap back to Twilio/other vendors later.

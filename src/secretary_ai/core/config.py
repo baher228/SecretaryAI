@@ -17,6 +17,12 @@ class Settings(BaseSettings):
     zai_model: str = "glm-5.1"
     zai_timeout_seconds: float = 30.0
 
+    telegram_api_id: int | None = None
+    telegram_api_hash: str | None = None
+    telegram_session_path: str = ".telegram/secretary"
+    telegram_auto_answer_inbound: bool = True
+    telegram_audio_root: str = ".telegram/audio"
+
 
 @lru_cache
 def get_settings() -> Settings:

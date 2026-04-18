@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
@@ -24,32 +23,53 @@ class OutboundPurpose(str, Enum):
     FOLLOW_UP = "follow_up"
 
 
-class InboundCallRequest(BaseModel):
-    call_id: str
-    from_number: str
-    to_number: str | None = None
-    transcript: str = ""
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+class CallDirection(str, Enum):
+    INBOUND = "inbound"
+    OUTBOUND = "outbound"
+
+
+class CallTranscriptRequest(BaseModel):
+    transcript: str
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class InboundCallResponse(BaseModel):
     call_id: str
-    status: str = "not_implemented"
-    detail: str = "Inbound call workflow is not implemented yet."
+    direction: CallDirection = CallDirection.INBOUND
+    status: str
+    detail: str
 
 
 class OutboundCallRequest(BaseModel):
-    to_number: str
-    message: str
-    purpose: OutboundPurpose
+    target_user: str = Field(description="Telegram username (@name) or numeric user id as string.")
+    purpose: OutboundPurpose = OutboundPurpose.REMINDER
+    initial_audio_path: str | None = Field(
+        default=None,
+        description="Optional local audio file path to stream into the call immediately.",
+    )
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class OutboundCallResponse(BaseModel):
     call_id: str
-    status: str = "not_implemented"
-    detail: str = "Outbound call workflow is not implemented yet."
+    status: str
+    detail: str
+    provider: str = "telegram_mtproto"
+    chat_id: int | None = None
+
+
+class CallAudioPlayRequest(BaseModel):
+    audio_path: str
+
+
+class CallAudioRecordRequest(BaseModel):
+    output_path: str
+
+
+class CallAudioResponse(BaseModel):
+    call_id: str
+    status: str
+    detail: str
 
 
 class PostCallEventRequest(BaseModel):
@@ -60,8 +80,8 @@ class PostCallEventRequest(BaseModel):
 
 class PostCallSummary(BaseModel):
     call_id: str
-    status: str = "not_implemented"
-    detail: str = "Post-call summary workflow is not implemented yet."
+    status: str
+    detail: str
 
 
 class ArchitectureOverview(BaseModel):
@@ -81,3 +101,51 @@ class ModelCheckResponse(BaseModel):
     connected: bool
     detail: str
     output: str | None = None
+
+
+class TelegramAuthSendCodeRequest(BaseModel):
+    phone_number: str
+
+
+class TelegramAuthSendCodeResponse(BaseModel):
+    status: str
+    phone_number: str
+    phone_code_hash: str | None = None
+    detail: str
+
+
+class TelegramAuthSignInRequest(BaseModel):
+    phone_number: str
+    code: str | None = None
+    phone_code_hash: str | None = None
+    password: str | None = None
+
+
+class TelegramAuthStatusResponse(BaseModel):
+    connected: bool
+    authorized: bool
+    detail: str
+    session_path: str
+
+
+class TelegramAuthSignInResponse(BaseModel):
+    status: str
+    authorized: bool
+    detail: str
+
+
+class CallEventAck(BaseModel):
+    status: str
+    detail: str
+
+
+class AgentReplyRequest(BaseModel):
+    call_id: str
+    transcript: str
+    context: dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentReplyResponse(BaseModel):
+    call_id: str
+    reply: str
+    action_items: list[str] = Field(default_factory=list)
