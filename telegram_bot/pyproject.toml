@@ -12,4 +12,4 @@ dependencies = [
 ]
 
 [tool.setuptools]
-packages = ["bot", "db", "scripts"]
+packages = ["bot", "db", "scripts", "shared"]
