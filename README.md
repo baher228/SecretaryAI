@@ -49,6 +49,8 @@ Detailed run instructions: [LAUNCH.md](./LAUNCH.md)
 - `POST /api/v1/calls/outbound` - placeholder (`501`)
 - `POST /api/v1/calls/post-call` - placeholder (`501`)
 - `GET /api/v1/calls/{call_id}` - placeholder (`501`)
+- `GET /dashboard` - interactive API dashboard for manual testing
+- `GET /docs` - Swagger/OpenAPI explorer
 
 ## Connect Z.AI GLM
 
@@ -56,7 +58,7 @@ Detailed run instructions: [LAUNCH.md](./LAUNCH.md)
    `ZAI_API_KEY=...`
 2. Keep defaults or change model/base URL:
    `ZAI_MODEL=glm-5.1`
-   `ZAI_BASE_URL=https://api.z.ai/api/paas/v4`
+   `ZAI_BASE_URL=https://api.z.ai/api/coding/paas/v4`
 3. Start API:
    `uvicorn secretary_ai.main:app --reload`
 4. Test connection:

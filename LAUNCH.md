@@ -12,14 +12,8 @@ Open `.env` and set at least:
 
 ```env
 ZAI_API_KEY=your_real_key_here
-ZAI_BASE_URL=https://api.z.ai/api/paas/v4
-ZAI_MODEL=glm-5.1
-```
-
-If you are on GLM Coding Plan, use:
-
-```env
 ZAI_BASE_URL=https://api.z.ai/api/coding/paas/v4
+ZAI_MODEL=glm-5.1
 ```
 
 ## 2. Build and start container
@@ -31,6 +25,14 @@ docker compose up --build
 Server endpoint:
 
 `http://127.0.0.1:8000`
+
+Open dashboard:
+
+`http://127.0.0.1:8000/dashboard`
+
+Swagger docs:
+
+`http://127.0.0.1:8000/docs`
 
 ## 3. Verify service health
 

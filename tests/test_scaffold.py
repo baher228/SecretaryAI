@@ -24,6 +24,14 @@ def test_architecture_endpoint_exists() -> None:
     assert "API Layer (FastAPI routes)" in payload["components"]
 
 
+def test_dashboard_endpoint_exists() -> None:
+    get_settings.cache_clear()
+    client = TestClient(create_app())
+    response = client.get("/dashboard")
+    assert response.status_code == 200
+    assert "Secretary AI Dashboard" in response.text
+
+
 def test_model_check_route_works_with_mock(monkeypatch) -> None:
     async def fake_check_model_connection(self, prompt: str) -> ModelCheckResponse:
         return ModelCheckResponse(
