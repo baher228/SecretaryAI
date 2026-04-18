@@ -2,7 +2,14 @@ import json
 from datetime import datetime, timedelta
 from sqlalchemy import select, desc
 from db.session import AsyncSessionLocal
-from db.models import Call, Task
+from db.models import Call, Task, UserContext
+from service.google_calendar import (
+    list_events as _gcal_list_events,
+    create_event as _gcal_create_event,
+    update_event as _gcal_update_event,
+    delete_event as _gcal_delete_event,
+    find_free_slots as _gcal_find_free_slots,
+)
 
 TOOL_SCHEMAS = [
     {
@@ -69,6 +76,83 @@ TOOL_SCHEMAS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "gcal_list_events",
+            "description": "List events from Google Calendar. Defaults to next 7 days.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "start_iso": {"type": "string"},
+                    "end_iso": {"type": "string"},
+                    "max_results": {"type": "integer"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "gcal_create_event",
+            "description": "Create a new calendar event. ALWAYS confirm details with the user before calling.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string"},
+                    "start_iso": {"type": "string"},
+                    "end_iso": {"type": "string"},
+                    "description": {"type": "string"},
+                    "location": {"type": "string"},
+                    "attendees": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["title", "start_iso", "end_iso"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "gcal_update_event",
+            "description": "Update an existing event. Must have event_id from list_events. Always confirm with user.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "event_id": {"type": "string"},
+                    "changes": {"type": "object"},
+                },
+                "required": ["event_id", "changes"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "gcal_delete_event",
+            "description": "Delete an event. Always confirm with user first.",
+            "parameters": {
+                "type": "object",
+                "properties": {"event_id": {"type": "string"}},
+                "required": ["event_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "gcal_find_free_slots",
+            "description": "Find free time slots of given duration in working hours.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "duration_minutes": {"type": "integer"},
+                    "date_range_start_iso": {"type": "string"},
+                    "date_range_end_iso": {"type": "string"},
+                },
+                "required": ["duration_minutes", "date_range_start_iso", "date_range_end_iso"],
+            },
+        },
+    },
 ]
 
 
@@ -125,6 +209,14 @@ async def _list_tasks(status: str = "open"):
         ]
 
 
+async def _store_context(kind: str, content: str, file_path: str | None = None):
+    async with AsyncSessionLocal() as s:
+        entry = UserContext(kind=kind, content=content, file_path=file_path)
+        s.add(entry)
+        await s.commit()
+        return {"id": entry.id, "status": "stored"}
+
+
 async def _complete_task(task_id: int):
     async with AsyncSessionLocal() as s:
         t = await s.get(Task, task_id)
@@ -141,6 +233,11 @@ HANDLERS = {
     "create_task": _create_task,
     "list_tasks": _list_tasks,
     "complete_task": _complete_task,
+    "gcal_list_events": _gcal_list_events,
+    "gcal_create_event": _gcal_create_event,
+    "gcal_update_event": _gcal_update_event,
+    "gcal_delete_event": _gcal_delete_event,
+    "gcal_find_free_slots": _gcal_find_free_slots,
 }
 
 
