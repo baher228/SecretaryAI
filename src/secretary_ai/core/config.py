@@ -12,6 +12,11 @@ class Settings(BaseSettings):
     api_port: int = 8000
     timezone: str = "Europe/London"
 
+    zai_api_key: str | None = None
+    zai_base_url: str = "https://api.z.ai/api/paas/v4"
+    zai_model: str = "glm-5.1"
+    zai_timeout_seconds: float = 30.0
+
 
 @lru_cache
 def get_settings() -> Settings:

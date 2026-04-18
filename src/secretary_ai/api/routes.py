@@ -4,6 +4,8 @@ from secretary_ai.domain.models import (
     ArchitectureOverview,
     InboundCallRequest,
     InboundCallResponse,
+    ModelCheckRequest,
+    ModelCheckResponse,
     OutboundCallRequest,
     OutboundCallResponse,
     PostCallEventRequest,
@@ -26,6 +28,13 @@ async def health() -> dict[str, str]:
 @router.get("/architecture", response_model=ArchitectureOverview)
 async def architecture(secretary: SecretaryService = Depends(get_secretary)) -> ArchitectureOverview:
     return secretary.architecture_overview()
+
+
+@router.post("/model/check", response_model=ModelCheckResponse)
+async def check_model(
+    payload: ModelCheckRequest, secretary: SecretaryService = Depends(get_secretary)
+) -> ModelCheckResponse:
+    return await secretary.check_model_connection(prompt=payload.prompt)
 
 
 @router.post("/calls/inbound", response_model=InboundCallResponse)

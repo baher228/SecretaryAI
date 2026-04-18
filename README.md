@@ -2,6 +2,7 @@
 
 This repository is intentionally initialized as architecture only.
 Core business logic and external integrations are not implemented yet.
+Model connectivity check for Z.AI GLM is implemented.
 
 ## Current scope
 
@@ -9,6 +10,7 @@ Core business logic and external integrations are not implemented yet.
 - API contracts (request/response models).
 - Route skeletons for inbound/outbound/post-call workflows.
 - A service layer interface (`SecretaryService`) with TODO methods.
+- A working Z.AI GLM connectivity check endpoint.
 - Architecture endpoint for quick project orientation.
 
 ## Architecture
@@ -24,29 +26,42 @@ src/secretary_ai/
   api/routes.py
   core/config.py
   domain/models.py
-  secretary.py
+  services/secretary.py
   main.py
 tests/
 ```
 
-## Quick start
+## Quick start (Docker)
 
 ```bash
-python -m venv .venv
-. .venv/Scripts/activate  # PowerShell: .\.venv\Scripts\Activate.ps1
-pip install -e ".[dev]"
 copy .env.example .env
-uvicorn secretary_ai.main:app --reload
+docker compose up --build
 ```
+
+Detailed run instructions: [LAUNCH.md](./LAUNCH.md)
 
 ## Endpoints
 
 - `GET /api/v1/health` - service health + scaffold mode
 - `GET /api/v1/architecture` - architecture summary
+- `POST /api/v1/model/check` - verify Z.AI GLM API connectivity
 - `POST /api/v1/calls/inbound` - placeholder (`501`)
 - `POST /api/v1/calls/outbound` - placeholder (`501`)
 - `POST /api/v1/calls/post-call` - placeholder (`501`)
 - `GET /api/v1/calls/{call_id}` - placeholder (`501`)
+
+## Connect Z.AI GLM
+
+1. Add your key in `.env`:
+   `ZAI_API_KEY=...`
+2. Keep defaults or change model/base URL:
+   `ZAI_MODEL=glm-5.1`
+   `ZAI_BASE_URL=https://api.z.ai/api/paas/v4`
+3. Start API:
+   `uvicorn secretary_ai.main:app --reload`
+4. Test connection:
+   `POST /api/v1/model/check`
+   body: `{"prompt":"Reply with connection_ok"}`
 
 ## Next implementation steps
 

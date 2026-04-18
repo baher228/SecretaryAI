@@ -69,3 +69,15 @@ class ArchitectureOverview(BaseModel):
     mode: str
     components: list[str]
     notes: str
+
+
+class ModelCheckRequest(BaseModel):
+    prompt: str = "Reply with: connection_ok"
+
+
+class ModelCheckResponse(BaseModel):
+    provider: str = "z.ai"
+    model: str
+    connected: bool
+    detail: str
+    output: str | None = None
