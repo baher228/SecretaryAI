@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     zai_base_url: str = "https://api.z.ai/api/coding/paas/v4"
     zai_model: str = "glm-5.1"
     zai_timeout_seconds: float = 30.0
+    agent_max_tokens: int = 160
+    agent_history_turns: int = 4
 
     telegram_api_id: int | None = None
     telegram_api_hash: str | None = None
@@ -41,7 +43,10 @@ class Settings(BaseSettings):
     stt_device: str = "cpu"
     stt_compute_type: str = "int8"
     stt_min_chars: int = 6
-    telegram_live_poll_seconds: float = 2.5
+    stt_recent_only: bool = True
+    stt_tail_seconds: float = 5.0
+    stt_min_new_bytes: int = 12000
+    telegram_live_poll_seconds: float = 1.2
     telegram_live_tts_cooldown_seconds: float = 2.5
 
 

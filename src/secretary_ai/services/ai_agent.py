@@ -32,7 +32,7 @@ class SecretaryAIAgent:
             "model": self.settings.zai_model,
             "messages": messages,
             "temperature": 0.15,
-            "max_tokens": 450,
+            "max_tokens": self.settings.agent_max_tokens,
         }
         result = await self._zai_chat_completion(payload)
         if result.get("error"):
@@ -71,9 +71,10 @@ class SecretaryAIAgent:
             "\"extracted_fields\": object with useful slots like date/time/name/phone/topic"
             "}. "
             "Output must be a single JSON object only, no markdown, no code fences, no extra text. "
-            "Be concise and practical. If unsure, use intent=unknown with lower confidence."
+            "Be concise and practical. Keep reply under 18 words. "
+            "If unsure, use intent=unknown with lower confidence."
         )
-        compact_history = history[-6:]
+        compact_history = history[-max(1, int(self.settings.agent_history_turns)) :]
         history_text = "\n".join(
             f"{turn.get('role', 'unknown')}: {turn.get('content', '')}" for turn in compact_history
         )

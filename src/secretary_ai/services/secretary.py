@@ -347,6 +347,7 @@ class SecretaryService:
             "last_stt_status": "waiting_audio",
             "last_full_transcript": "",
             "last_transcript_delta": "",
+            "last_audio_size": 0,
             "pause_until": None,
             "started_at": self._now_iso(),
         }
@@ -444,6 +445,18 @@ class SecretaryService:
             if isinstance(pause_until, datetime) and datetime.now(timezone.utc) < pause_until:
                 await asyncio.sleep(0.4)
                 continue
+
+            recording_path = Path(str(session["recording_path"]))
+            if not recording_path.exists():
+                await asyncio.sleep(0.5)
+                continue
+            file_size = recording_path.stat().st_size
+            previous_size = int(session.get("last_audio_size") or 0)
+            min_new_bytes = max(1024, int(self.settings.stt_min_new_bytes))
+            if file_size <= 0 or (file_size - previous_size) < min_new_bytes:
+                await asyncio.sleep(min(0.6, poll_seconds))
+                continue
+            session["last_audio_size"] = file_size
 
             text, stt_status = await self.stt.transcribe(str(session["recording_path"]))
             session["last_stt_status"] = stt_status
