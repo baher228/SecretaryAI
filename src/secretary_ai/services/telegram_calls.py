@@ -233,7 +233,8 @@ class TelegramCallService:
             if source_path:
                 await self._calls.play(chat_id, stream=source_path)
             else:
-                await self._calls.play(chat_id)
+                # Join/establish private call without media file probing (ffprobe).
+                await self._calls.play(chat_id, stream=None)
             self._upsert_call(
                 call_id,
                 {"status": "active", "connected_at": self._now_iso(), "updated_at": self._now_iso()},
@@ -248,11 +249,15 @@ class TelegramCallService:
             }
         except Exception as exc:
             self._upsert_call(call_id, {"status": "failed", "updated_at": self._now_iso()})
-            self._append_event(call_id, "call_failed", {"error": exc.__class__.__name__})
+            self._append_event(
+                call_id,
+                "call_failed",
+                {"error": exc.__class__.__name__, "message": str(exc)},
+            )
             return {
                 "call_id": call_id,
                 "status": "failed",
-                "detail": f"Outbound call failed: {exc.__class__.__name__}",
+                "detail": f"Outbound call failed: {exc.__class__.__name__}: {str(exc) or 'no message'}",
                 "provider": "telegram_mtproto",
                 "chat_id": chat_id,
             }
@@ -481,11 +486,16 @@ class TelegramCallService:
         )
         if should_auto_answer:
             try:
-                await self._calls.play(chat_id)
+                # Answer call without forcing a probed media stream.
+                await self._calls.play(chat_id, stream=None)
                 self._upsert_call(call_id, {"status": "active", "updated_at": self._now_iso()})
                 self._append_event(call_id, "auto_answered", {})
             except Exception as exc:
-                self._append_event(call_id, "auto_answer_failed", {"error": exc.__class__.__name__})
+                self._append_event(
+                    call_id,
+                    "auto_answer_failed",
+                    {"error": exc.__class__.__name__, "message": str(exc)},
+                )
 
     async def _handle_stream_end(self, update: Any) -> None:
         call_id = self._call_id(int(update.chat_id))

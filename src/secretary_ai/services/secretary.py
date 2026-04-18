@@ -145,26 +145,32 @@ class SecretaryService:
                 reply = f"AI error: {result['error']}"
             else:
                 msg_data = self._extract_message(result["data"])
-                raw_content = msg_data.get("content")
-                if isinstance(raw_content, list):
-                    # Some providers return structured content blocks.
-                    parts: list[str] = []
-                    for item in raw_content:
-                        if isinstance(item, dict):
-                            text_part = str(item.get("text") or "").strip()
-                            if text_part:
-                                parts.append(text_part)
-                        else:
-                            text_part = str(item).strip()
-                            if text_part:
-                                parts.append(text_part)
-                    reply = " ".join(parts).strip()
-                else:
-                    reply = str(raw_content or "").strip()
+                reply = self._extract_text_from_content(msg_data.get("content"))
                 if not reply:
-                    reply = "Sorry, I could not generate a reply right now."
-                else:
-                    reply = self._normalize_chat_reply(reply)
+                    retry_messages = [
+                        {
+                            "role": "system",
+                            "content": (
+                                "Reply in one short sentence only. "
+                                "Final answer only. No analysis."
+                            ),
+                        },
+                        {"role": "user", "content": payload.message},
+                    ]
+                    retry_payload = {
+                        "model": chat_model,
+                        "messages": retry_messages,
+                        "temperature": 0.1,
+                        "max_tokens": max(24, min(64, int(self.settings.chat_max_tokens))),
+                    }
+                    retry_result = await self._zai_chat_completion(retry_payload)
+                    if not retry_result.get("error"):
+                        retry_msg = self._extract_message(retry_result["data"])
+                        reply = self._extract_text_from_content(retry_msg.get("content"))
+
+                reply = self._normalize_chat_reply(reply)
+                if not reply:
+                    reply = self._fallback_short_reply(payload.message)
 
         new_history = list(payload.history) + [
             ChatMessage(role="user", content=payload.message),
@@ -219,6 +225,37 @@ class SecretaryService:
         if len(text) > 180:
             text = text[:177].rstrip() + "..."
         return text
+
+    @staticmethod
+    def _extract_text_from_content(content: Any) -> str:
+        if content is None:
+            return ""
+        if isinstance(content, str):
+            return content.strip()
+        if isinstance(content, dict):
+            for key in ("text", "content", "value", "output_text"):
+                value = content.get(key)
+                extracted = SecretaryService._extract_text_from_content(value)
+                if extracted:
+                    return extracted
+            return ""
+        if isinstance(content, list):
+            parts: list[str] = []
+            for item in content:
+                extracted = SecretaryService._extract_text_from_content(item)
+                if extracted:
+                    parts.append(extracted)
+            return " ".join(parts).strip()
+        return str(content).strip()
+
+    @staticmethod
+    def _fallback_short_reply(user_message: str) -> str:
+        text = (user_message or "").strip().lower()
+        if any(token in text for token in ("hello", "hi", "hey")):
+            return "Hello. How can I help?"
+        if "how are you" in text:
+            return "I'm good, thanks. How can I help?"
+        return "Understood. Tell me what you need, and I'll keep it brief."
 
     async def telegram_auth_status(self) -> TelegramAuthStatusResponse:
         payload = await self.telegram.auth_status()

@@ -517,6 +517,7 @@ DASHBOARD_HTML = """<!doctype html>
       let voiceSpeaking = false;
       let voiceTurnInFlight = false;
       let voiceDialogSessionId = 0;
+      let voiceBrowserChoice = null;
 
       async function fetchJson(path, init = {}, timeoutMs = 8000) {
         const controller = new AbortController();
@@ -577,23 +578,61 @@ DASHBOARD_HTML = """<!doctype html>
         log.scrollTop = log.scrollHeight;
       }
 
-      function voiceSpeak(text) {
+      function voiceWaitForVoices(timeoutMs = 900) {
         return new Promise((resolve) => {
           if (!window.speechSynthesis) {
-            resolve();
+            resolve([]);
             return;
           }
-          const utterance = new SpeechSynthesisUtterance(text);
-          utterance.lang = "en-GB";
-          utterance.rate = 1.0;
-          utterance.pitch = 1.0;
-          try {
-            const voices = window.speechSynthesis.getVoices() || [];
-            const preferred = voices.find(v =>
-              /joanna|jenny|sonia|aria|libby/i.test(v.name || "")
-            ) || voices.find(v => /en-/i.test(v.lang || ""));
-            if (preferred) utterance.voice = preferred;
-          } catch (_) {}
+          const initial = window.speechSynthesis.getVoices() || [];
+          if (initial.length > 0) {
+            resolve(initial);
+            return;
+          }
+          const onChanged = () => {
+            window.speechSynthesis.removeEventListener("voiceschanged", onChanged);
+            resolve(window.speechSynthesis.getVoices() || []);
+          };
+          window.speechSynthesis.addEventListener("voiceschanged", onChanged);
+          setTimeout(() => {
+            window.speechSynthesis.removeEventListener("voiceschanged", onChanged);
+            resolve(window.speechSynthesis.getVoices() || []);
+          }, timeoutMs);
+        });
+      }
+
+      function voicePickBrowserVoice(voices) {
+        if (!Array.isArray(voices) || voices.length === 0) return null;
+        const byName = (re) => voices.find(v => re.test(v.name || ""));
+        const byLang = (re) => voices.find(v => re.test(v.lang || ""));
+        const isMale = (name) => /ryan|guy|davis|daniel|thomas|steffan|david|mark|male/i.test(name || "");
+        const firstNonMale = (re) => voices.find(v => re.test(v.lang || "") && !isMale(v.name || ""));
+
+        return (
+          byName(/joanna|jenny|sonia|aria|libby|sara|emma|olivia|zira|hazel|samantha|victoria|ava|alloy/i) ||
+          firstNonMale(/^en-GB/i) ||
+          firstNonMale(/^en-US/i) ||
+          byLang(/^en-GB/i) ||
+          byLang(/^en-US/i) ||
+          voices[0]
+        );
+      }
+
+      async function voiceSpeak(text) {
+        if (!window.speechSynthesis) return;
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = "en-GB";
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+        try {
+          if (!voiceBrowserChoice) {
+            const voices = await voiceWaitForVoices();
+            voiceBrowserChoice = voicePickBrowserVoice(voices);
+          }
+          if (voiceBrowserChoice) utterance.voice = voiceBrowserChoice;
+        } catch (_) {}
+
+        await new Promise((resolve) => {
           utterance.onend = () => resolve();
           utterance.onerror = () => resolve();
           window.speechSynthesis.cancel();
@@ -655,7 +694,7 @@ DASHBOARD_HTML = """<!doctype html>
         }
       }
 
-      function voiceStartDialog() {
+      async function voiceStartDialog() {
         if (voiceDialogueOn) {
           voiceSetDialogState("Already running", true);
           return;
@@ -673,7 +712,12 @@ DASHBOARD_HTML = """<!doctype html>
         voiceRecognition.maxAlternatives = 1;
 
         voiceDialogueOn = true;
-        voiceSetDialogState("Listening...", true);
+        try {
+          const voices = await voiceWaitForVoices();
+          voiceBrowserChoice = voicePickBrowserVoice(voices);
+        } catch (_) {}
+        const chosen = voiceBrowserChoice ? ` (${voiceBrowserChoice.name})` : "";
+        voiceSetDialogState(`Listening${chosen}...`, true);
         voiceAppendLog("System", "Voice dialogue started.");
 
         voiceRecognition.onresult = (event) => {
