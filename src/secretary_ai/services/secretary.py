@@ -12,6 +12,11 @@ from secretary_ai.domain.models import (
     AgentAnalyzeResponse,
     AgentReplyResponse,
     ArchitectureOverview,
+    CalendarCacheResponse,
+    CalendarProcessResponse,
+    CalendarQueueRequest,
+    CalendarQueueResponse,
+    CalendarQueueSnapshotResponse,
     CallAudioPlayRequest,
     CallAudioRecordRequest,
     CallAudioResponse,
@@ -34,6 +39,7 @@ from secretary_ai.domain.models import (
     TelegramAuthStatusResponse,
 )
 from secretary_ai.services.ai_agent import SecretaryAIAgent
+from secretary_ai.services.calendar import CalendarService
 from secretary_ai.services.stt import STTEngine
 from secretary_ai.services.telegram_calls import TelegramCallService
 from secretary_ai.services.tts import TTSEngine
@@ -45,19 +51,25 @@ class SecretaryService:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.telegram = TelegramCallService(settings)
+        self.calendar = CalendarService(settings)
         self.ai = SecretaryAIAgent(settings)
         self.tts = TTSEngine(settings)
         self.stt = STTEngine(settings)
         self.live_sessions: dict[str, dict[str, Any]] = {}
         self._auto_live_task: asyncio.Task | None = None
+        self._calendar_worker_task: asyncio.Task | None = None
 
     async def startup(self) -> None:
         await self.telegram.start()
+        await self.calendar.refresh_cache()
         if self.settings.telegram_auto_start_live_agent:
             self._auto_live_task = asyncio.create_task(self._auto_attach_live_loop())
+        if self.settings.calendar_worker_enabled:
+            self._calendar_worker_task = asyncio.create_task(self._calendar_worker_loop())
 
     async def shutdown(self) -> None:
         await self._stop_auto_live_task()
+        await self._stop_calendar_worker_task()
         await self._stop_all_live_sessions()
         await self.telegram.stop()
 
@@ -355,7 +367,22 @@ class SecretaryService:
         context: dict[str, Any],
         speak_response: bool,
     ) -> AgentLiveRespondResponse:
-        analysis = await self.analyze_agent_turn(call_id=call_id, transcript=transcript, context=context)
+        calendar_turn = await self.calendar.quick_reply_or_enqueue(
+            call_id=call_id,
+            transcript=transcript,
+            context=context,
+        )
+
+        forced_reply = calendar_turn.get("reply") if isinstance(calendar_turn, dict) else None
+        if forced_reply:
+            analysis = await self.analyze_agent_turn(call_id=call_id, transcript=transcript, context=context)
+            analysis.reply = str(forced_reply)
+            if bool(calendar_turn.get("queued")):
+                action_items = list(analysis.action_items)
+                action_items.append(f"calendar_queue:{calendar_turn.get('task_id')}")
+                analysis.action_items = action_items[:8]
+        else:
+            analysis = await self.analyze_agent_turn(call_id=call_id, transcript=transcript, context=context)
 
         tts_audio_path: str | None = None
         tts_status: str | None = None
@@ -429,10 +456,17 @@ class SecretaryService:
             "detail": detail,
             "session_path": self.settings.telegram_session_path,
         }
+        calendar_ready, calendar_detail = self.calendar.readiness()
         return {
             "ready": ready,
             "detail": detail,
             "auth": auth,
+            "calendar": {
+                "ready": calendar_ready,
+                "detail": calendar_detail,
+                "cache": self.calendar.cache_snapshot(limit=3),
+                "queue": self.calendar.queue_snapshot(limit=5),
+            },
             "notes": [
                 "Telegram bot accounts cannot receive voice calls directly.",
                 "Voice calls require authorized Telegram user session (API_ID/API_HASH + sign-in).",
@@ -452,6 +486,37 @@ class SecretaryService:
     async def stream_audio_in(self, call_id: str, payload: CallAudioRecordRequest) -> CallAudioResponse:
         result = await self.telegram.stream_audio_in(call_id, payload.output_path)
         return CallAudioResponse(**result)
+
+    async def calendar_cache(self, limit: int = 10) -> CalendarCacheResponse:
+        return CalendarCacheResponse(**self.calendar.cache_snapshot(limit=limit))
+
+    async def calendar_queue(self, limit: int = 20) -> CalendarQueueSnapshotResponse:
+        return CalendarQueueSnapshotResponse(**self.calendar.queue_snapshot(limit=limit))
+
+    async def calendar_enqueue(self, payload: CalendarQueueRequest) -> CalendarQueueResponse:
+        result = await self.calendar.quick_reply_or_enqueue(
+            call_id=payload.call_id,
+            transcript=payload.transcript,
+            context=payload.context,
+        )
+        return CalendarQueueResponse(
+            status=str(result.get("status") or "unknown"),
+            detail=str(result.get("detail")) if result.get("detail") is not None else None,
+            reply=str(result.get("reply")) if result.get("reply") is not None else None,
+            queued=bool(result.get("queued", False)),
+            task_id=str(result.get("task_id")) if result.get("task_id") is not None else None,
+        )
+
+    async def calendar_process(self, max_items: int = 5) -> CalendarProcessResponse:
+        result = await self.calendar.process_queue(max_items=max_items)
+        return CalendarProcessResponse(
+            status=str(result.get("status") or "unknown"),
+            processed=int(result.get("processed") or 0),
+            results=result.get("results") or [],
+        )
+
+    async def calendar_refresh(self, days: int = 7, max_results: int = 30) -> dict[str, Any]:
+        return await self.calendar.refresh_cache(days=days, max_results=max_results)
 
     async def start_telegram_live_agent(
         self,
@@ -671,6 +736,21 @@ class SecretaryService:
         except Exception:
             pass
 
+    async def _stop_calendar_worker_task(self) -> None:
+        task = self._calendar_worker_task
+        self._calendar_worker_task = None
+        if not task:
+            return
+        if task.done():
+            return
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            pass
+
     async def _auto_attach_live_loop(self) -> None:
         scan_seconds = max(0.5, float(self.settings.telegram_auto_start_scan_seconds))
         retry_seconds = max(4.0, scan_seconds * 2.0)
@@ -726,6 +806,19 @@ class SecretaryService:
                 pass
 
             await asyncio.sleep(scan_seconds)
+
+    async def _calendar_worker_loop(self) -> None:
+        poll_seconds = max(0.5, float(self.settings.calendar_worker_poll_seconds))
+        batch_size = max(1, int(self.settings.calendar_worker_batch_size))
+
+        while True:
+            try:
+                await self.calendar.process_queue(max_items=batch_size)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                pass
+            await asyncio.sleep(poll_seconds)
 
     async def _play_greeting_with_retry(self, call_id: str, source: str) -> dict[str, Any]:
         tts_audio_path, tts_status = await self.tts.synthesize(

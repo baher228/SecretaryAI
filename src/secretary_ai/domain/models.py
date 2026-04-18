@@ -230,3 +230,34 @@ class ChatResponse(BaseModel):
     reply: str
     model: str
     history: list[ChatMessage] = Field(default_factory=list)
+
+
+class CalendarQueueRequest(BaseModel):
+    call_id: str
+    transcript: str
+    context: dict[str, Any] = Field(default_factory=dict)
+
+
+class CalendarQueueResponse(BaseModel):
+    status: str
+    detail: str | None = None
+    reply: str | None = None
+    queued: bool = False
+    task_id: str | None = None
+
+
+class CalendarProcessResponse(BaseModel):
+    status: str
+    processed: int
+    results: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class CalendarCacheResponse(BaseModel):
+    updated_at: str | None = None
+    events: list[dict[str, Any]] = Field(default_factory=list)
+    total_events: int = 0
+
+
+class CalendarQueueSnapshotResponse(BaseModel):
+    total: int
+    items: list[dict[str, Any]] = Field(default_factory=list)

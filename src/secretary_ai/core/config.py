@@ -56,6 +56,18 @@ class Settings(BaseSettings):
     telegram_live_poll_seconds: float = 0.6
     telegram_live_tts_cooldown_seconds: float = 2.5
 
+    calendar_enabled: bool = True
+    calendar_timezone: str = "Europe/London"
+    calendar_id: str | None = None
+    calendar_service_account_json: str | None = None
+    calendar_cache_path: str = ".telegram/cache/calendar_events.json"
+    calendar_queue_path: str = ".telegram/cache/calendar_queue.json"
+    calendar_worker_enabled: bool = True
+    calendar_worker_poll_seconds: float = 2.0
+    calendar_worker_batch_size: int = 4
+    calendar_smart_model: str | None = None
+    calendar_planner_max_tokens: int = 140
+
 
 @lru_cache
 def get_settings() -> Settings:

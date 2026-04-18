@@ -11,6 +11,11 @@ from secretary_ai.domain.models import (
     AgentReplyRequest,
     AgentReplyResponse,
     ArchitectureOverview,
+    CalendarCacheResponse,
+    CalendarProcessResponse,
+    CalendarQueueRequest,
+    CalendarQueueResponse,
+    CalendarQueueSnapshotResponse,
     CallAudioPlayRequest,
     CallAudioRecordRequest,
     CallAudioResponse,
@@ -233,6 +238,47 @@ async def get_telegram_live_agent_status(
 @router.get("/calls/readiness")
 async def calls_readiness(secretary: SecretaryService = Depends(get_secretary)) -> dict:
     return await secretary.calls_readiness()
+
+
+@router.get("/calendar/cache", response_model=CalendarCacheResponse)
+async def calendar_cache(
+    limit: int = Query(default=10, ge=1, le=100),
+    secretary: SecretaryService = Depends(get_secretary),
+) -> CalendarCacheResponse:
+    return await secretary.calendar_cache(limit=limit)
+
+
+@router.get("/calendar/queue", response_model=CalendarQueueSnapshotResponse)
+async def calendar_queue(
+    limit: int = Query(default=20, ge=1, le=200),
+    secretary: SecretaryService = Depends(get_secretary),
+) -> CalendarQueueSnapshotResponse:
+    return await secretary.calendar_queue(limit=limit)
+
+
+@router.post("/calendar/queue", response_model=CalendarQueueResponse)
+async def calendar_enqueue(
+    payload: CalendarQueueRequest,
+    secretary: SecretaryService = Depends(get_secretary),
+) -> CalendarQueueResponse:
+    return await secretary.calendar_enqueue(payload)
+
+
+@router.post("/calendar/process", response_model=CalendarProcessResponse)
+async def calendar_process(
+    max_items: int = Query(default=5, ge=1, le=50),
+    secretary: SecretaryService = Depends(get_secretary),
+) -> CalendarProcessResponse:
+    return await secretary.calendar_process(max_items=max_items)
+
+
+@router.post("/calendar/refresh")
+async def calendar_refresh(
+    days: int = Query(default=7, ge=1, le=60),
+    max_results: int = Query(default=30, ge=1, le=200),
+    secretary: SecretaryService = Depends(get_secretary),
+) -> dict:
+    return await secretary.calendar_refresh(days=days, max_results=max_results)
 
 
 @router.get("/calls")
