@@ -218,6 +218,8 @@ DASHBOARD_HTML = """<!doctype html>
       .layout { display: grid; gap: 24px; grid-template-columns: 1.2fr 0.8fr; }
       @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
       .cards { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+      .test-list { margin: 0; padding-left: 18px; color: var(--muted); line-height: 1.7; font-size: 0.92rem; }
+      .test-code { font-family: "JetBrains Mono", monospace; background: rgba(15,118,110,0.08); padding: 2px 6px; border-radius: 8px; color: #0f5f59; }
       .card {
         border: 1px solid var(--line);
         border-radius: 14px;

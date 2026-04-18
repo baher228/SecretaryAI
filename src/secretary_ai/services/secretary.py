@@ -161,7 +161,7 @@ class SecretaryService:
                         "model": chat_model,
                         "messages": retry_messages,
                         "temperature": 0.1,
-                        "max_tokens": max(24, min(64, int(self.settings.chat_max_tokens))),
+                        "max_tokens": max(18, min(48, int(self.settings.chat_max_tokens))),
                     }
                     retry_result = await self._zai_chat_completion(retry_payload)
                     if not retry_result.get("error"):

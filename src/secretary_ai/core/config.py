@@ -18,13 +18,13 @@ class Settings(BaseSettings):
 
     zai_api_key: str | None = None
     zai_base_url: str = "https://api.z.ai/api/coding/paas/v4"
-    zai_model: str = "glm-5.1"
+    zai_model: str = "glm-4.5-air"
     zai_chat_model: str | None = None
     zai_timeout_seconds: float = 30.0
     agent_max_tokens: int = 160
     agent_history_turns: int = 4
-    chat_max_tokens: int = 96
-    chat_temperature: float = 0.25
+    chat_max_tokens: int = 64
+    chat_temperature: float = 0.15
 
     telegram_api_id: int | None = None
     telegram_api_hash: str | None = None
@@ -39,7 +39,7 @@ class Settings(BaseSettings):
 
     tts_enabled: bool = True
     tts_provider: str = "edge_tts"
-    tts_voice: str = "en-US-AriaNeural"
+    tts_voice: str = "en-GB-SoniaNeural"
     tts_rate: str = "+0%"
     tts_volume: str = "+0%"
 
