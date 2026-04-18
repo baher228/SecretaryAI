@@ -265,6 +265,7 @@ DASHBOARD_HTML = """<!doctype html>
       .d-flex { display: flex; gap: 24px; }
       .flex-1 { flex: 1; min-width: 300px; }
 
+
       .loader {
         border: 2px solid rgba(15,118,110,0.2);
         border-top-color: var(--primary);
@@ -344,6 +345,28 @@ DASHBOARD_HTML = """<!doctype html>
             <input type="text" id="quick-target" placeholder="Target e.g., @telegram_username" />
             <input type="text" id="quick-purpose" placeholder="Purpose (e.g. reschedule meeting)" />
             <button onclick="startQuickCall()" style="width: 100%; margin-top: 4px;">Trigger Outbound Call</button>
+            <div style="margin-top: 14px; border: 1px solid var(--line); background: rgba(255,255,255,0.72); border-radius: 12px; padding: 12px;">
+              <h3 style="margin: 0 0 8px; font-size: 0.9rem;">Voice Dialogue (No Call ID)</h3>
+              <p style="margin: 0 0 10px; color: var(--muted); font-size: 0.84rem; line-height: 1.45;">
+                Click Start, speak naturally, and the AI will answer with voice. No call setup needed.
+              </p>
+              <div class="row">
+                <button onclick="voiceStartDialog()">Start Voice Dialogue</button>
+                <button class="secondary" onclick="voiceStopDialog()">Stop</button>
+                <button onclick="voiceClearDialog()">Clear</button>
+              </div>
+              <div id="voice-dialog-state" style="margin: 4px 0 8px; color: var(--muted); font-size: 0.84rem;">Idle</div>
+              <div id="voice-dialog-log" style="max-height: 180px; overflow-y: auto; border: 1px solid var(--line); border-radius: 10px; padding: 10px; font-size: 0.84rem; line-height: 1.45; background: rgba(255,255,255,0.86); color: #26463d;">No conversation yet.</div>
+            </div>
+            <div style="margin-top: 14px; border: 1px solid var(--line); background: rgba(255,255,255,0.7); border-radius: 12px; padding: 12px;">
+              <h3 style="margin: 0 0 8px; font-size: 0.9rem;">Voice Quickstart</h3>
+              <ol style="margin: 0; padding-left: 18px; color: var(--muted); font-size: 0.84rem; line-height: 1.5;">
+                <li>Open <b>API Lab & Debug</b> and run auth endpoints if Telegram is not authorized.</li>
+                <li>Run <code>/api/v1/calls/outbound</code> or use <b>Trigger Outbound Call</b> to get a <code>call_id</code>.</li>
+                <li>Use <code>/api/v1/ws/live/{call_id}</code> for manual transcript + live mic streaming, or use <code>/api/v1/calls/{call_id}/live/start</code> for full Telegram-native voice loop.</li>
+                <li>Watch the Response Console and Call Audit Log to verify events and status.</li>
+              </ol>
+            </div>
           </div>
           
           <div class="panel flex-1" style="flex-grow: 2; height: 420px; overflow-y: auto;">
@@ -482,11 +505,35 @@ DASHBOARD_HTML = """<!doctype html>
         if (buttonEl) buttonEl.classList.add('active');
       }
 
+
       // API Call Helpers for Lab
       let liveSocket = null;
       let wsRecognition = null;
       let wsVoiceEnabled = false;
       let wsSpeechSeq = 0;
+      let voiceRecognition = null;
+      let voiceDialogueOn = false;
+      let voiceHistory = [];
+      let voiceSpeaking = false;
+      let voiceTurnInFlight = false;
+      let voiceDialogSessionId = 0;
+
+      async function fetchJson(path, init = {}, timeoutMs = 8000) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          const requestInit = {
+            ...init,
+            signal: controller.signal,
+            cache: "no-store",
+          };
+          const res = await fetch(path, requestInit);
+          const body = await res.json().catch(() => ({ raw: "Non-JSON response" }));
+          return { ok: res.ok, status: res.status, body };
+        } finally {
+          clearTimeout(timer);
+        }
+      }
 
       function appendOutputLine(text) {
         const output = document.getElementById("output");
@@ -505,6 +552,184 @@ DASHBOARD_HTML = """<!doctype html>
         state.style.color = active ? "#34d399" : "var(--muted)";
       }
 
+      function voiceSupportsDialog() {
+        return Boolean((window.SpeechRecognition || window.webkitSpeechRecognition) && window.speechSynthesis);
+      }
+
+      function voiceSetDialogState(text, active = false) {
+        const state = document.getElementById("voice-dialog-state");
+        if (!state) return;
+        state.textContent = text;
+        state.style.color = active ? "#0f766e" : "var(--muted)";
+      }
+
+      function voiceAppendLog(role, text) {
+        const log = document.getElementById("voice-dialog-log");
+        if (!log) return;
+        const stamp = new Date().toLocaleTimeString();
+        if (log.textContent.includes("No conversation yet.")) {
+          log.textContent = "";
+        }
+        const line = document.createElement("div");
+        line.style.marginBottom = "8px";
+        line.innerHTML = `<b>${stamp} ${role}:</b> ${text.replace(/</g, "&lt;").replace(/>/g, "&gt;")}`;
+        log.appendChild(line);
+        log.scrollTop = log.scrollHeight;
+      }
+
+      function voiceSpeak(text) {
+        return new Promise((resolve) => {
+          if (!window.speechSynthesis) {
+            resolve();
+            return;
+          }
+          const utterance = new SpeechSynthesisUtterance(text);
+          utterance.lang = "en-GB";
+          utterance.rate = 1.0;
+          utterance.pitch = 1.0;
+          try {
+            const voices = window.speechSynthesis.getVoices() || [];
+            const preferred = voices.find(v =>
+              /joanna|jenny|sonia|aria|libby/i.test(v.name || "")
+            ) || voices.find(v => /en-/i.test(v.lang || ""));
+            if (preferred) utterance.voice = preferred;
+          } catch (_) {}
+          utterance.onend = () => resolve();
+          utterance.onerror = () => resolve();
+          window.speechSynthesis.cancel();
+          window.speechSynthesis.speak(utterance);
+        });
+      }
+
+      async function voiceHandleTurn(userText) {
+        if (!userText) return;
+        if (voiceTurnInFlight) return;
+        const sessionIdAtStart = voiceDialogSessionId;
+        voiceTurnInFlight = true;
+        voiceAppendLog("You", userText);
+        voiceSetDialogState("Thinking...", true);
+        try {
+          const res = await fetch("/api/v1/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message: userText, history: voiceHistory }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            const detail = data.detail || `Server error ${res.status}`;
+            if (!voiceDialogueOn || sessionIdAtStart !== voiceDialogSessionId) return;
+            voiceAppendLog("AI", String(detail));
+            voiceSetDialogState("Error from chat endpoint", false);
+            return;
+          }
+
+          if (!voiceDialogueOn || sessionIdAtStart !== voiceDialogSessionId) return;
+          const reply = data.reply || "(no reply)";
+          voiceHistory = Array.isArray(data.history) ? data.history : voiceHistory;
+          voiceAppendLog("AI", reply);
+
+          voiceSpeaking = true;
+          voiceSetDialogState("AI speaking...", true);
+          if (voiceRecognition) {
+            try { voiceRecognition.stop(); } catch (_) {}
+          }
+          await voiceSpeak(reply);
+          voiceSpeaking = false;
+          if (voiceDialogueOn && sessionIdAtStart === voiceDialogSessionId && voiceRecognition) {
+            try {
+              voiceRecognition.start();
+              voiceSetDialogState("Listening...", true);
+            } catch (_) {
+              voiceSetDialogState("Listening restart delayed...", false);
+            }
+          } else {
+            voiceSetDialogState("Idle", false);
+          }
+        } catch (err) {
+          voiceSpeaking = false;
+          if (!voiceDialogueOn || sessionIdAtStart !== voiceDialogSessionId) return;
+          voiceAppendLog("AI", `Network error: ${String(err)}`);
+          voiceSetDialogState("Network error", false);
+        } finally {
+          voiceTurnInFlight = false;
+        }
+      }
+
+      function voiceStartDialog() {
+        if (voiceDialogueOn) {
+          voiceSetDialogState("Already running", true);
+          return;
+        }
+        if (!voiceSupportsDialog()) {
+          alert("This browser does not support full voice dialogue. Try Chrome/Edge.");
+          return;
+        }
+
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        voiceRecognition = new SpeechRecognition();
+        voiceRecognition.lang = "en-GB";
+        voiceRecognition.continuous = true;
+        voiceRecognition.interimResults = false;
+        voiceRecognition.maxAlternatives = 1;
+
+        voiceDialogueOn = true;
+        voiceSetDialogState("Listening...", true);
+        voiceAppendLog("System", "Voice dialogue started.");
+
+        voiceRecognition.onresult = (event) => {
+          if (!voiceDialogueOn || voiceSpeaking || voiceTurnInFlight) return;
+          let latestFinal = "";
+          for (let i = event.resultIndex; i < event.results.length; i += 1) {
+            const result = event.results[i];
+            if (!result.isFinal) continue;
+            const text = (result[0]?.transcript || "").trim();
+            if (text) latestFinal = text;
+          }
+          if (latestFinal) {
+            voiceHandleTurn(latestFinal);
+          }
+        };
+
+        voiceRecognition.onerror = (event) => {
+          voiceSetDialogState(`Mic error: ${event.error}`, false);
+        };
+
+        voiceRecognition.onend = () => {
+          if (!voiceDialogueOn || voiceSpeaking) return;
+          try {
+            voiceRecognition.start();
+            voiceSetDialogState("Listening...", true);
+          } catch (_) {
+            voiceSetDialogState("Mic restart delayed...", false);
+          }
+        };
+
+        voiceRecognition.start();
+      }
+
+      function voiceStopDialog() {
+        voiceDialogueOn = false;
+        voiceDialogSessionId += 1;
+        voiceSpeaking = false;
+        voiceTurnInFlight = false;
+        if (voiceRecognition) {
+          try { voiceRecognition.stop(); } catch (_) {}
+          voiceRecognition = null;
+        }
+        if (window.speechSynthesis) {
+          window.speechSynthesis.cancel();
+        }
+        voiceSetDialogState("Stopped", false);
+        voiceAppendLog("System", "Voice dialogue stopped.");
+      }
+
+      function voiceClearDialog() {
+        voiceHistory = [];
+        const log = document.getElementById("voice-dialog-log");
+        if (log) log.textContent = "No conversation yet.";
+        voiceSetDialogState(voiceDialogueOn ? "Listening..." : "Idle", voiceDialogueOn);
+      }
+
       function printResult(method, path, status, body) {
         const output = document.getElementById("output");
         const stamp = new Date().toISOString();
@@ -516,20 +741,18 @@ DASHBOARD_HTML = """<!doctype html>
       }
       async function callGet(path) {
         try {
-          const res = await fetch(path, { method: "GET" });
-          const body = await res.json().catch(() => ({ raw: "Non-JSON response" }));
-          printResult("GET", path, res.status, body);
+          const result = await fetchJson(path, { method: "GET" });
+          printResult("GET", path, result.status, result.body);
         } catch (err) { printClientError("GET", path, err); }
       }
       async function callPost(path, textareaId) {
         try {
           const payload = JSON.parse(document.getElementById(textareaId).value);
-          const res = await fetch(path, {
+          const result = await fetchJson(path, {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
           });
-          const body = await res.json().catch(() => ({ raw: "Non-JSON response" }));
-          printResult("POST", path, res.status, body);
+          printResult("POST", path, result.status, result.body);
         } catch (err) { printClientError("POST", path, err); }
       }
 
@@ -543,13 +766,12 @@ DASHBOARD_HTML = """<!doctype html>
         const callId = document.getElementById("live-call-id").value.trim();
         if (!callId) { alert("Enter call_id first."); return; }
         try {
-          const res = await fetch(`/api/v1/calls/${encodeURIComponent(callId)}/live/stop`, {
+          const result = await fetchJson(`/api/v1/calls/${encodeURIComponent(callId)}/live/stop`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: "{}",
           });
-          const body = await res.json().catch(() => ({ raw: "Non-JSON response" }));
-          printResult("POST", `/api/v1/calls/${callId}/live/stop`, res.status, body);
+          printResult("POST", `/api/v1/calls/${callId}/live/stop`, result.status, result.body);
         } catch (err) { printClientError("POST", `/api/v1/calls/${callId}/live/stop`, err); }
       }
 
@@ -742,45 +964,58 @@ DASHBOARD_HTML = """<!doctype html>
       // Overview Tab Refresh Loop
       async function refreshDashboard() {
         try {
-          // Health
-          fetch('/api/v1/health').then(r => r.json()).then(d => {
-            const ind = d.status === 'ok' ? '<span class="status-indicator status-ok"></span>' : '<span class="status-indicator status-err"></span>';
-            document.getElementById('status-health').innerHTML = ind + (d.status === 'ok' ? 'Online' : 'Error');
-          }).catch(() => document.getElementById('status-health').innerHTML = '<span class="status-indicator status-err"></span>Offline');
+          const [health, auth, calls] = await Promise.all([
+            fetchJson('/api/v1/health', { method: 'GET' }, 6000),
+            fetchJson('/api/v1/telegram/auth/status', { method: 'GET' }, 6000),
+            fetchJson('/api/v1/calls', { method: 'GET' }, 6000),
+          ]);
 
-          // Auth
-          fetch('/api/v1/telegram/auth/status').then(r => r.json()).then(d => {
-            const state = d.authorized ? 'authorized' : (d.connected ? 'connected' : 'offline');
+          const healthBody = health.body || {};
+          if (health.ok) {
+            const ind = healthBody.status === 'ok'
+              ? '<span class="status-indicator status-ok"></span>'
+              : '<span class="status-indicator status-err"></span>';
+            document.getElementById('status-health').innerHTML = ind + (healthBody.status === 'ok' ? 'Online' : 'Error');
+          } else {
+            document.getElementById('status-health').innerHTML = '<span class="status-indicator status-err"></span>Offline';
+          }
+
+          const authBody = auth.body || {};
+          if (auth.ok) {
+            const state = authBody.authorized ? 'authorized' : (authBody.connected ? 'connected' : 'offline');
             let ind = '<span class="status-indicator status-warn"></span>';
-            if (d.authorized) ind = '<span class="status-indicator status-ok"></span>';
-            if (!d.connected) ind = '<span class="status-indicator status-err"></span>';
+            if (authBody.authorized) ind = '<span class="status-indicator status-ok"></span>';
+            if (!authBody.connected) ind = '<span class="status-indicator status-err"></span>';
             document.getElementById('status-auth').innerHTML = ind + state;
-          }).catch(() => document.getElementById('status-auth').innerHTML = '<span class="status-indicator status-err"></span>Error');
+          } else {
+            document.getElementById('status-auth').innerHTML = '<span class="status-indicator status-err"></span>Error';
+          }
 
-          // List Calls
-          fetch('/api/v1/calls').then(r => r.json()).then(calls => {
-            const tbody = document.getElementById('calls-body');
-            if (!calls || calls.length === 0) {
-              tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color: var(--muted); padding: 24px;">No calls executed yet.</td></tr>';
-              return;
-            }
-            tbody.innerHTML = '';
-            // Make a clone and reverse it to show newest calls top
-            const recent = calls.slice().reverse();
-            recent.forEach(c => {
-              const tr = document.createElement('tr');
-              let statusCls = 'pill-routing';
-              if (c.status === 'completed') statusCls = 'pill-completed';
-              else if (c.status === 'received') statusCls = 'pill-received';
-              tr.innerHTML = `
-                <td style="font-family: 'Cascadia Code', monospace; color: var(--primary-2)">${c.call_id || 'unknown'}</td>
-                <td>${c.target_user || c.source_user || 'N/A'}</td>
-                <td>${c.metadata?.purpose || c.purpose || 'N/A'}</td>
-                <td><span class="pill ${statusCls}">${c.status || 'unknown'}</span></td>
-              `;
-              tbody.appendChild(tr);
-            });
-          }).catch(e => console.error(e));
+          const tbody = document.getElementById('calls-body');
+          const callsBody = Array.isArray(calls.body) ? calls.body : [];
+          if (!calls.ok) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color: var(--muted); padding: 24px;">Failed to load calls.</td></tr>';
+            return;
+          }
+          if (callsBody.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color: var(--muted); padding: 24px;">No calls executed yet.</td></tr>';
+            return;
+          }
+          tbody.innerHTML = '';
+          const recent = callsBody.slice().reverse();
+          recent.forEach(c => {
+            const tr = document.createElement('tr');
+            let statusCls = 'pill-routing';
+            if (c.status === 'completed') statusCls = 'pill-completed';
+            else if (c.status === 'received') statusCls = 'pill-received';
+            tr.innerHTML = `
+              <td style="font-family: 'Cascadia Code', monospace; color: var(--primary-2)">${c.call_id || 'unknown'}</td>
+              <td>${c.target_user || c.source_user || 'N/A'}</td>
+              <td>${c.metadata?.purpose || c.purpose || 'N/A'}</td>
+              <td><span class="pill ${statusCls}">${c.status || 'unknown'}</span></td>
+            `;
+            tbody.appendChild(tr);
+          });
         } catch(e) { console.error('Dashboard refresh failed', e); }
       }
 
@@ -790,13 +1025,12 @@ DASHBOARD_HTML = """<!doctype html>
         const purpose = document.getElementById('quick-purpose').value || "checking in";
         if (!target) return alert('Enter a target user!');
         try {
-          const res = await fetch('/api/v1/calls/outbound', {
+          const result = await fetchJson('/api/v1/calls/outbound', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ target_user: target, purpose: purpose, metadata: { quick_trigger: true } })
           });
-          const body = await res.json();
-          if(res.ok) alert('Call triggered! ID: ' + body.call_id);
-          else alert('Error triggering call: ' + JSON.stringify(body));
+          if(result.ok) alert('Call triggered! ID: ' + result.body.call_id);
+          else alert('Error triggering call: ' + JSON.stringify(result.body));
           refreshDashboard();
         } catch(err) { alert('Error: ' + err.message); }
       }
@@ -804,13 +1038,13 @@ DASHBOARD_HTML = """<!doctype html>
       // Quick Model Check
       async function runModelCheck() {
         try {
-          const res = await fetch('/api/v1/model/check', {
+          const result = await fetchJson('/api/v1/model/check', {
             method: 'POST', headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ prompt: 'ping' })
           });
-          const body = await res.json();
+          const body = result.body || {};
           const el = document.getElementById('status-model');
-          if (res.ok && body.connected) {
+          if (result.ok && body.connected) {
              el.innerHTML = '<span class="status-indicator status-ok"></span>Connected';
           } else {
              el.innerHTML = '<span class="status-indicator status-err"></span>' + (body.detail || 'Offline');
@@ -824,6 +1058,7 @@ DASHBOARD_HTML = """<!doctype html>
       refreshDashboard();
       runModelCheck();
       setInterval(refreshDashboard, 5000);
+    
     </script>
   </body>
 </html>
@@ -831,8 +1066,22 @@ DASHBOARD_HTML = """<!doctype html>
 
 @router.get("/", include_in_schema=False)
 async def root() -> RedirectResponse:
-    return RedirectResponse(url="/dashboard")
+    return RedirectResponse(
+        url="/dashboard?v=20260418",
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
 
 @router.get("/dashboard", response_class=HTMLResponse, include_in_schema=False)
 async def dashboard() -> HTMLResponse:
-    return HTMLResponse(content=DASHBOARD_HTML)
+    return HTMLResponse(
+        content=DASHBOARD_HTML,
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )

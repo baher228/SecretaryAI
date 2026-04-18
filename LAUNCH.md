@@ -210,7 +210,7 @@ WebSocket realtime loop (persistent connection):
 Logs:
 
 ```powershell
-docker compose logs -f
+c
 ```
 
 Restart with rebuild:

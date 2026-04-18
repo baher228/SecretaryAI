@@ -16,6 +16,8 @@ from secretary_ai.domain.models import (
     CallAudioResponse,
     CallEventAck,
     CallTranscriptRequest,
+    ChatRequest,
+    ChatResponse,
     InboundCallResponse,
     ModelCheckRequest,
     ModelCheckResponse,
@@ -71,6 +73,13 @@ async def check_model(
     payload: ModelCheckRequest, secretary: SecretaryService = Depends(get_secretary)
 ) -> ModelCheckResponse:
     return await secretary.check_model_connection(prompt=payload.prompt)
+
+
+@router.post("/chat", response_model=ChatResponse)
+async def chat(
+    payload: ChatRequest, secretary: SecretaryService = Depends(get_secretary)
+) -> ChatResponse:
+    return await secretary.chat_direct(payload)
 
 
 @router.get("/telegram/auth/status", response_model=TelegramAuthStatusResponse)

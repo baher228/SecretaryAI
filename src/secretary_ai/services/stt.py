@@ -10,6 +10,11 @@ try:
 except Exception:  # pragma: no cover - optional dependency
     WhisperModel = None  # type: ignore[assignment]
 
+try:
+    import imageio_ffmpeg
+except Exception:  # pragma: no cover - optional dependency
+    imageio_ffmpeg = None  # type: ignore[assignment]
+
 
 class STTEngine:
     """Simple STT adapter. Current default provider: faster-whisper."""
@@ -17,7 +22,7 @@ class STTEngine:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self._model = None
-        self._ffmpeg_path = shutil.which("ffmpeg")
+        self._ffmpeg_path = shutil.which("ffmpeg") or self._bundled_ffmpeg_path()
 
     async def transcribe(self, audio_path: str) -> tuple[str, str]:
         path = Path(audio_path)
@@ -119,3 +124,13 @@ class STTEngine:
         if not output_path.exists() or output_path.stat().st_size <= 0:
             return None
         return output_path
+
+    @staticmethod
+    def _bundled_ffmpeg_path() -> str | None:
+        if imageio_ffmpeg is None:
+            return None
+        try:
+            path = imageio_ffmpeg.get_ffmpeg_exe()
+            return str(path) if path else None
+        except Exception:
+            return None

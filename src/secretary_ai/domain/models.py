@@ -214,3 +214,19 @@ class AgentLiveRespondResponse(BaseModel):
     tts_audio_path: str | None = None
     tts_status: str | None = None
     call_audio_status: str | None = None
+
+
+class ChatMessage(BaseModel):
+    role: str  # "user" or "assistant"
+    content: str
+
+
+class ChatRequest(BaseModel):
+    message: str
+    history: list[ChatMessage] = Field(default_factory=list)
+
+
+class ChatResponse(BaseModel):
+    reply: str
+    model: str
+    history: list[ChatMessage] = Field(default_factory=list)

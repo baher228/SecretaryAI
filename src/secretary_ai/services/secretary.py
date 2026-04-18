@@ -1,6 +1,7 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+import re
 from typing import Any
 
 import httpx
@@ -16,6 +17,9 @@ from secretary_ai.domain.models import (
     CallAudioResponse,
     CallEventAck,
     CallTranscriptRequest,
+    ChatMessage,
+    ChatRequest,
+    ChatResponse,
     InboundCallResponse,
     ModelCheckResponse,
     OutboundCallRequest,
@@ -111,6 +115,111 @@ class SecretaryService:
             output=message.get("content"),
         )
 
+    async def chat_direct(self, payload: ChatRequest) -> ChatResponse:
+        """Direct conversational chat with Z.AI - no call context, plain text reply."""
+        chat_model = self.settings.zai_chat_model or self.settings.zai_model
+        system_prompt = (
+            "You are Secretary AI. "
+            "Reply with short, direct, practical answers. "
+            "Prefer 1 to 2 short sentences and avoid fluff. "
+            "Only add detail if the user explicitly asks for it. "
+            "Return ONLY the final assistant reply text for the user. "
+            "Do not reveal reasoning, internal analysis, instructions, or policy notes."
+        )
+        messages: list[dict] = [{"role": "system", "content": system_prompt}]
+        for msg in payload.history[-20:]:
+            messages.append({"role": msg.role, "content": msg.content})
+        messages.append({"role": "user", "content": payload.message})
+
+        if not self.settings.zai_api_key:
+            reply = "ZAI_API_KEY is not configured. Please add it to your .env file."
+        else:
+            api_payload = {
+                "model": chat_model,
+                "messages": messages,
+                "temperature": self.settings.chat_temperature,
+                "max_tokens": self.settings.chat_max_tokens,
+            }
+            result = await self._zai_chat_completion(api_payload)
+            if result.get("error"):
+                reply = f"AI error: {result['error']}"
+            else:
+                msg_data = self._extract_message(result["data"])
+                raw_content = msg_data.get("content")
+                if isinstance(raw_content, list):
+                    # Some providers return structured content blocks.
+                    parts: list[str] = []
+                    for item in raw_content:
+                        if isinstance(item, dict):
+                            text_part = str(item.get("text") or "").strip()
+                            if text_part:
+                                parts.append(text_part)
+                        else:
+                            text_part = str(item).strip()
+                            if text_part:
+                                parts.append(text_part)
+                    reply = " ".join(parts).strip()
+                else:
+                    reply = str(raw_content or "").strip()
+                if not reply:
+                    reply = "Sorry, I could not generate a reply right now."
+                else:
+                    reply = self._normalize_chat_reply(reply)
+
+        new_history = list(payload.history) + [
+            ChatMessage(role="user", content=payload.message),
+            ChatMessage(role="assistant", content=reply),
+        ]
+        return ChatResponse(
+            reply=reply,
+            model=chat_model,
+            history=new_history[-40:],
+        )
+
+    @staticmethod
+    def _normalize_chat_reply(reply: str) -> str:
+        text = " ".join((reply or "").split()).strip()
+        if not text:
+            return ""
+
+        lower = text.lower()
+        meta_markers = [
+            "i'm instructed",
+            "i am instructed",
+            "the user",
+            "my response should be",
+            "this is:",
+            "i should",
+            "without fluff",
+            "short and direct",
+        ]
+        has_meta = any(marker in lower for marker in meta_markers)
+
+        if has_meta:
+            quoted = re.findall(r"['\"“”]([^'\"“”]{2,180})['\"“”]", text)
+            if quoted:
+                candidate = quoted[-1].strip()
+                if candidate:
+                    text = candidate
+            else:
+                for marker in ("my response should be:", "response would be:", "appropriate response would be:"):
+                    idx = lower.find(marker)
+                    if idx >= 0:
+                        text = text[idx + len(marker) :].strip()
+                        break
+                for stopper in (" this is:", " - ", " only add detail", " i should"):
+                    idx = text.lower().find(stopper)
+                    if idx > 0:
+                        text = text[:idx].strip()
+
+        # Keep spoken replies short and natural.
+        if len(text) > 180:
+            parts = re.split(r"(?<=[.!?])\s+", text)
+            text = " ".join(parts[:2]).strip()
+        if len(text) > 180:
+            text = text[:177].rstrip() + "..."
+        return text
+
     async def telegram_auth_status(self) -> TelegramAuthStatusResponse:
         payload = await self.telegram.auth_status()
         return TelegramAuthStatusResponse(**payload)
@@ -149,16 +258,11 @@ class SecretaryService:
             and bool(self.settings.assistant_auto_greet_on_connect)
         )
         if should_greet:
-            tts_audio_path, tts_status = await self.tts.synthesize(
-                self.settings.assistant_greeting_message,
-                call_id=response.call_id,
+            greeting = await self._play_greeting_with_retry(response.call_id, source="outbound")
+            response.detail = (
+                f"{response.detail} Greeting: {greeting.get('status')} "
+                f"({greeting.get('detail')})."
             )
-            if tts_audio_path:
-                stream_result = await self.telegram.stream_audio_out(response.call_id, tts_audio_path)
-                stream_status = str(stream_result.get("status"))
-                response.detail = f"{response.detail} Greeting: {stream_status}."
-            else:
-                response.detail = f"{response.detail} Greeting TTS: {tts_status}."
 
         should_auto_live = (
             response.status == "active"
@@ -527,6 +631,16 @@ class SecretaryService:
                     status = str(call.get("status") or "").strip().lower()
                     if status != "active":
                         continue
+
+                    should_greet = (
+                        bool(self.settings.assistant_auto_greet_on_connect)
+                        and not bool(call.get("greeting_sent"))
+                    )
+                    if should_greet:
+                        greeting = await self._play_greeting_with_retry(call_id, source="auto_attach")
+                        if greeting.get("status") == "streaming_out":
+                            call["greeting_sent"] = True
+
                     existing = self.live_sessions.get(call_id)
                     if existing and existing.get("running"):
                         continue
@@ -557,6 +671,45 @@ class SecretaryService:
                 pass
 
             await asyncio.sleep(scan_seconds)
+
+    async def _play_greeting_with_retry(self, call_id: str, source: str) -> dict[str, Any]:
+        tts_audio_path, tts_status = await self.tts.synthesize(
+            self.settings.assistant_greeting_message,
+            call_id=call_id,
+        )
+        if not tts_audio_path:
+            self.telegram._append_event(  # type: ignore[attr-defined]
+                call_id,
+                "greeting_tts_failed",
+                {"source": source, "tts_status": tts_status},
+            )
+            return {"status": "tts_failed", "detail": str(tts_status or "unknown")}
+
+        attempts = 3
+        delays = [0.0, 0.7, 1.4]
+        last_status = "unknown"
+        last_detail = "no detail"
+        for i in range(attempts):
+            if delays[i] > 0:
+                await asyncio.sleep(delays[i])
+            stream_result = await self.telegram.stream_audio_out(call_id, tts_audio_path)
+            last_status = str(stream_result.get("status") or "unknown")
+            last_detail = str(stream_result.get("detail") or "no detail")
+            self.telegram._append_event(  # type: ignore[attr-defined]
+                call_id,
+                "greeting_stream_attempt",
+                {
+                    "source": source,
+                    "attempt": i + 1,
+                    "status": last_status,
+                    "detail": last_detail,
+                    "audio_path": tts_audio_path,
+                },
+            )
+            if last_status == "streaming_out":
+                return {"status": last_status, "detail": last_detail}
+
+        return {"status": last_status, "detail": last_detail}
 
     @staticmethod
     def _extract_new_text(previous: str, current: str) -> str:

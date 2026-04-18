@@ -6,8 +6,12 @@ services:
     container_name: secretary-ai
     env_file:
       - .env
+    environment:
+      - PYTHONPATH=/app/src
     ports:
       - "8000:8000"
     volumes:
       - ./.telegram:/app/.telegram
+      - ./src:/app/src
+    command: uvicorn secretary_ai.main:app --host 0.0.0.0 --port 8000 --reload --app-dir src
     restart: unless-stopped

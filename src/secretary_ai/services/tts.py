@@ -35,9 +35,10 @@ class TTSEngine:
         output_path = root / f"{safe_call}-{ts}.mp3"
 
         try:
+            voice_name = self._resolve_voice_name(self.settings.tts_voice)
             communicate = edge_tts.Communicate(
                 text=clean_text,
-                voice=self.settings.tts_voice,
+                voice=voice_name,
                 rate=self.settings.tts_rate,
                 volume=self.settings.tts_volume,
             )
@@ -45,3 +46,14 @@ class TTSEngine:
             return str(output_path.resolve()), "generated"
         except Exception:
             return None, "generation_failed"
+
+    @staticmethod
+    def _resolve_voice_name(configured_voice: str) -> str:
+        voice = (configured_voice or "").strip()
+        if not voice:
+            return "en-US-AriaNeural"
+        # Compatibility aliases: allow common Amazon Polly names while using edge-tts backend.
+        polly_aliases = {
+            "Polly.Joanna": "en-US-JennyNeural",
+        }
+        return polly_aliases.get(voice, voice)
