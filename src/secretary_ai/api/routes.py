@@ -230,6 +230,11 @@ async def get_telegram_live_agent_status(
     return await secretary.telegram_live_agent_status(call_id)
 
 
+@router.get("/calls/readiness")
+async def calls_readiness(secretary: SecretaryService = Depends(get_secretary)) -> dict:
+    return await secretary.calls_readiness()
+
+
 @router.get("/calls")
 async def list_calls(secretary: SecretaryService = Depends(get_secretary)) -> list[dict]:
     return await secretary.list_calls()

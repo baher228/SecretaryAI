@@ -486,16 +486,26 @@ class TelegramCallService:
         )
         if should_auto_answer:
             try:
-                # Answer call without forcing a probed media stream.
-                await self._calls.play(chat_id, stream=None)
+                # Prefer plain play() first; some setups fail when stream=None is passed explicitly.
+                await self._calls.play(chat_id)
                 self._upsert_call(call_id, {"status": "active", "updated_at": self._now_iso()})
-                self._append_event(call_id, "auto_answered", {})
-            except Exception as exc:
-                self._append_event(
-                    call_id,
-                    "auto_answer_failed",
-                    {"error": exc.__class__.__name__, "message": str(exc)},
-                )
+                self._append_event(call_id, "auto_answered", {"mode": "play_default"})
+            except Exception as first_exc:
+                try:
+                    await self._calls.play(chat_id, stream=None)
+                    self._upsert_call(call_id, {"status": "active", "updated_at": self._now_iso()})
+                    self._append_event(call_id, "auto_answered", {"mode": "play_stream_none_fallback"})
+                except Exception as exc:
+                    self._append_event(
+                        call_id,
+                        "auto_answer_failed",
+                        {
+                            "error": exc.__class__.__name__,
+                            "message": str(exc),
+                            "first_error": first_exc.__class__.__name__,
+                            "first_message": str(first_exc),
+                        },
+                    )
 
     async def _handle_stream_end(self, update: Any) -> None:
         call_id = self._call_id(int(update.chat_id))

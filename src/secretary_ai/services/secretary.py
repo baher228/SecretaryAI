@@ -421,6 +421,24 @@ class SecretaryService:
     async def list_call_events(self, limit: int) -> list[dict[str, Any]]:
         return self.telegram.list_events(limit=limit)
 
+    async def calls_readiness(self) -> dict[str, Any]:
+        ready, detail = self.telegram.readiness()
+        auth = await self.telegram.auth_status() if ready else {
+            "connected": False,
+            "authorized": False,
+            "detail": detail,
+            "session_path": self.settings.telegram_session_path,
+        }
+        return {
+            "ready": ready,
+            "detail": detail,
+            "auth": auth,
+            "notes": [
+                "Telegram bot accounts cannot receive voice calls directly.",
+                "Voice calls require authorized Telegram user session (API_ID/API_HASH + sign-in).",
+            ],
+        }
+
     async def end_call(self, call_id: str) -> CallEventAck:
         if call_id in self.live_sessions:
             await self.stop_telegram_live_agent(call_id)
@@ -571,7 +589,7 @@ class SecretaryService:
         if session is None:
             return
 
-        poll_seconds = max(1.0, float(self.settings.telegram_live_poll_seconds))
+        poll_seconds = max(0.35, float(self.settings.telegram_live_poll_seconds))
         while True:
             if not session.get("running"):
                 return
@@ -654,7 +672,7 @@ class SecretaryService:
             pass
 
     async def _auto_attach_live_loop(self) -> None:
-        scan_seconds = max(1.0, float(self.settings.telegram_auto_start_scan_seconds))
+        scan_seconds = max(0.5, float(self.settings.telegram_auto_start_scan_seconds))
         retry_seconds = max(4.0, scan_seconds * 2.0)
 
         while True:
