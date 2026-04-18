@@ -2,6 +2,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import re
+from time import monotonic
 from typing import Any
 
 import httpx
@@ -574,6 +575,9 @@ class SecretaryService:
             "last_audio_size": 0,
             "pause_until": None,
             "started_at": self._now_iso(),
+            "started_monotonic": monotonic(),
+            "responses_sent": 0,
+            "last_response_at": None,
         }
         session["task"] = asyncio.create_task(self._telegram_live_loop(call_id))
         self.live_sessions[call_id] = session
@@ -639,11 +643,13 @@ class SecretaryService:
                 status="not_running",
                 detail="No active Telegram live agent loop for this call.",
             )
+        responses_sent = int(session.get("responses_sent") or 0)
+        detail = f"Telegram live agent loop status fetched. responses_sent={responses_sent}."
         return TelegramLiveAgentStatusResponse(
             call_id=call_id,
             running=bool(session.get("running")),
             status="running" if session.get("running") else "stopped",
-            detail="Telegram live agent loop status fetched.",
+            detail=detail,
             recording_path=session.get("recording_path"),
             last_stt_status=session.get("last_stt_status"),
             last_transcript=session.get("last_transcript_delta"),
@@ -674,15 +680,24 @@ class SecretaryService:
             if not recording_path.exists():
                 await asyncio.sleep(0.5)
                 continue
+
             file_size = recording_path.stat().st_size
             previous_size = int(session.get("last_audio_size") or 0)
-            min_new_bytes = max(1024, int(self.settings.stt_min_new_bytes))
-            if file_size <= 0 or (file_size - previous_size) < min_new_bytes:
+            min_new_bytes = max(512, int(self.settings.stt_min_new_bytes // 2))
+
+            started_monotonic = float(session.get("started_monotonic") or 0.0)
+            warmup_elapsed = monotonic() - started_monotonic if started_monotonic else 999.0
+            in_warmup = warmup_elapsed < 12.0
+
+            if file_size <= 0:
+                await asyncio.sleep(min(0.6, poll_seconds))
+                continue
+            if (file_size - previous_size) < min_new_bytes and not in_warmup:
                 await asyncio.sleep(min(0.6, poll_seconds))
                 continue
             session["last_audio_size"] = file_size
 
-            text, stt_status = await self.stt.transcribe(str(session["recording_path"]))
+            text, stt_status = await self.stt.transcribe(str(recording_path))
             session["last_stt_status"] = stt_status
 
             if stt_status != "ok":
@@ -691,7 +706,8 @@ class SecretaryService:
 
             previous = str(session.get("last_full_transcript") or "")
             delta = self._extract_new_text(previous, text)
-            if len(delta.strip()) < int(self.settings.stt_min_chars):
+            min_chars = max(3, int(self.settings.stt_min_chars) - 2)
+            if len(delta.strip()) < min_chars:
                 await asyncio.sleep(poll_seconds)
                 continue
 
@@ -702,14 +718,32 @@ class SecretaryService:
             context["stt_provider"] = self.settings.stt_provider
 
             try:
-                await self.live_agent_respond(
+                response = await self.live_agent_respond(
                     call_id=call_id,
                     transcript=delta,
                     context=context,
                     speak_response=bool(session.get("speak_response", True)),
                 )
-            except Exception:
+                session["responses_sent"] = int(session.get("responses_sent") or 0) + 1
+                session["last_response_at"] = self._now_iso()
+                self.telegram._append_event(  # type: ignore[attr-defined]
+                    call_id,
+                    "live_turn",
+                    {
+                        "delta_chars": len(delta.strip()),
+                        "reply_chars": len((response.reply or "").strip()),
+                        "tts_status": response.tts_status,
+                        "call_audio_status": response.call_audio_status,
+                        "responses_sent": session["responses_sent"],
+                    },
+                )
+            except Exception as exc:
                 session["last_stt_status"] = "agent_error"
+                self.telegram._append_event(  # type: ignore[attr-defined]
+                    call_id,
+                    "live_turn_error",
+                    {"error": exc.__class__.__name__, "detail": str(exc)},
+                )
 
             await asyncio.sleep(poll_seconds)
 

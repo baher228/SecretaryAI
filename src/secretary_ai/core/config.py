@@ -49,11 +49,11 @@ class Settings(BaseSettings):
     stt_language: str = "en"
     stt_device: str = "cpu"
     stt_compute_type: str = "int8"
-    stt_min_chars: int = 6
+    stt_min_chars: int = 4
     stt_recent_only: bool = True
-    stt_tail_seconds: float = 2.0
-    stt_min_new_bytes: int = 4000
-    telegram_live_poll_seconds: float = 0.6
+    stt_tail_seconds: float = 3.0
+    stt_min_new_bytes: int = 2000
+    telegram_live_poll_seconds: float = 0.45
     telegram_live_tts_cooldown_seconds: float = 2.5
 
     calendar_enabled: bool = True
