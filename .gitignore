@@ -12,3 +12,7 @@ dist/
 *.log
 .env
 
+# Generated call audio artifacts
+.telegram/audio/
+*.wav
+*.mp3

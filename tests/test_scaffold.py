@@ -2,9 +2,13 @@ from fastapi.testclient import TestClient
 
 from secretary_ai.core.config import get_settings
 from secretary_ai.domain.models import (
+    AgentAnalyzeResponse,
+    AgentLiveRespondResponse,
     AgentReplyResponse,
     ModelCheckResponse,
     OutboundCallResponse,
+    TelegramLiveAgentResponse,
+    TelegramLiveAgentStatusResponse,
     TelegramAuthStatusResponse,
 )
 from secretary_ai.main import create_app
@@ -34,7 +38,7 @@ def test_dashboard_endpoint_exists() -> None:
     with TestClient(create_app()) as client:
         response = client.get("/dashboard")
     assert response.status_code == 200
-    assert "Secretary AI Telegram Lab" in response.text
+    assert "Secretary AI Control Center" in response.text
 
 
 def test_model_check_route_works_with_mock(monkeypatch) -> None:
@@ -147,6 +151,83 @@ def test_agent_reply_route_works_with_mock(monkeypatch) -> None:
     assert payload["action_items"] == ["update_calendar", "notify_customer"]
 
 
+def test_agent_analyze_route_works_with_mock(monkeypatch) -> None:
+    async def fake_agent_analyze(self, call_id: str, transcript: str, context: dict) -> AgentAnalyzeResponse:
+        return AgentAnalyzeResponse(
+            call_id=call_id,
+            intent="reschedule_event",
+            confidence=0.92,
+            reply="Sure, I can help reschedule that.",
+            requires_human=False,
+            transfer_reason=None,
+            action_items=["Find available slots", "Confirm preferred time"],
+            extracted_fields={"date": "Tuesday", "time": "15:00"},
+            model="glm-5.1",
+        )
+
+    monkeypatch.setattr(SecretaryService, "analyze_agent_turn", fake_agent_analyze)
+    get_settings.cache_clear()
+    with TestClient(create_app()) as client:
+        response = client.post(
+            "/api/v1/agent/analyze",
+            json={
+                "call_id": "tg-88",
+                "transcript": "Can you move my meeting to Tuesday at 3?",
+                "context": {"customer_name": "Alex"},
+            },
+        )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["intent"] == "reschedule_event"
+    assert payload["confidence"] == 0.92
+    assert payload["reply"].startswith("Sure")
+    assert payload["action_items"] == ["Find available slots", "Confirm preferred time"]
+
+
+def test_agent_live_respond_route_works_with_mock(monkeypatch) -> None:
+    async def fake_live_respond(
+        self,
+        call_id: str,
+        transcript: str,
+        context: dict,
+        speak_response: bool,
+    ) -> AgentLiveRespondResponse:
+        return AgentLiveRespondResponse(
+            call_id=call_id,
+            transcript=transcript,
+            reply="Sure, I can move that.",
+            intent="reschedule_event",
+            confidence=0.9,
+            requires_human=False,
+            transfer_reason=None,
+            action_items=["Find available times"],
+            extracted_fields={"date": "Tuesday"},
+            model="glm-5.1",
+            tts_audio_path=".telegram/audio/generated/tg-77.mp3",
+            tts_status="generated",
+            call_audio_status="streaming_out",
+        )
+
+    monkeypatch.setattr(SecretaryService, "live_agent_respond", fake_live_respond)
+    get_settings.cache_clear()
+    with TestClient(create_app()) as client:
+        response = client.post(
+            "/api/v1/agent/live/respond",
+            json={
+                "call_id": "tg-77",
+                "transcript": "Please reschedule this.",
+                "context": {"source": "test"},
+                "speak_response": True,
+            },
+        )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["intent"] == "reschedule_event"
+    assert payload["reply"].startswith("Sure")
+    assert payload["tts_status"] == "generated"
+    assert payload["call_audio_status"] == "streaming_out"
+
+
 def test_call_events_endpoint_returns_transcript_event() -> None:
     get_settings.cache_clear()
     with TestClient(create_app()) as client:
@@ -160,3 +241,129 @@ def test_call_events_endpoint_returns_transcript_event() -> None:
     events = response.json()
     assert isinstance(events, list)
     assert any(event.get("type") == "transcript_received" for event in events)
+
+
+def test_live_websocket_ping_roundtrip() -> None:
+    get_settings.cache_clear()
+    with TestClient(create_app()) as client:
+        with client.websocket_connect("/api/v1/ws/live/tg-900") as ws:
+            connected = ws.receive_json()
+            assert connected["type"] == "connected"
+            assert connected["call_id"] == "tg-900"
+
+            ws.send_json({"type": "ping"})
+            pong = ws.receive_json()
+            assert pong["type"] == "pong"
+            assert pong["call_id"] == "tg-900"
+
+
+def test_live_websocket_transcript_triggers_agent_response(monkeypatch) -> None:
+    async def fake_live_respond(
+        self,
+        call_id: str,
+        transcript: str,
+        context: dict,
+        speak_response: bool,
+    ) -> AgentLiveRespondResponse:
+        return AgentLiveRespondResponse(
+            call_id=call_id,
+            transcript=transcript,
+            reply="I can help with that now.",
+            intent="general_query",
+            confidence=0.75,
+            requires_human=False,
+            transfer_reason=None,
+            action_items=["confirm_time"],
+            extracted_fields={"topic": "reschedule"},
+            model="glm-5.1",
+            tts_audio_path=".telegram/audio/generated/tg-900.mp3",
+            tts_status="generated",
+            call_audio_status="streaming_out",
+        )
+
+    monkeypatch.setattr(SecretaryService, "live_agent_respond", fake_live_respond)
+    get_settings.cache_clear()
+
+    with TestClient(create_app()) as client:
+        with client.websocket_connect("/api/v1/ws/live/tg-900") as ws:
+            ws.receive_json()  # connected event
+            ws.send_json(
+                {
+                    "type": "transcript",
+                    "transcript": "Can we move my meeting?",
+                    "context": {"source": "test"},
+                    "speak_response": True,
+                }
+            )
+            event = ws.receive_json()
+
+    assert event["type"] == "agent_response"
+    payload = event["data"]
+    assert payload["reply"] == "I can help with that now."
+    assert payload["tts_status"] == "generated"
+
+
+def test_start_telegram_live_loop_route_works_with_mock(monkeypatch) -> None:
+    async def fake_start_live(self, call_id: str, payload) -> TelegramLiveAgentResponse:
+        return TelegramLiveAgentResponse(
+            call_id=call_id,
+            status="running",
+            detail="mock start",
+            recording_path=".telegram/audio/recordings/tg-10.wav",
+            stt_status="waiting_audio",
+            speak_response=True,
+        )
+
+    monkeypatch.setattr(SecretaryService, "start_telegram_live_agent", fake_start_live)
+    get_settings.cache_clear()
+    with TestClient(create_app()) as client:
+        response = client.post(
+            "/api/v1/calls/tg-10/live/start",
+            json={"context": {"source": "test"}, "speak_response": True},
+        )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "running"
+    assert payload["recording_path"].endswith("tg-10.wav")
+
+
+def test_telegram_live_status_route_works_with_mock(monkeypatch) -> None:
+    async def fake_status(self, call_id: str) -> TelegramLiveAgentStatusResponse:
+        return TelegramLiveAgentStatusResponse(
+            call_id=call_id,
+            running=True,
+            status="running",
+            detail="mock status",
+            recording_path=".telegram/audio/recordings/tg-11.wav",
+            last_stt_status="ok",
+            last_transcript="hello there",
+        )
+
+    monkeypatch.setattr(SecretaryService, "telegram_live_agent_status", fake_status)
+    get_settings.cache_clear()
+    with TestClient(create_app()) as client:
+        response = client.get("/api/v1/calls/tg-11/live/status")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["running"] is True
+    assert payload["last_stt_status"] == "ok"
+
+
+def test_stop_telegram_live_loop_route_works_with_mock(monkeypatch) -> None:
+    async def fake_stop_live(self, call_id: str) -> TelegramLiveAgentResponse:
+        return TelegramLiveAgentResponse(
+            call_id=call_id,
+            status="stopped",
+            detail="mock stop",
+            recording_path=".telegram/audio/recordings/tg-12.wav",
+            stt_status="ok",
+            speak_response=True,
+        )
+
+    monkeypatch.setattr(SecretaryService, "stop_telegram_live_agent", fake_stop_live)
+    get_settings.cache_clear()
+    with TestClient(create_app()) as client:
+        response = client.post("/api/v1/calls/tg-12/live/stop")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "stopped"

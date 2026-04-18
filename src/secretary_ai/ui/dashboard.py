@@ -266,9 +266,57 @@ DASHBOARD_HTML = """<!doctype html>
                 <button class="secondary" onclick="callPost('/api/v1/agent/reply', 'payload-agent')">Run</button>
               </article>
               <article class="card">
+                <div class="row"><span class="method post">POST</span><code class="path">/api/v1/agent/analyze</code></div>
+                <p class="hint">Structured AI analysis: intent, confidence, handoff and action plan.</p>
+                <textarea id="payload-analyze">{\n  "call_id": "tg-123456789",\n  "transcript": "Please move my appointment to next Tuesday at 3 PM.",\n  "context": {"customer_name":"Alex"}\n}</textarea>
+                <button class="secondary" onclick="callPost('/api/v1/agent/analyze', 'payload-analyze')">Run</button>
+              </article>
+              <article class="card">
+                <div class="row"><span class="method post">POST</span><code class="path">/api/v1/agent/live/respond</code></div>
+                <p class="hint">Near realtime talk loop: transcript -> AI reply -> TTS -> push audio into active call.</p>
+                <textarea id="payload-live">{\n  "call_id": "tg-123456789",\n  "transcript": "Hello, can we move my meeting to next Tuesday at 3 PM?",\n  "context": {"source":"dashboard"},\n  "speak_response": true\n}</textarea>
+                <div class="row">
+                  <button class="secondary" onclick="callPost('/api/v1/agent/live/respond', 'payload-live')">Run</button>
+                  <button onclick="dictateIntoPayload('payload-live')">Dictate Transcript</button>
+                </div>
+              </article>
+              <article class="card">
                 <div class="row"><span class="method">GET</span><code class="path">/api/v1/calls/events</code></div>
                 <p class="hint">Inspect inbound/outbound call state events.</p>
                 <button onclick="callGet('/api/v1/calls/events?limit=100')">Run</button>
+              </article>
+              <article class="card">
+                <div class="row"><span class="method">WS</span><code class="path">/api/v1/ws/live/{call_id}</code></div>
+                <p class="hint">Realtime channel: send transcript chunks and receive instant AI + TTS call events.</p>
+                <input type="text" id="ws-call-id" placeholder="Call ID, e.g. tg-123456789" />
+                <textarea id="ws-transcript">Hello, can you please move my appointment to Tuesday at 3 PM?</textarea>
+                <div class="row" style="justify-content: space-between;">
+                  <label style="color: var(--muted); font-size: 0.85rem;">
+                    <input type="checkbox" id="ws-speak-response" checked style="width: auto; margin: 0 6px 0 0;" />
+                    Speak response into active call
+                  </label>
+                  <span id="ws-voice-state" style="color: var(--muted); font-size: 0.85rem;">Mic idle</span>
+                </div>
+                <div class="row">
+                  <button onclick="wsConnect()">Connect</button>
+                  <button class="secondary" onclick="wsSendTranscript()">Send Transcript</button>
+                  <button onclick="wsStartLiveMic()">Start Live Mic</button>
+                  <button onclick="wsStopLiveMic()">Stop Live Mic</button>
+                  <button onclick="wsDisconnect()">Disconnect</button>
+                </div>
+              </article>
+              <article class="card">
+                <div class="row"><span class="method post">POST</span><code class="path">/api/v1/calls/{call_id}/live/start</code></div>
+                <p class="hint">Telegram-native mode: call recording -> STT -> AI reply -> TTS into the same call.</p>
+                <textarea id="payload-live-start">{\n  "context": {"source":"dashboard_live_telegram"},\n  "speak_response": true\n}</textarea>
+                <div class="row">
+                  <input type="text" id="live-call-id" placeholder="Call ID, e.g. tg-123456789" />
+                </div>
+                <div class="row">
+                  <button class="secondary" onclick="startTelegramLive()">Start</button>
+                  <button onclick="stopTelegramLive()">Stop</button>
+                  <button onclick="statusTelegramLive()">Status</button>
+                </div>
               </article>
             </div>
           </div>
@@ -291,6 +339,28 @@ DASHBOARD_HTML = """<!doctype html>
       }
 
       // API Call Helpers for Lab
+      let liveSocket = null;
+      let wsRecognition = null;
+      let wsVoiceEnabled = false;
+      let wsSpeechSeq = 0;
+
+      function appendOutputLine(text) {
+        const output = document.getElementById("output");
+        output.textContent += `\\n\\n${text}`;
+        output.scrollTop = output.scrollHeight;
+      }
+
+      function wsSupportsSpeechRecognition() {
+        return Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
+      }
+
+      function wsSetVoiceState(text, active = false) {
+        const state = document.getElementById("ws-voice-state");
+        if (!state) return;
+        state.textContent = text;
+        state.style.color = active ? "#34d399" : "var(--muted)";
+      }
+
       function printResult(method, path, status, body) {
         const output = document.getElementById("output");
         const stamp = new Date().toISOString();
@@ -319,6 +389,212 @@ DASHBOARD_HTML = """<!doctype html>
         } catch (err) { printClientError("POST", path, err); }
       }
 
+      async function startTelegramLive() {
+        const callId = document.getElementById("live-call-id").value.trim();
+        if (!callId) { alert("Enter call_id first."); return; }
+        await callPost(`/api/v1/calls/${encodeURIComponent(callId)}/live/start`, "payload-live-start");
+      }
+
+      async function stopTelegramLive() {
+        const callId = document.getElementById("live-call-id").value.trim();
+        if (!callId) { alert("Enter call_id first."); return; }
+        try {
+          const res = await fetch(`/api/v1/calls/${encodeURIComponent(callId)}/live/stop`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: "{}",
+          });
+          const body = await res.json().catch(() => ({ raw: "Non-JSON response" }));
+          printResult("POST", `/api/v1/calls/${callId}/live/stop`, res.status, body);
+        } catch (err) { printClientError("POST", `/api/v1/calls/${callId}/live/stop`, err); }
+      }
+
+      async function statusTelegramLive() {
+        const callId = document.getElementById("live-call-id").value.trim();
+        if (!callId) { alert("Enter call_id first."); return; }
+        await callGet(`/api/v1/calls/${encodeURIComponent(callId)}/live/status`);
+      }
+
+      function wsEndpoint(callId) {
+        const scheme = location.protocol === "https:" ? "wss" : "ws";
+        return `${scheme}://${location.host}/api/v1/ws/live/${encodeURIComponent(callId)}`;
+      }
+
+      function wsConnect() {
+        const callId = document.getElementById("ws-call-id").value.trim();
+        if (!callId) {
+          alert("Provide a call_id first.");
+          return;
+        }
+        if (liveSocket && liveSocket.readyState === WebSocket.OPEN) {
+          appendOutputLine(`[${new Date().toISOString()}] WS already connected for ${callId}`);
+          return;
+        }
+
+        liveSocket = new WebSocket(wsEndpoint(callId));
+        liveSocket.onopen = () => {
+          appendOutputLine(`[${new Date().toISOString()}] WS connected: ${callId}`);
+        };
+        liveSocket.onmessage = (event) => {
+          appendOutputLine(`[${new Date().toISOString()}] WS message\\n${event.data}`);
+        };
+        liveSocket.onerror = () => {
+          appendOutputLine(`[${new Date().toISOString()}] WS error`);
+        };
+        liveSocket.onclose = () => {
+          wsStopLiveMic();
+          appendOutputLine(`[${new Date().toISOString()}] WS disconnected`);
+          liveSocket = null;
+        };
+      }
+
+      function wsSendTranscript() {
+        if (!liveSocket || liveSocket.readyState !== WebSocket.OPEN) {
+          alert("Connect the websocket first.");
+          return;
+        }
+        const transcript = document.getElementById("ws-transcript").value.trim();
+        if (!transcript) {
+          alert("Transcript is empty.");
+          return;
+        }
+        wsSendTranscriptChunk(transcript);
+      }
+
+      function wsSendTranscriptChunk(transcript) {
+        if (!liveSocket || liveSocket.readyState !== WebSocket.OPEN) {
+          appendOutputLine(`[${new Date().toISOString()}] WS not connected; transcript skipped`);
+          return;
+        }
+        const speakResponse = document.getElementById("ws-speak-response")?.checked !== false;
+        const payload = {
+          type: "transcript",
+          transcript,
+          context: { source: "dashboard_ws", seq: wsSpeechSeq++ },
+          speak_response: speakResponse
+        };
+        liveSocket.send(JSON.stringify(payload));
+        appendOutputLine(`[${new Date().toISOString()}] WS transcript sent\\n${transcript}`);
+      }
+
+      function wsStartLiveMic() {
+        if (!liveSocket || liveSocket.readyState !== WebSocket.OPEN) {
+          alert("Connect the websocket first.");
+          return;
+        }
+        if (!wsSupportsSpeechRecognition()) {
+          alert("Speech recognition is not supported in this browser.");
+          return;
+        }
+        if (wsVoiceEnabled) {
+          appendOutputLine(`[${new Date().toISOString()}] Live mic already running`);
+          return;
+        }
+
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        wsRecognition = new SpeechRecognition();
+        wsRecognition.lang = "en-GB";
+        wsRecognition.continuous = true;
+        wsRecognition.interimResults = true;
+        wsRecognition.maxAlternatives = 1;
+
+        wsVoiceEnabled = true;
+        wsSetVoiceState("Mic listening...", true);
+        appendOutputLine(`[${new Date().toISOString()}] Live mic started`);
+
+        wsRecognition.onresult = (event) => {
+          let latestFinal = "";
+          for (let i = event.resultIndex; i < event.results.length; i += 1) {
+            const res = event.results[i];
+            const text = (res[0]?.transcript || "").trim();
+            if (!text) continue;
+            if (res.isFinal) {
+              latestFinal = text;
+            }
+          }
+          if (latestFinal) {
+            const textarea = document.getElementById("ws-transcript");
+            if (textarea) textarea.value = latestFinal;
+            wsSendTranscriptChunk(latestFinal);
+          }
+        };
+
+        wsRecognition.onerror = (event) => {
+          appendOutputLine(`[${new Date().toISOString()}] Live mic error: ${event.error}`);
+          wsSetVoiceState(`Mic error: ${event.error}`, false);
+        };
+
+        wsRecognition.onend = () => {
+          if (!wsVoiceEnabled) {
+            wsSetVoiceState("Mic idle", false);
+            return;
+          }
+          try {
+            wsRecognition.start();
+            wsSetVoiceState("Mic listening...", true);
+          } catch (_) {
+            wsSetVoiceState("Mic restart delayed...", false);
+            setTimeout(() => {
+              if (!wsVoiceEnabled || !wsRecognition) return;
+              try {
+                wsRecognition.start();
+                wsSetVoiceState("Mic listening...", true);
+              } catch (err) {
+                appendOutputLine(`[${new Date().toISOString()}] Live mic restart failed: ${String(err)}`);
+              }
+            }, 400);
+          }
+        };
+
+        wsRecognition.start();
+      }
+
+      function wsStopLiveMic() {
+        wsVoiceEnabled = false;
+        if (wsRecognition) {
+          try { wsRecognition.stop(); } catch (_) {}
+          wsRecognition = null;
+        }
+        wsSetVoiceState("Mic idle", false);
+        appendOutputLine(`[${new Date().toISOString()}] Live mic stopped`);
+      }
+
+      function wsDisconnect() {
+        wsStopLiveMic();
+        if (liveSocket) {
+          liveSocket.close(1000, "dashboard_disconnect");
+          liveSocket = null;
+        }
+      }
+
+      function dictateIntoPayload(textareaId) {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+          alert("Speech recognition is not supported in this browser.");
+          return;
+        }
+        const recognition = new SpeechRecognition();
+        recognition.lang = "en-GB";
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+
+        recognition.onresult = (event) => {
+          const spoken = event.results[0][0].transcript;
+          const textarea = document.getElementById(textareaId);
+          try {
+            const payload = JSON.parse(textarea.value);
+            payload.transcript = spoken;
+            textarea.value = JSON.stringify(payload, null, 2);
+          } catch (err) {
+            alert("Payload JSON is invalid. Fix it and try again.");
+          }
+        };
+        recognition.onerror = () => {
+          alert("Could not capture speech. Try again.");
+        };
+        recognition.start();
+      }
+
       // Overview Tab Refresh Loop
       async function refreshDashboard() {
         try {
@@ -330,9 +606,10 @@ DASHBOARD_HTML = """<!doctype html>
 
           // Auth
           fetch('/api/v1/telegram/auth/status').then(r => r.json()).then(d => {
-            const state = d.state || 'unknown';
+            const state = d.authorized ? 'authorized' : (d.connected ? 'connected' : 'offline');
             let ind = '<span class="status-indicator status-warn"></span>';
-            if (state === 'authorized') ind = '<span class="status-indicator status-ok"></span>';
+            if (d.authorized) ind = '<span class="status-indicator status-ok"></span>';
+            if (!d.connected) ind = '<span class="status-indicator status-err"></span>';
             document.getElementById('status-auth').innerHTML = ind + state;
           }).catch(() => document.getElementById('status-auth').innerHTML = '<span class="status-indicator status-err"></span>Error');
 

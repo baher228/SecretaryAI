@@ -261,12 +261,15 @@ class TelegramCallService:
         call = self.calls.get(call_id)
         if not call:
             return {"status": "not_found", "detail": "Unknown call_id."}
+        chat_id = call.get("chat_id")
+        if not isinstance(chat_id, int):
+            return {"status": "invalid_call_state", "detail": "Call has no active Telegram chat_id."}
         if not await self._can_place_calls():
             return {"status": "not_authorized", "detail": "Telegram calls client is not ready."}
 
         try:
             assert self._calls is not None
-            await self._calls.leave_call(call["chat_id"])
+            await self._calls.leave_call(chat_id)
             self._upsert_call(call_id, {"status": "ended", "updated_at": self._now_iso()})
             self._append_event(call_id, "call_ended", {})
             return {"status": "ended", "detail": "Call ended."}
@@ -277,6 +280,13 @@ class TelegramCallService:
         call = self.calls.get(call_id)
         if not call:
             return {"call_id": call_id, "status": "not_found", "detail": "Unknown call_id."}
+        chat_id = call.get("chat_id")
+        if not isinstance(chat_id, int):
+            return {
+                "call_id": call_id,
+                "status": "invalid_call_state",
+                "detail": "Call has no active Telegram chat_id.",
+            }
         if not await self._can_place_calls():
             return {
                 "call_id": call_id,
@@ -294,7 +304,7 @@ class TelegramCallService:
 
         try:
             assert self._calls is not None
-            await self._calls.play(call["chat_id"], stream=str(normalized))
+            await self._calls.play(chat_id, stream=str(normalized))
             self._append_event(call_id, "audio_out_started", {"audio_path": str(normalized)})
             return {
                 "call_id": call_id,
@@ -312,6 +322,13 @@ class TelegramCallService:
         call = self.calls.get(call_id)
         if not call:
             return {"call_id": call_id, "status": "not_found", "detail": "Unknown call_id."}
+        chat_id = call.get("chat_id")
+        if not isinstance(chat_id, int):
+            return {
+                "call_id": call_id,
+                "status": "invalid_call_state",
+                "detail": "Call has no active Telegram chat_id.",
+            }
         if not await self._can_place_calls():
             return {
                 "call_id": call_id,
@@ -324,7 +341,7 @@ class TelegramCallService:
 
         try:
             assert self._calls is not None
-            await self._calls.record(call["chat_id"], stream=str(normalized))
+            await self._calls.record(chat_id, stream=str(normalized))
             self._append_event(call_id, "audio_in_recording", {"output_path": str(normalized)})
             return {
                 "call_id": call_id,

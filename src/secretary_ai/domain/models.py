@@ -72,6 +72,30 @@ class CallAudioResponse(BaseModel):
     detail: str
 
 
+class TelegramLiveAgentStartRequest(BaseModel):
+    context: dict[str, Any] = Field(default_factory=dict)
+    speak_response: bool = True
+
+
+class TelegramLiveAgentResponse(BaseModel):
+    call_id: str
+    status: str
+    detail: str
+    recording_path: str | None = None
+    stt_status: str | None = None
+    speak_response: bool = True
+
+
+class TelegramLiveAgentStatusResponse(BaseModel):
+    call_id: str
+    running: bool
+    status: str
+    detail: str
+    recording_path: str | None = None
+    last_stt_status: str | None = None
+    last_transcript: str | None = None
+
+
 class PostCallEventRequest(BaseModel):
     call_id: str
     transcript: str
@@ -149,3 +173,44 @@ class AgentReplyResponse(BaseModel):
     call_id: str
     reply: str
     action_items: list[str] = Field(default_factory=list)
+
+
+class AgentAnalyzeRequest(BaseModel):
+    call_id: str
+    transcript: str
+    context: dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentAnalyzeResponse(BaseModel):
+    call_id: str
+    intent: IntentType = IntentType.UNKNOWN
+    confidence: float = 0.0
+    reply: str
+    requires_human: bool = False
+    transfer_reason: str | None = None
+    action_items: list[str] = Field(default_factory=list)
+    extracted_fields: dict[str, Any] = Field(default_factory=dict)
+    model: str
+
+
+class AgentLiveRespondRequest(BaseModel):
+    call_id: str
+    transcript: str
+    context: dict[str, Any] = Field(default_factory=dict)
+    speak_response: bool = True
+
+
+class AgentLiveRespondResponse(BaseModel):
+    call_id: str
+    transcript: str
+    reply: str
+    intent: IntentType
+    confidence: float
+    requires_human: bool
+    transfer_reason: str | None = None
+    action_items: list[str] = Field(default_factory=list)
+    extracted_fields: dict[str, Any] = Field(default_factory=dict)
+    model: str
+    tts_audio_path: str | None = None
+    tts_status: str | None = None
+    call_audio_status: str | None = None
