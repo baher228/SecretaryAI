@@ -9,7 +9,7 @@ from aiogram.types import Message, BotCommand, CallbackQuery, InlineKeyboardMark
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.exceptions import TelegramBadRequest
 
-from bot.config import TELEGRAM_BOT_TOKEN, OWNER_TELEGRAM_ID, ZAI_MAX_TOTAL_SECONDS
+from bot.config import TELEGRAM_BOT_TOKEN, OWNER_TELEGRAM_ID, ALLOWED_TELEGRAM_IDS
 from bot.agent import run_agent
 from bot.files import (
     UPLOAD_DIR, extract_pdf_text, summarize_document,
@@ -45,6 +45,7 @@ CALLBACK_PROMPTS = {
     "cmd:help": "Briefly list what you can help me with. Keep it under 100 words, use emojis.",
     "cmd:calendar": "Show my calendar for this week",
     "cmd:edit": "Let me edit the last thing you proposed.",
+    "cmd:concierge": "What can you help me find? I can search for restaurants, hotels, events, travel options, or plan a full evening. Just tell me what you need.",
 }
 
 
@@ -94,8 +95,8 @@ def extract_buttons(text: str) -> tuple[str, "InlineKeyboardMarkup | None"]:
     return clean_text, kb.as_markup()
 
 
-def is_owner(message: Message) -> bool:
-    return message.from_user.id == OWNER_TELEGRAM_ID
+def is_allowed(message: Message) -> bool:
+    return message.from_user.id in ALLOWED_TELEGRAM_IDS
 
 
 def build_default_keyboard() -> InlineKeyboardMarkup:
@@ -104,8 +105,8 @@ def build_default_keyboard() -> InlineKeyboardMarkup:
     kb.button(text="📅 Calendar", callback_data="cmd:calendar")
     kb.button(text="📞 Calls", callback_data="cmd:calls")
     kb.button(text="👤 Contacts", callback_data="cmd:contacts")
+    kb.button(text="🍽️ Concierge", callback_data="cmd:concierge")
     kb.button(text="➕ New task", callback_data="cmd:newtask")
-    kb.button(text="❓ Help", callback_data="cmd:help")
     kb.adjust(3, 3)
     return kb.as_markup()
 
@@ -136,35 +137,35 @@ async def handle_text_internal(
     initial_message: Message | None = None,
     uid_override: int | None = None,
 ):
-    uid = uid_override if uid_override is not None else message.from_user.id
-    history = sessions.setdefault(uid, [])
+    incoming_uid = uid_override or message.from_user.id
+    print(f"[recv] uid={incoming_uid} text={text[:80]!r}", flush=True)
+    history = sessions.setdefault(incoming_uid, [])
 
     typing_task = asyncio.create_task(_keep_typing(message.chat.id))
     placeholder = initial_message or await message.answer("<i>Thinking…</i>", parse_mode="HTML")
 
     accumulated = ""
+    last_edit = 0.0
     new_history = None
 
-    async def _run_agent_collect():
-        nonlocal accumulated, new_history
+    try:
         async for chunk, maybe_history in run_agent(text, history):
             if maybe_history is not None:
                 new_history = maybe_history
                 break
             accumulated += chunk
-
-    try:
-        await asyncio.wait_for(_run_agent_collect(), timeout=ZAI_MAX_TOTAL_SECONDS)
-        clean_text, contextual_kb = extract_buttons(accumulated.strip() or "(empty response)")
-        keyboard = contextual_kb if contextual_kb else build_default_keyboard()
-        await _safe_edit(placeholder, clean_text or "(empty response)", reply_markup=keyboard)
-    except asyncio.TimeoutError:
-        await _safe_edit(
-            placeholder,
-            "Sorry, that took too long. Please send a shorter follow-up and I’ll answer fast.",
-            reply_markup=build_default_keyboard(),
-        )
-        return
+            now = time.perf_counter()
+            if now - last_edit > 0.5:
+                display = strip_button_marker_for_streaming(accumulated)
+                if display.strip():
+                    await _safe_edit(placeholder, display)
+                    last_edit = now
+        if accumulated.strip():
+            clean_text, contextual_kb = extract_buttons(accumulated)
+            keyboard = contextual_kb if contextual_kb else build_default_keyboard()
+            await _safe_edit(placeholder, clean_text or "(empty response)", reply_markup=keyboard)
+        else:
+            await _safe_edit(placeholder, "(empty response)", reply_markup=build_default_keyboard())
     except Exception as e:
         await _safe_edit(placeholder, f"Error: {e}")
         return
@@ -172,12 +173,12 @@ async def handle_text_internal(
         typing_task.cancel()
 
     if new_history is not None:
-        sessions[uid] = new_history[-20:]
+        sessions[incoming_uid] = new_history[-20:]
 
 
 @dp.message(CommandStart())
 async def cmd_start(message: Message):
-    if not is_owner(message):
+    if not is_allowed(message):
         return
     sessions[message.from_user.id] = []
     await message.answer(
@@ -189,7 +190,7 @@ async def cmd_start(message: Message):
 
 @dp.message(F.document)
 async def handle_document(message: Message):
-    if not is_owner(message):
+    if not is_allowed(message):
         return
     doc = message.document
     filename = doc.file_name or "document"
@@ -227,7 +228,7 @@ async def handle_document(message: Message):
 
 @dp.message(F.photo)
 async def handle_photo(message: Message):
-    if not is_owner(message):
+    if not is_allowed(message):
         return
     photo = message.photo[-1]
 
@@ -255,7 +256,7 @@ async def handle_photo(message: Message):
 
 @dp.message(F.voice | F.audio)
 async def handle_voice(message: Message):
-    if not is_owner(message):
+    if not is_allowed(message):
         return
     voice = message.voice or message.audio
 
@@ -285,51 +286,52 @@ async def handle_voice(message: Message):
 
 @dp.message(Command("tasks"))
 async def cmd_tasks(message: Message):
-    if not is_owner(message):
+    if not is_allowed(message):
         return
     await handle_text_internal(message, "Show my open tasks")
 
 
 @dp.message(Command("calls"))
 async def cmd_calls(message: Message):
-    if not is_owner(message):
+    if not is_allowed(message):
         return
     await handle_text_internal(message, "Show my recent calls")
 
 
 @dp.message(Command("contacts"))
 async def cmd_contacts(message: Message):
-    if not is_owner(message):
+    if not is_allowed(message):
         return
     await handle_text_internal(message, "Show my contacts")
 
 
 @dp.message(Command("calendar"))
 async def cmd_calendar(message: Message):
-    if not is_owner(message):
+    if not is_allowed(message):
         return
     await handle_text_internal(message, "Show my calendar for this week")
 
 
 @dp.message(Command("help"))
 async def cmd_help(message: Message):
-    if not is_owner(message):
+    if not is_allowed(message):
         return
     await handle_text_internal(message, "What can you help me with? List capabilities briefly.")
 
 
 @dp.message(F.text)
 async def handle_text(message: Message):
-    if not is_owner(message):
+    if not is_allowed(message):
         return
     await handle_text_internal(message, message.text)
 
 
 @dp.callback_query()
 async def handle_callback(cq: CallbackQuery):
-    if cq.from_user.id != OWNER_TELEGRAM_ID:
+    if cq.from_user.id not in ALLOWED_TELEGRAM_IDS:
         await cq.answer()
         return
+    print(f"[callback] uid={cq.from_user.id} data={cq.data!r}", flush=True)
 
     data = cq.data or ""
     await cq.answer()
@@ -364,6 +366,20 @@ async def handle_callback(cq: CallbackQuery):
             f"[User tapped 🗑️ Delete for event ID {event_id}. Delete it and confirm.]",
             uid_override=cq.from_user.id,
         )
+    elif data.startswith("book:"):
+        # Format: book:TYPE:YYYY-MM-DDTHH:MM:NAME (timestamp is exactly 16 chars)
+        remainder = data[len("book:"):]
+        first_colon = remainder.find(":")
+        if first_colon > 0 and len(remainder) >= first_colon + 1 + 17 and remainder[first_colon + 1 + 16] == ":":
+            btype = remainder[:first_colon]
+            after_type = remainder[first_colon + 1:]
+            timestamp = after_type[:16]
+            name = after_type[17:]
+            synthetic = (
+                f"[User chose booking slot: type={btype}, time={timestamp}, venue={name}. "
+                f"Create calendar event and confirm.]"
+            )
+            await handle_text_internal(cq.message, synthetic, uid_override=cq.from_user.id)
 
 
 async def main():

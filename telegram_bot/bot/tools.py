@@ -1,3 +1,4 @@
+import asyncio
 import json
 from datetime import datetime, timedelta
 from sqlalchemy import select, desc
@@ -10,6 +11,7 @@ from service.google_calendar import (
     delete_event as _gcal_delete_event,
     find_free_slots as _gcal_find_free_slots,
 )
+from service.search import tavily_search
 
 TOOL_SCHEMAS = [
     {
@@ -153,6 +155,89 @@ TOOL_SCHEMAS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_restaurants",
+            "description": "Search the web for real restaurants. Returns a list of {title, url, content, score}.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "location": {"type": "string"},
+                    "cuisine": {"type": "string"},
+                    "price_range": {"type": "string", "description": "$, $$, or $$$"},
+                },
+                "required": ["location"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_hotels",
+            "description": "Search the web for real hotels.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "location": {"type": "string"},
+                    "check_in": {"type": "string", "description": "ISO date YYYY-MM-DD"},
+                    "check_out": {"type": "string", "description": "ISO date YYYY-MM-DD"},
+                    "budget": {"type": "string"},
+                },
+                "required": ["location", "check_in", "check_out"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_events",
+            "description": "Search the web for concerts, theatre, cinema, sports, or exhibitions.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "location": {"type": "string"},
+                    "event_type": {"type": "string", "description": "concert, theatre, cinema, sports, exhibition"},
+                    "date": {"type": "string", "description": "ISO date or 'this weekend' etc."},
+                },
+                "required": ["location", "event_type"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_travel",
+            "description": "Search the web for flight, train, or bus options between two places.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "origin": {"type": "string"},
+                    "destination": {"type": "string"},
+                    "date": {"type": "string", "description": "ISO date YYYY-MM-DD"},
+                    "mode": {"type": "string", "description": "flight, train, or bus"},
+                    "return_date": {"type": "string"},
+                },
+                "required": ["origin", "destination", "date", "mode"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "plan_evening",
+            "description": "Compose a full evening plan: dinner + entertainment. Runs two web searches internally. Returns {dinner, entertainment} each a list of results.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "location": {"type": "string"},
+                    "date": {"type": "string", "description": "ISO date YYYY-MM-DD"},
+                    "preferences": {"type": "string", "description": "e.g. 'romantic, italian, jazz'"},
+                },
+                "required": ["location", "date"],
+            },
+        },
+    },
 ]
 
 
@@ -227,6 +312,64 @@ async def _complete_task(task_id: int):
         return {"id": t.id, "status": "done"}
 
 
+_RESTAURANT_DOMAINS = ["opentable.com", "timeout.com", "resy.com", "tripadvisor.com"]
+_HOTEL_DOMAINS = ["booking.com", "hotels.com", "airbnb.com", "expedia.com"]
+_EVENT_DOMAINS = ["ticketmaster.com", "seetickets.com", "timeout.com", "eventbrite.com"]
+_FLIGHT_DOMAINS = ["skyscanner.net", "kayak.com", "google.com"]
+_TRAIN_DOMAINS = ["nationalrail.co.uk", "trainline.com", "raileurope.com"]
+_BUS_DOMAINS = ["nationalexpress.com", "megabus.com", "flixbus.com"]
+
+
+async def _search_restaurants(location: str, cuisine: str | None = None, price_range: str | None = None):
+    parts = ["best"]
+    if cuisine:
+        parts.append(cuisine)
+    parts.append("restaurants in")
+    parts.append(location)
+    if price_range:
+        parts.append(price_range)
+    return await tavily_search(" ".join(parts), max_results=5, include_domains=_RESTAURANT_DOMAINS)
+
+
+async def _search_hotels(location: str, check_in: str, check_out: str, budget: str | None = None):
+    parts = [f"hotels in {location} {check_in} to {check_out}"]
+    if budget:
+        parts.append(budget)
+    return await tavily_search(" ".join(parts), max_results=5, include_domains=_HOTEL_DOMAINS)
+
+
+async def _search_events(location: str, event_type: str, date: str | None = None):
+    parts = [event_type, "in", location]
+    if date:
+        parts.append(date)
+    return await tavily_search(" ".join(parts), max_results=5, include_domains=_EVENT_DOMAINS)
+
+
+async def _search_travel(origin: str, destination: str, date: str, mode: str, return_date: str | None = None):
+    mode_l = (mode or "").lower()
+    if mode_l == "train":
+        domains = _TRAIN_DOMAINS
+    elif mode_l == "bus":
+        domains = _BUS_DOMAINS
+    else:
+        domains = _FLIGHT_DOMAINS
+    q = f"{mode} from {origin} to {destination} on {date}"
+    if return_date:
+        q += f" return {return_date}"
+    return await tavily_search(q, max_results=5, include_domains=domains)
+
+
+async def _plan_evening(location: str, date: str, preferences: str | None = None):
+    pref = preferences or ""
+    dinner_q = f"dinner restaurants in {location} {date} {pref}".strip()
+    ent_q = f"theatre concerts bars in {location} {date} {pref}".strip()
+    dinner, entertainment = await asyncio.gather(
+        tavily_search(dinner_q, max_results=3, include_domains=_RESTAURANT_DOMAINS),
+        tavily_search(ent_q, max_results=3, include_domains=_EVENT_DOMAINS),
+    )
+    return {"dinner": dinner, "entertainment": entertainment}
+
+
 HANDLERS = {
     "list_recent_calls": _list_recent_calls,
     "get_call_details": _get_call_details,
@@ -238,6 +381,11 @@ HANDLERS = {
     "gcal_update_event": _gcal_update_event,
     "gcal_delete_event": _gcal_delete_event,
     "gcal_find_free_slots": _gcal_find_free_slots,
+    "search_restaurants": _search_restaurants,
+    "search_hotels": _search_hotels,
+    "search_events": _search_events,
+    "search_travel": _search_travel,
+    "plan_evening": _plan_evening,
 }
 
 

@@ -5,10 +5,10 @@ from datetime import datetime
 from typing import AsyncIterator
 from zoneinfo import ZoneInfo
 from openai import AsyncOpenAI
-from bot.config import ZAI_API_KEY, ZAI_BASE_URL, ZAI_MODEL, ZAI_TIMEOUT_SECONDS, ZAI_MAX_TOOL_ROUNDS
+from bot.config import ZAI_API_KEY, ZAI_BASE_URL, ZAI_MODEL
 from bot.tools import TOOL_SCHEMAS, execute_tool
 
-client = AsyncOpenAI(api_key=ZAI_API_KEY, base_url=ZAI_BASE_URL, timeout=ZAI_TIMEOUT_SECONDS)
+client = AsyncOpenAI(api_key=ZAI_API_KEY, base_url=ZAI_BASE_URL)
 
 _SYSTEM_PROMPT_TEMPLATE = """You are a personal AI secretary assistant for the user, communicating via Telegram.
 
@@ -23,6 +23,32 @@ You have access to a database of phone calls, tasks, contacts, notes, and the us
 - Never use headers (# or ##) — Telegram doesn't render them.
 - Put blank lines between sections for readability.
 - End responses with a short suggestion in italic like "<i>Tap a button below to act.</i>" when relevant.
+
+## Concierge behaviors (when user wants to book/plan something)
+
+When user asks to find restaurants, hotels, events, travel, or plan an evening:
+
+1. Use the appropriate search_* tool to get REAL data (real names, addresses, prices, ratings from the web).
+
+2. After getting results, present 2-3 best options as a compact HTML list with:
+   - <b>Name</b>
+   - One-line description with key detail (cuisine, rating, distance)
+   - <a href="URL">View</a> link to the actual source
+
+3. For each option, invent 2-3 plausible "booking slots" — specific times that realistically could be available. Frame them honestly:
+   - <i>"I'd typically check these times — tap one and I'll add it to your calendar with the booking link."</i>
+   - NEVER claim you actually called or booked. User understands they'll finalize via the link.
+
+4. Attach [[BUTTONS:]] marker with one button per slot, callback_data format:
+   `book:TYPE:TIMESTAMP:NAME` where TYPE is one of restaurant/hotel/event/travel, TIMESTAMP is ISO start time (YYYY-MM-DDTHH:MM, exactly 16 chars), NAME is shortened venue name (max 20 chars, no colons).
+   Example: `[[BUTTONS: 🍽️ 7:30 PM=book:restaurant:2026-04-20T19:30:Bocca di Lupo | 🍽️ 8:00 PM=book:restaurant:2026-04-20T20:00:Bocca di Lupo ;; 🍽️ 8:30 PM=book:restaurant:2026-04-20T20:30:Bocca di Lupo]]`
+
+5. When user clicks a slot button:
+   - You'll receive a synthetic user message like `[User chose booking slot: type=restaurant, time=2026-04-20T19:30, venue=Bocca di Lupo]`
+   - Create the calendar event via gcal_create_event (duration: 90 min for restaurant, 3 hours for event, 2 days for hotel check-in, fixed times for travel)
+   - Respond with a short confirmation: "Added to your calendar. <a href='BOOKING_URL'>Finalize your booking here</a>. Remember to complete the reservation on their site."
+
+6. For plan_evening: compose a timeline like "7pm Dinner at X → 9pm Show at Y" with slot buttons for each component.
 
 ## Button hints (REQUIRED in these scenarios)
 
@@ -73,45 +99,37 @@ def build_system_prompt() -> str:
 
 
 async def run_agent(user_message: str, history: list) -> AsyncIterator[tuple[str, list | None]]:
-    """Single-response loop with bounded tool execution to reduce latency and dropped replies."""
+    """
+    Yields (chunk, None) for incremental text deltas.
+    Final yield is ("", updated_history) as a sentinel to hand back the final history.
+    """
     t0 = time.perf_counter()
-    messages = [{"role": "system", "content": build_system_prompt()}] + history[-12:] + [
+    messages = [{"role": "system", "content": build_system_prompt()}] + history + [
         {"role": "user", "content": user_message}
     ]
 
-    async def _chat_once(payload_messages):
-        last_error = None
-        for attempt in range(1, 3):
-            try:
-                return await client.chat.completions.create(
-                    model=ZAI_MODEL,
-                    messages=payload_messages,
-                    tools=TOOL_SCHEMAS,
-                    tool_choice="auto",
-                    extra_body={"thinking": {"type": "disabled"}},
-                )
-            except Exception as exc:
-                last_error = exc
-                await asyncio.sleep(0.35 * attempt)
-        raise last_error  # type: ignore[misc]
-
-    for iteration in range(1, max(1, ZAI_MAX_TOOL_ROUNDS) + 1):
+    for iteration in range(1, 11):
         t_call = time.perf_counter()
-        response = await _chat_once(messages)
+        response = await client.chat.completions.create(
+            model=ZAI_MODEL,
+            messages=messages,
+            tools=TOOL_SCHEMAS,
+            tool_choice="auto",
+            extra_body={"thinking": {"type": "disabled"}},
+        )
         print(f"[agent] iter={iteration} glm_call={time.perf_counter()-t_call:.2f}s", flush=True)
 
         msg = response.choices[0].message
         messages.append(msg.model_dump(exclude_none=True))
 
         if not msg.tool_calls:
-            text = msg.content or "Sorry, I couldn't generate a reply just now."
-            print(f"[agent] total={time.perf_counter()-t0:.2f}s", flush=True)
-            yield (text, None)
+            print(f"[agent] total={time.perf_counter()-t0:.2f}s iterations={iteration}", flush=True)
+            yield (msg.content or "", None)
             out_history = [m for m in messages if m.get("role") != "system"]
             yield ("", out_history)
             return
 
-        for call in msg.tool_calls[:3]:
+        for call in msg.tool_calls:
             args = json.loads(call.function.arguments or "{}")
             t_tool = time.perf_counter()
             result = await execute_tool(call.function.name, args)
@@ -122,6 +140,45 @@ async def run_agent(user_message: str, history: list) -> AsyncIterator[tuple[str
                 "content": json.dumps(result, default=str),
             })
 
-    fallback = "I processed most of it. Please send one short follow-up so I can finish quickly."
-    yield (fallback, None)
+        t_stream = time.perf_counter()
+        stream = await client.chat.completions.create(
+            model=ZAI_MODEL,
+            messages=messages,
+            extra_body={"thinking": {"type": "disabled"}},
+            stream=True,
+        )
+
+        full_text = ""
+        chunk_count = 0
+        first_chunk_t = None
+        async for chunk in stream:
+            if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
+                delta_content = chunk.choices[0].delta.content
+                chunk_count += 1
+                if first_chunk_t is None:
+                    first_chunk_t = time.perf_counter() - t_stream
+                    print(f"[agent] first_chunk_at={first_chunk_t:.2f}s len={len(delta_content)}", flush=True)
+                full_text += delta_content
+                yield (delta_content, None)
+
+        print(f"[agent] stream_call={time.perf_counter()-t_stream:.2f}s chunks={chunk_count}", flush=True)
+        print(f"[agent] total={time.perf_counter()-t0:.2f}s iterations=stream", flush=True)
+
+        if not full_text.strip():
+            print("[agent] empty stream — retrying non-streaming", flush=True)
+            fallback = await client.chat.completions.create(
+                model=ZAI_MODEL,
+                messages=messages,
+                extra_body={"thinking": {"type": "disabled"}},
+            )
+            full_text = fallback.choices[0].message.content or "(no response generated)"
+            yield (full_text, None)
+
+        messages.append({"role": "assistant", "content": full_text})
+        out_history = [m for m in messages if m.get("role") != "system"]
+        yield ("", out_history)
+        return
+
+    print(f"[agent] total={time.perf_counter()-t0:.2f}s LIMIT REACHED", flush=True)
+    yield ("Reached tool-call iteration limit.", None)
     yield ("", [m for m in messages if m.get("role") != "system"])
