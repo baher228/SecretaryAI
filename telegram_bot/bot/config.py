@@ -22,3 +22,4 @@ ZAI_MODEL = os.environ.get("ZAI_MODEL", "glm-5.1")
 DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite+aiosqlite:///./data/secretary.db")
 GOOGLE_SERVICE_ACCOUNT_JSON = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "./data/service_account.json")
 GOOGLE_CALENDAR_ID = os.environ.get("GOOGLE_CALENDAR_ID", "primary")
+TAVILY_API_KEY = os.environ["TAVILY_API_KEY"]

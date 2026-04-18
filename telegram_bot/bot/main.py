@@ -45,6 +45,7 @@ CALLBACK_PROMPTS = {
     "cmd:help": "Briefly list what you can help me with. Keep it under 100 words, use emojis.",
     "cmd:calendar": "Show my calendar for this week",
     "cmd:edit": "Let me edit the last thing you proposed.",
+    "cmd:concierge": "What can you help me find? I can search for restaurants, hotels, events, travel options, or plan a full evening. Just tell me what you need.",
 }
 
 
@@ -104,8 +105,8 @@ def build_default_keyboard() -> InlineKeyboardMarkup:
     kb.button(text="📅 Calendar", callback_data="cmd:calendar")
     kb.button(text="📞 Calls", callback_data="cmd:calls")
     kb.button(text="👤 Contacts", callback_data="cmd:contacts")
+    kb.button(text="🍽️ Concierge", callback_data="cmd:concierge")
     kb.button(text="➕ New task", callback_data="cmd:newtask")
-    kb.button(text="❓ Help", callback_data="cmd:help")
     kb.adjust(3, 3)
     return kb.as_markup()
 
@@ -365,6 +366,20 @@ async def handle_callback(cq: CallbackQuery):
             f"[User tapped 🗑️ Delete for event ID {event_id}. Delete it and confirm.]",
             uid_override=cq.from_user.id,
         )
+    elif data.startswith("book:"):
+        # Format: book:TYPE:YYYY-MM-DDTHH:MM:NAME (timestamp is exactly 16 chars)
+        remainder = data[len("book:"):]
+        first_colon = remainder.find(":")
+        if first_colon > 0 and len(remainder) >= first_colon + 1 + 17 and remainder[first_colon + 1 + 16] == ":":
+            btype = remainder[:first_colon]
+            after_type = remainder[first_colon + 1:]
+            timestamp = after_type[:16]
+            name = after_type[17:]
+            synthetic = (
+                f"[User chose booking slot: type={btype}, time={timestamp}, venue={name}. "
+                f"Create calendar event and confirm.]"
+            )
+            await handle_text_internal(cq.message, synthetic, uid_override=cq.from_user.id)
 
 
 async def main():
