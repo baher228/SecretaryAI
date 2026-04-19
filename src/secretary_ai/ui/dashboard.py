@@ -17,6 +17,8 @@ DASHBOARD_HTML = """<!doctype html>
         --panel-solid: #18181b;
         --ink: #f0fdf4;
         --muted: #a1a1aa;
+        --muted-on-light: #667085;
+        --ink-on-light: #1f2937;
         --line: rgba(255, 255, 255, 0.1);
         --primary: #10b981;
         --primary-2: #3b82f6;
@@ -109,7 +111,7 @@ DASHBOARD_HTML = """<!doctype html>
         flex: 1;
         background: transparent;
         border: 1px solid transparent;
-        color: var(--muted);
+        color: #5f6f68;
         font-family: "Sora", sans-serif;
         font-size: 0.96rem;
         font-weight: 600;
@@ -119,7 +121,7 @@ DASHBOARD_HTML = """<!doctype html>
         border-radius: 999px;
         outline: none;
       }
-      .tab-btn:hover { color: var(--ink); border-color: #d6e6de; }
+      .tab-btn:hover { color: #1f3b33; border-color: #d6e6de; }
       .tab-btn.active {
         color: #fff;
         border-color: transparent;
@@ -163,8 +165,8 @@ DASHBOARD_HTML = """<!doctype html>
         transition: transform 0.2s ease, box-shadow 0.2s ease;
       }
       .stat-card:hover { transform: translateY(-2px); box-shadow: 0 12px 30px -20px rgba(24,44,37,0.45); }
-      .stat-title { font-size: 0.79rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; }
-      .stat-value { font-size: 1.25rem; font-weight: 700; color: #24382f; }
+      .stat-title { font-size: 0.79rem; color: var(--muted-on-light); text-transform: uppercase; letter-spacing: 0.07em; font-weight: 700; }
+      .stat-value { font-size: 1.25rem; font-weight: 700; color: var(--ink-on-light); }
       .status-indicator { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 8px; }
       .status-ok { background: var(--ok); box-shadow: 0 0 10px rgba(21, 128, 61, 0.6); }
       .status-warn { background: var(--warn); box-shadow: 0 0 10px rgba(180, 83, 9, 0.6); }
@@ -305,7 +307,6 @@ DASHBOARD_HTML = """<!doctype html>
       <div class="hero-meta">
         <span class="meta-chip"><span class="dot"></span>Realtime Call Ops</span>
         <span class="meta-chip"><span class="dot"></span>Z.AI Reasoning</span>
-        <span class="meta-chip"><span class="dot"></span>Hackathon Fast Mode</span>
       </div>
     </div>
 
@@ -325,15 +326,15 @@ DASHBOARD_HTML = """<!doctype html>
         <!-- New Dashboard Header Stats -->
         <div class="stats-grid" style="margin-bottom: 24px;">
           <div class="stat-card" style="background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border);">
-            <span class="stat-title" style="color: var(--muted);">AI Status</span>
-            <span class="stat-value" id="status-model" style="color: #fff;"><span class="loader"></span> Polling...</span>
+            <span class="stat-title">AI Status</span>
+            <span class="stat-value" id="status-model"><span class="loader"></span> Polling...</span>
           </div>
           <div class="stat-card" style="background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border);">
-            <span class="stat-title" style="color: var(--muted);">Active Deployments</span>
-            <span class="stat-value" style="color: #fff;">1 Node</span>
+            <span class="stat-title">Active Deployments</span>
+            <span class="stat-value">1 Node</span>
           </div>
           <div class="stat-card" style="background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border);">
-            <span class="stat-title" style="color: var(--muted);">Next Event</span>
+            <span class="stat-title">Next Event</span>
             <span class="stat-value" style="color: var(--primary);">London Trip</span>
           </div>
         </div>
@@ -1120,7 +1121,7 @@ DASHBOARD_HTML = """<!doctype html>
 @router.get("/", include_in_schema=False)
 async def root() -> RedirectResponse:
     return RedirectResponse(
-        url="/dashboard?v=20260419",
+        url="/dashboard?v=20260420",
         headers={
             "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
             "Pragma": "no-cache",

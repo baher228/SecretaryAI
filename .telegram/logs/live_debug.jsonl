@@ -16,3 +16,15 @@
 {"ts": "2026-04-19T07:17:53.432241+00:00", "call_id": "tg-5523073095", "stage": "fallback_tts", "data": {"tts_status": "generated", "has_audio": true, "reply": "Sorry, I’m slow right now. Please repeat in one short sentence."}}
 {"ts": "2026-04-19T07:18:13.512777+00:00", "call_id": "tg-5523073095", "stage": "fallback_audio_out", "data": {"audio_path": "/app/.telegram/audio/generated/tg-5523073095-20260419T071752507389Z.mp3", "status": "error", "detail": "Could not stream outgoing audio: TimeoutError: no message"}}
 {"ts": "2026-04-19T07:18:14.724574+00:00", "call_id": "tg-5523073095", "stage": "loop_stopped", "data": {"reason": "call_ended", "status": "ended"}}
+{"ts": "2026-04-19T07:36:16.826974+00:00", "call_id": "tg-5523073095", "stage": "live_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "speak_response": true, "context": {"source": "auto_attach_watcher"}}}
+{"ts": "2026-04-19T07:36:53.624467+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T07:37:00.391275+00:00", "call_id": "tg-5523073095", "stage": "loop_tick", "data": {"tick": 15, "file_size": 696296, "last_audio_size": 841832, "last_stt_status": "no_speech"}}
+{"ts": "2026-04-19T07:37:07.284051+00:00", "call_id": "tg-5523073095", "stage": "loop_tick", "data": {"tick": 30, "file_size": 804584, "last_audio_size": 841832, "last_stt_status": "no_speech"}}
+{"ts": "2026-04-19T07:37:11.320675+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T07:37:13.224727+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T07:37:15.003876+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T07:37:17.208732+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T07:37:19.210269+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T07:37:21.830019+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T07:37:23.641136+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T07:37:24.862578+00:00", "call_id": "tg-5523073095", "stage": "loop_stopped", "data": {"reason": "call_ended", "status": "ended"}}
