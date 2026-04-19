@@ -405,6 +405,16 @@ class SecretaryService:
                 speak_response=speak_response,
             )
 
+        if self._looks_like_background_announcement(transcript):
+            self.debug.log(call_id, "background_announcement_ignored", {"sample": transcript[:180]})
+            return await self._fast_fallback_response(
+                call_id=call_id,
+                snippet=transcript,
+                reply="",
+                action_item="background_ignored",
+                speak_response=False,
+            )
+
         retrieval_hits = self.memory.retrieve_user_fact(transcript, limit=1)
         if retrieval_hits and any(k in transcript.lower() for k in ("remember", "what did i", "about me", "my favorite", "what do i")):
             recalled = str(retrieval_hits[0].get("fact") or "")
@@ -1250,6 +1260,22 @@ class SecretaryService:
             "last_transcript": transcript,
         }
 
+    @staticmethod
+    def _looks_like_background_announcement(transcript: str) -> bool:
+        text = " ".join((transcript or "").split()).strip().lower()
+        if not text:
+            return False
+        markers = [
+            "fire has been reported",
+            "please leave the building",
+            "attention, please",
+            "nearest exit",
+            "evacuate",
+            "emergency",
+            "alarm",
+        ]
+        return any(marker in text for marker in markers)
+
     async def _handle_reminder_flow(
         self,
         call_id: str,
@@ -1270,20 +1296,26 @@ class SecretaryService:
                 speak_response=speak_response,
             )
 
-        # Step 1: immediate pre-recorded acknowledgment
-        ack_reply = "Let me check your availability for that reminder."
-        ack = await self._fast_fallback_response(
-            call_id=call_id,
-            snippet=transcript,
-            reply=ack_reply,
-            action_item="reminder_flow_ack",
-            speak_response=speak_response,
-        )
+        # Step 1: immediate pre-recorded acknowledgment (once per fingerprint)
+        should_speak_ack = True
+        if existing.get("last_ack_fingerprint") == fingerprint:
+            should_speak_ack = False
+
+        if should_speak_ack:
+            ack_reply = "Let me check your availability for that reminder."
+            await self._fast_fallback_response(
+                call_id=call_id,
+                snippet=transcript,
+                reply=ack_reply,
+                action_item="reminder_flow_ack",
+                speak_response=speak_response,
+            )
 
         self._reminder_flow_state[call_id] = {
             "awaiting_result": True,
             "fingerprint": fingerprint,
             "requested_at": self._now_iso(),
+            "last_ack_fingerprint": fingerprint,
         }
 
         # Step 2: fast availability decision using cached schedule + optional planner queue
@@ -1300,9 +1332,9 @@ class SecretaryService:
 
         # Heuristic decision phrase (pre-recorded family)
         if busy_count >= 5:
-            result_reply = "You’re not very available. I can still queue this reminder around your schedule."
+            result_reply = "You are not available then. You already have events, so I can suggest the next free slot."
         elif busy_count >= 1:
-            result_reply = "You have some events, but yes, I can place this reminder."
+            result_reply = "You have a few events, but yes, I can fit this reminder in."
         else:
             result_reply = "Yes, you’re available. I can set this reminder now."
 
@@ -1312,7 +1344,7 @@ class SecretaryService:
             if path:
                 self._template_audio_cache["reminder_result_available"] = path
         if "reminder_result_busy" not in self._template_audio_cache:
-            path, _ = await self.tts.synthesize("You’re not very available. I can still queue this reminder around your schedule.", call_id="template-reminder_result_busy")
+            path, _ = await self.tts.synthesize("You are not available then. You already have events, so I can suggest the next free slot.", call_id="template-reminder_result_busy")
             if path:
                 self._template_audio_cache["reminder_result_busy"] = path
 
