@@ -448,7 +448,18 @@ class SecretaryService:
                 },
             )
         else:
-            analysis = await self.analyze_agent_turn(call_id=call_id, transcript=transcript, context=context)
+            try:
+                analysis = await asyncio.wait_for(
+                    self.analyze_agent_turn(call_id=call_id, transcript=transcript, context=context),
+                    timeout=max(0.9, float(self.settings.agent_live_timeout_seconds)),
+                )
+            except asyncio.TimeoutError:
+                analysis = AgentAnalyzeResponse(
+                    call_id=call_id,
+                    reply="Sorry, I’m slow right now. Please repeat in one short sentence.",
+                    model=self.settings.zai_model,
+                    action_items=["latency_fallback"],
+                )
 
         tts_audio_path: str | None = None
         tts_status: str | None = None
@@ -950,45 +961,32 @@ class SecretaryService:
                     self.debug.log(call_id, "skip_live_respond_call_not_active", {"status": status_before})
                     await asyncio.sleep(poll_seconds)
                     continue
-                try:
-                    started = monotonic()
-                    response = await asyncio.wait_for(
-                        self.live_agent_respond(
-                            call_id=call_id,
-                            transcript=snippet,
-                            context=context,
-                            speak_response=bool(session.get("speak_response", True)),
-                        ),
-                        timeout=max(0.9, float(self.settings.agent_live_timeout_seconds)),
-                    )
+                started = monotonic()
+                response = await self.live_agent_respond(
+                    call_id=call_id,
+                    transcript=snippet,
+                    context=context,
+                    speak_response=bool(session.get("speak_response", True)),
+                )
+                self.debug.log(
+                    call_id,
+                    "live_respond_ok",
+                    {
+                        "elapsed_sec": round(monotonic() - started, 3),
+                        "reply_chars": len((response.reply or "").strip()),
+                        "call_audio_status": response.call_audio_status,
+                    },
+                )
+                if str((response.call_audio_status or "").lower()) == "error":
                     self.debug.log(
                         call_id,
-                        "live_respond_ok",
+                        "audio_out_error_after_response",
                         {
-                            "elapsed_sec": round(monotonic() - started, 3),
-                            "reply_chars": len((response.reply or "").strip()),
+                            "reply": (response.reply or "")[:140],
+                            "tts_status": response.tts_status,
                             "call_audio_status": response.call_audio_status,
+                            "call_status": call.get("status"),
                         },
-                    )
-                    if str((response.call_audio_status or "").lower()) == "error":
-                        self.debug.log(
-                            call_id,
-                            "audio_out_error_after_response",
-                            {
-                                "reply": (response.reply or "")[:140],
-                                "tts_status": response.tts_status,
-                                "call_audio_status": response.call_audio_status,
-                                "call_status": call.get("status"),
-                            },
-                        )
-                except asyncio.TimeoutError:
-                    self.debug.log(call_id, "live_respond_timeout", {"timeout_sec": self.settings.agent_live_timeout_seconds})
-                    response = await self._fast_fallback_response(
-                        call_id=call_id,
-                        snippet=snippet,
-                        reply="Sorry, I’m slow right now. Please repeat in one short sentence.",
-                        action_item="latency_fallback",
-                        speak_response=bool(session.get("speak_response", True)),
                     )
 
                 session["last_processed_snippet"] = snippet
