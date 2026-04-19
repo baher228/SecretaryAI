@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
+from difflib import SequenceMatcher
 from pathlib import Path
 import re
 from time import monotonic
@@ -661,7 +662,7 @@ class SecretaryService:
         if session is None:
             return
 
-        poll_seconds = max(0.35, float(self.settings.telegram_live_poll_seconds))
+        poll_seconds = max(0.2, float(self.settings.telegram_live_poll_seconds))
         while True:
             if not session.get("running"):
                 return
@@ -674,33 +675,32 @@ class SecretaryService:
 
             pause_until = session.get("pause_until")
             if isinstance(pause_until, datetime) and datetime.now(timezone.utc) < pause_until:
-                await asyncio.sleep(0.4)
+                await asyncio.sleep(0.2)
                 continue
 
             recording_path = Path(str(session["recording_path"]))
             if not recording_path.exists():
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(0.3)
                 continue
 
             file_size = recording_path.stat().st_size
             previous_size = int(session.get("last_audio_size") or 0)
-            min_new_bytes = max(512, int(self.settings.stt_min_new_bytes // 2))
+            min_new_bytes = max(256, int(self.settings.stt_min_new_bytes // 2))
 
             started_monotonic = float(session.get("started_monotonic") or 0.0)
             warmup_elapsed = monotonic() - started_monotonic if started_monotonic else 999.0
-            in_warmup = warmup_elapsed < 12.0
+            in_warmup = warmup_elapsed < 10.0
 
             if file_size <= 0:
-                await asyncio.sleep(min(0.6, poll_seconds))
+                await asyncio.sleep(min(0.4, poll_seconds))
                 continue
             if (file_size - previous_size) < min_new_bytes and not in_warmup:
-                await asyncio.sleep(min(0.6, poll_seconds))
+                await asyncio.sleep(min(0.4, poll_seconds))
                 continue
             session["last_audio_size"] = file_size
 
             text, stt_status = await self.stt.transcribe(str(recording_path))
             session["last_stt_status"] = stt_status
-
             if stt_status != "ok":
                 await asyncio.sleep(poll_seconds)
                 continue
@@ -708,35 +708,56 @@ class SecretaryService:
             previous = str(session.get("last_full_transcript") or "")
             delta = self._extract_new_text(previous, text)
             snippet = delta.strip() if delta.strip() else text.strip()
-            min_chars = max(3, int(self.settings.stt_min_chars) - 2)
+            min_chars = max(3, int(self.settings.stt_min_chars) - 1)
             if len(snippet) < min_chars:
                 session["last_full_transcript"] = text
                 await asyncio.sleep(poll_seconds)
                 continue
 
-            # With stt_recent_only=True, transcript often represents a moving tail window,
-            # not a cumulative full transcript. De-duplicate by snippet, not only by prefix delta.
-            last_snippet = str(session.get("last_processed_snippet") or "")
             normalized_snippet = " ".join(snippet.split()).strip().lower()
-            normalized_last = " ".join(last_snippet.split()).strip().lower()
-            if normalized_snippet and normalized_snippet == normalized_last:
-                session["last_full_transcript"] = text
-                await asyncio.sleep(poll_seconds)
-                continue
+            normalized_last = " ".join(str(session.get("last_processed_snippet") or "").split()).strip().lower()
+            if normalized_snippet and normalized_last:
+                similarity = SequenceMatcher(None, normalized_snippet, normalized_last).ratio()
+                if similarity >= float(self.settings.stt_repeat_similarity_threshold):
+                    session["last_full_transcript"] = text
+                    await asyncio.sleep(poll_seconds)
+                    continue
 
             session["last_full_transcript"] = text
             session["last_transcript_delta"] = snippet
-            context = dict(session.get("context") or {})
-            context["source"] = "telegram_live_loop"
-            context["stt_provider"] = self.settings.stt_provider
 
             try:
-                response = await self.live_agent_respond(
-                    call_id=call_id,
-                    transcript=snippet,
-                    context=context,
-                    speak_response=bool(session.get("speak_response", True)),
-                )
+                if self._is_low_quality_snippet(snippet):
+                    response = await self._fast_fallback_response(
+                        call_id=call_id,
+                        snippet=snippet,
+                        reply=self.settings.agent_live_low_quality_reply,
+                        action_item="clarify_user_request",
+                        speak_response=bool(session.get("speak_response", True)),
+                    )
+                else:
+                    context = dict(session.get("context") or {})
+                    context["source"] = "telegram_live_loop"
+                    context["stt_provider"] = self.settings.stt_provider
+                    try:
+                        response = await asyncio.wait_for(
+                            self.live_agent_respond(
+                                call_id=call_id,
+                                transcript=snippet,
+                                context=context,
+                                speak_response=bool(session.get("speak_response", True)),
+                            ),
+                            timeout=max(1.0, float(self.settings.agent_live_timeout_seconds)),
+                        )
+                    except asyncio.TimeoutError:
+                        response = await self._fast_fallback_response(
+                            call_id=call_id,
+                            snippet=snippet,
+                            reply="Sorry, I’m slow right now. Please repeat in one short sentence.",
+                            action_item="latency_fallback",
+                            speak_response=bool(session.get("speak_response", True)),
+                        )
+
                 session["last_processed_snippet"] = snippet
                 session["responses_sent"] = int(session.get("responses_sent") or 0) + 1
                 session["last_response_at"] = self._now_iso()
@@ -876,6 +897,55 @@ class SecretaryService:
             except Exception:
                 pass
             await asyncio.sleep(poll_seconds)
+
+    async def _fast_fallback_response(
+        self,
+        call_id: str,
+        snippet: str,
+        reply: str,
+        action_item: str,
+        speak_response: bool,
+    ) -> AgentLiveRespondResponse:
+        tts_audio_path: str | None = None
+        tts_status: str | None = None
+        call_audio_status: str | None = None
+
+        if speak_response:
+            tts_audio_path, tts_status = await self.tts.synthesize(reply, call_id=call_id)
+            if tts_audio_path:
+                stream_result = await self.telegram.stream_audio_out(call_id, tts_audio_path)
+                call_audio_status = str(stream_result.get("status"))
+            else:
+                call_audio_status = "not_streamed"
+
+        return AgentLiveRespondResponse(
+            call_id=call_id,
+            transcript=snippet,
+            reply=reply,
+            intent=AgentAnalyzeResponse(call_id=call_id, reply=reply, model=self.settings.zai_model).intent,
+            confidence=0.2,
+            requires_human=False,
+            transfer_reason=None,
+            action_items=[action_item],
+            extracted_fields={},
+            model=self.settings.zai_model,
+            tts_audio_path=tts_audio_path,
+            tts_status=tts_status,
+            call_audio_status=call_audio_status,
+        )
+
+    @staticmethod
+    def _is_low_quality_snippet(text: str) -> bool:
+        normalized = " ".join((text or "").split()).strip()
+        if len(normalized) < 4:
+            return True
+        words = [w for w in re.split(r"\s+", normalized) if w]
+        if len(words) < 2:
+            return True
+        if len(set(w.lower() for w in words)) <= 1 and len(words) >= 3:
+            return True
+        alpha_chars = sum(ch.isalpha() for ch in normalized)
+        return alpha_chars < max(3, int(len(normalized) * 0.45))
 
     async def _play_greeting_with_retry(self, call_id: str, source: str) -> dict[str, Any]:
         tts_audio_path, tts_status = await self.tts.synthesize(

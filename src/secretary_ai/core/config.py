@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     zai_timeout_seconds: float = 30.0
     agent_max_tokens: int = 160
     agent_history_turns: int = 4
+    agent_live_timeout_seconds: float = 4.5
+    agent_live_low_quality_reply: str = "Sorry, I didn’t catch that clearly. Please repeat briefly."
     chat_max_tokens: int = 64
     chat_temperature: float = 0.15
 
@@ -51,10 +53,11 @@ class Settings(BaseSettings):
     stt_compute_type: str = "int8"
     stt_min_chars: int = 4
     stt_recent_only: bool = True
-    stt_tail_seconds: float = 3.0
-    stt_min_new_bytes: int = 2000
-    telegram_live_poll_seconds: float = 0.45
-    telegram_live_tts_cooldown_seconds: float = 2.5
+    stt_tail_seconds: float = 2.0
+    stt_min_new_bytes: int = 1200
+    stt_repeat_similarity_threshold: float = 0.9
+    telegram_live_poll_seconds: float = 0.3
+    telegram_live_tts_cooldown_seconds: float = 1.2
 
     calendar_enabled: bool = True
     calendar_timezone: str = "Europe/London"
