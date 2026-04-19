@@ -387,16 +387,29 @@ class SecretaryService:
         template_reply = self.template_matcher.match(transcript) if not forced_reply else None
 
         if forced_reply or template_reply:
-            analysis = await self.analyze_agent_turn(call_id=call_id, transcript=transcript, context=context)
-            analysis.reply = str(forced_reply or template_reply)
+            # Critical for latency: do NOT run remote analysis when we already have deterministic reply.
+            analysis = AgentAnalyzeResponse(
+                call_id=call_id,
+                reply=str(forced_reply or template_reply),
+                model=self.settings.zai_model,
+            )
             if template_reply and not forced_reply:
-                action_items = list(analysis.action_items)
-                action_items.append("template_reply")
-                analysis.action_items = action_items[:8]
+                analysis.action_items = ["template_reply"]
             if bool(calendar_turn.get("queued")):
-                action_items = list(analysis.action_items)
-                action_items.append(f"calendar_queue:{calendar_turn.get('task_id')}")
-                analysis.action_items = action_items[:8]
+                analysis.action_items = list(analysis.action_items) + [
+                    f"calendar_queue:{calendar_turn.get('task_id')}"
+                ]
+                analysis.action_items = analysis.action_items[:8]
+            self.memory.add_short_term_turn(call_id=call_id, transcript=transcript, reply=analysis.reply)
+            self.memory.append_long_term(
+                "live_turn_template",
+                {
+                    "call_id": call_id,
+                    "transcript": transcript,
+                    "reply": analysis.reply,
+                    "source": "calendar_forced" if forced_reply else "template",
+                },
+            )
         else:
             analysis = await self.analyze_agent_turn(call_id=call_id, transcript=transcript, context=context)
 
@@ -821,6 +834,11 @@ class SecretaryService:
                 context = dict(session.get("context") or {})
                 context["source"] = "telegram_live_loop"
                 context["stt_provider"] = self.settings.stt_provider
+                status_before = str(call.get("status") or "").lower()
+                if status_before in {"ended", "discarded", "failed"}:
+                    self.debug.log(call_id, "skip_live_respond_call_not_active", {"status": status_before})
+                    await asyncio.sleep(poll_seconds)
+                    continue
                 try:
                     started = monotonic()
                     response = await asyncio.wait_for(

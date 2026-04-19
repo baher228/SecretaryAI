@@ -315,7 +315,18 @@ class TelegramCallService:
 
         try:
             assert self._calls is not None
-            await self._calls.play(chat_id, stream=str(normalized))
+            call_status = str(call.get("status") or "").lower()
+            if call_status in {"ended", "discarded", "failed"}:
+                return {
+                    "call_id": call_id,
+                    "status": "call_not_active",
+                    "detail": f"Call status is {call_status}; skipping audio stream.",
+                }
+
+            await asyncio.wait_for(
+                self._calls.play(chat_id, stream=str(normalized)),
+                timeout=max(0.5, float(self.settings.telegram_stream_play_timeout_seconds)),
+            )
             self._append_event(call_id, "audio_out_started", {"audio_path": str(normalized)})
             return {
                 "call_id": call_id,
