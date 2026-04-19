@@ -388,22 +388,36 @@ class SecretaryService:
         )
 
         forced_reply = calendar_turn.get("reply") if isinstance(calendar_turn, dict) else None
-        template_reply = self.template_matcher.match(transcript) if not forced_reply else None
+        template_hit = self.template_matcher.match(transcript) if not forced_reply else None
 
-        if forced_reply or template_reply:
+        if forced_reply or template_hit:
             # Critical for latency: do NOT run remote analysis when we already have deterministic reply.
+            selected_reply = str(forced_reply or (template_hit or {}).get("reply") or "")
             analysis = AgentAnalyzeResponse(
                 call_id=call_id,
-                reply=str(forced_reply or template_reply),
+                reply=selected_reply,
                 model=self.settings.zai_model,
             )
-            if template_reply and not forced_reply:
-                analysis.action_items = ["template_reply"]
+            action_items: list[str] = []
+
+            if template_hit and not forced_reply:
+                action_items.append(f"template_reply:{template_hit.get('id')}")
+                if bool(template_hit.get("calendar_check")):
+                    snapshot = self.calendar.cache_snapshot(limit=3)
+                    action_items.append(f"calendar_checked:{snapshot.get('total_events', 0)}")
+                if bool(template_hit.get("calendar_enqueue")):
+                    queued = await self.calendar.quick_reply_or_enqueue(
+                        call_id=call_id,
+                        transcript=transcript,
+                        context={**context, "source": "template_enqueue"},
+                    )
+                    if bool(queued.get("queued")):
+                        action_items.append(f"calendar_queue:{queued.get('task_id')}")
+
             if bool(calendar_turn.get("queued")):
-                analysis.action_items = list(analysis.action_items) + [
-                    f"calendar_queue:{calendar_turn.get('task_id')}"
-                ]
-                analysis.action_items = analysis.action_items[:8]
+                action_items.append(f"calendar_queue:{calendar_turn.get('task_id')}")
+
+            analysis.action_items = action_items[:8]
             self.memory.add_short_term_turn(call_id=call_id, transcript=transcript, reply=analysis.reply)
             self.memory.append_long_term(
                 "live_turn_template",
@@ -412,6 +426,8 @@ class SecretaryService:
                     "transcript": transcript,
                     "reply": analysis.reply,
                     "source": "calendar_forced" if forced_reply else "template",
+                    "template_id": (template_hit or {}).get("id") if template_hit else None,
+                    "actions": analysis.action_items,
                 },
             )
         else:

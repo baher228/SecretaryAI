@@ -10,81 +10,112 @@ _DEFAULT_TEMPLATES = [
         "id": "greeting",
         "keywords": ["hello", "hi", "hey", "good morning", "good evening"],
         "reply": "Hi. I’m here. Tell me what you need.",
+        "priority": 1,
     },
     {
         "id": "repeat",
         "keywords": ["repeat", "say again", "again", "what did you say"],
         "reply": "Sure. I can repeat that. What part should I repeat?",
+        "priority": 2,
     },
     {
         "id": "clarify",
         "keywords": ["you there", "can you hear me", "hello are you there"],
         "reply": "Yes, I can hear you. Please go ahead.",
+        "priority": 3,
     },
     {
         "id": "slow_down",
         "keywords": ["slow down", "too fast", "speak slower"],
         "reply": "Understood. I will speak slower.",
+        "priority": 4,
     },
     {
         "id": "volume_issue",
         "keywords": ["cant hear", "can't hear", "too quiet", "volume"],
         "reply": "Understood. I will keep replies short and clear.",
+        "priority": 4,
+    },
+    {
+        "id": "availability_check",
+        "keywords": ["am i free", "availability", "free tomorrow", "free at"],
+        "reply": "Let me quickly check your availability.",
+        "calendar_check": True,
+        "priority": 10,
+    },
+    {
+        "id": "reminder_set",
+        "keywords": ["set a reminder", "remind me", "set reminder", "reminder"],
+        "reply": "Absolutely. Let me check your availability and queue this reminder.",
+        "calendar_check": True,
+        "calendar_enqueue": True,
+        "priority": 11,
+    },
+    {
+        "id": "meeting_schedule",
+        "keywords": ["schedule meeting", "book meeting", "add meeting", "create event"],
+        "reply": "Absolutely. I’ll check your timetable and queue this for scheduling.",
+        "calendar_check": True,
+        "calendar_enqueue": True,
+        "priority": 11,
     },
     {
         "id": "calendar_today",
         "keywords": ["calendar", "today", "schedule", "upcoming"],
         "reply": "I can check your upcoming schedule now.",
-    },
-    {
-        "id": "calendar_add",
-        "keywords": ["add to calendar", "create event", "schedule meeting", "book meeting"],
-        "reply": "Got it. I can add that to your calendar. Please confirm time.",
+        "calendar_check": True,
+        "priority": 8,
     },
     {
         "id": "calendar_delete",
         "keywords": ["delete event", "remove event", "cancel event"],
         "reply": "Okay. I can remove that event after you confirm which one.",
+        "calendar_enqueue": True,
+        "priority": 9,
     },
     {
         "id": "time_query",
         "keywords": ["what time", "when is", "next meeting"],
         "reply": "I can check that now. Give me one second.",
-    },
-    {
-        "id": "reminder",
-        "keywords": ["remind me", "set reminder", "reminder"],
-        "reply": "Sure. I can set that reminder for you.",
+        "calendar_check": True,
+        "priority": 7,
     },
     {
         "id": "reschedule",
         "keywords": ["reschedule", "move meeting", "another time"],
         "reply": "Understood. I can help reschedule it.",
+        "calendar_enqueue": True,
+        "priority": 9,
     },
     {
         "id": "confirm",
         "keywords": ["yes", "confirm", "correct", "go ahead"],
         "reply": "Great. Confirmed.",
+        "priority": 1,
     },
     {
         "id": "reject",
         "keywords": ["no", "not that", "wrong", "cancel that"],
         "reply": "Okay. I won’t do that. Tell me the correct option.",
+        "priority": 1,
     },
     {
         "id": "thanks",
         "keywords": ["thanks", "thank you", "appreciate"],
         "reply": "You’re welcome.",
+        "priority": 1,
     },
     {
         "id": "hold_on",
         "keywords": ["wait", "hold on", "one second"],
         "reply": "Sure, I’ll wait.",
+        "priority": 1,
     },
     {
         "id": "goodbye",
         "keywords": ["bye", "goodbye", "hang up", "that is all"],
         "reply": "Got it. I’ll wrap up now.",
+        "priority": 2,
     },
 ]
 
@@ -97,25 +128,44 @@ class LiveTemplateMatcher:
         self.path = Path(self.settings.agent_live_template_path)
         self.templates = self._load_templates()
 
-    def match(self, transcript: str) -> str | None:
+    def match(self, transcript: str) -> dict[str, Any] | None:
         if not self.settings.agent_live_template_enabled:
             return None
         text = " ".join((transcript or "").split()).strip().lower()
         if not text:
             return None
 
-        best_reply: str | None = None
+        best_item: dict[str, Any] | None = None
         best_score = 0
+        best_priority = -1
         for item in self.templates:
             keywords = [str(k).strip().lower() for k in item.get("keywords", []) if str(k).strip()]
             if not keywords:
                 continue
             score = sum(1 for kw in keywords if kw in text)
-            if score > best_score:
+            if score <= 0:
+                continue
+            priority = int(item.get("priority", 0))
+            if score > best_score or (score == best_score and priority > best_priority):
+                best_item = item
                 best_score = score
-                best_reply = str(item.get("reply") or "").strip() or None
+                best_priority = priority
 
-        return best_reply if best_score > 0 else None
+        if best_item is None:
+            return None
+
+        reply = str(best_item.get("reply") or "").strip()
+        if not reply:
+            return None
+
+        return {
+            "id": str(best_item.get("id") or "template"),
+            "reply": reply,
+            "score": best_score,
+            "priority": best_priority,
+            "calendar_check": bool(best_item.get("calendar_check", False)),
+            "calendar_enqueue": bool(best_item.get("calendar_enqueue", False)),
+        }
 
     def _load_templates(self) -> list[dict[str, Any]]:
         self.path.parent.mkdir(parents=True, exist_ok=True)
