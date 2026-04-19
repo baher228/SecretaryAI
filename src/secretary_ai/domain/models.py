@@ -14,6 +14,8 @@ class IntentType(str, Enum):
     TRANSFER_HUMAN = "transfer_human"
     LEAVE_MESSAGE = "leave_message"
     GENERAL_QUERY = "general_query"
+    PLAN_ROUTE = "plan_route"
+    SEARCH_BOOKING = "search_booking"
     UNKNOWN = "unknown"
 
 
@@ -261,3 +263,29 @@ class CalendarCacheResponse(BaseModel):
 class CalendarQueueSnapshotResponse(BaseModel):
     total: int
     items: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class MapRouteRequest(BaseModel):
+    call_id: str
+    origin: str
+    destination: str
+    mode: str = "driving"
+
+
+class MapRouteResponse(BaseModel):
+    call_id: str
+    status: str
+    route_details: str | None = None
+
+
+class BookingSearchRequest(BaseModel):
+    call_id: str
+    booking_type: str
+    location: str
+    query_params: dict[str, Any] = Field(default_factory=dict)
+
+
+class BookingSearchResponse(BaseModel):
+    call_id: str
+    status: str
+    results: list[dict[str, Any]] = Field(default_factory=list)

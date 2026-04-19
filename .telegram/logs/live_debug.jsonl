@@ -1,0 +1,18 @@
+{"ts": "2026-04-19T07:15:46.644632+00:00", "call_id": "tg-5523073095", "stage": "live_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "speak_response": true, "context": {"source": "outbound_auto_start"}}}
+{"ts": "2026-04-19T07:16:48.024437+00:00", "call_id": "tg-5523073095", "stage": "live_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "speak_response": true, "context": {"source": "outbound_auto_start"}}}
+{"ts": "2026-04-19T07:17:14.374959+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech"}}
+{"ts": "2026-04-19T07:17:19.315686+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech"}}
+{"ts": "2026-04-19T07:17:22.255473+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 13, "sample": "Set the room.", "count": 1}}
+{"ts": "2026-04-19T07:17:24.135307+00:00", "call_id": "tg-5523073095", "stage": "live_respond_timeout", "data": {"timeout_sec": 1.8}}
+{"ts": "2026-04-19T07:17:27.972011+00:00", "call_id": "tg-5523073095", "stage": "fallback_tts", "data": {"tts_status": "generated", "has_audio": true, "reply": "Sorry, I’m slow right now. Please repeat in one short sentence."}}
+{"ts": "2026-04-19T07:17:29.349728+00:00", "call_id": "tg-5523073095", "stage": "fallback_audio_out", "data": {"audio_path": "/app/.telegram/audio/generated/tg-5523073095-20260419T071724389975Z.mp3", "status": "streaming_out", "detail": "Audio file is being streamed into the call."}}
+{"ts": "2026-04-19T07:17:32.416363+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech"}}
+{"ts": "2026-04-19T07:17:35.045235+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech"}}
+{"ts": "2026-04-19T07:17:37.092196+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech"}}
+{"ts": "2026-04-19T07:17:38.968580+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech"}}
+{"ts": "2026-04-19T07:17:40.298153+00:00", "call_id": "tg-5523073095", "stage": "loop_tick", "data": {"tick": 15, "file_size": 834920, "last_audio_size": 804200, "last_stt_status": "no_speech"}}
+{"ts": "2026-04-19T07:17:50.597432+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 57, "sample": "Set a reminder for tomorrow. Set a reminder for tomorrow.", "count": 2}}
+{"ts": "2026-04-19T07:17:52.417115+00:00", "call_id": "tg-5523073095", "stage": "live_respond_timeout", "data": {"timeout_sec": 1.8}}
+{"ts": "2026-04-19T07:17:53.432241+00:00", "call_id": "tg-5523073095", "stage": "fallback_tts", "data": {"tts_status": "generated", "has_audio": true, "reply": "Sorry, I’m slow right now. Please repeat in one short sentence."}}
+{"ts": "2026-04-19T07:18:13.512777+00:00", "call_id": "tg-5523073095", "stage": "fallback_audio_out", "data": {"audio_path": "/app/.telegram/audio/generated/tg-5523073095-20260419T071752507389Z.mp3", "status": "error", "detail": "Could not stream outgoing audio: TimeoutError: no message"}}
+{"ts": "2026-04-19T07:18:14.724574+00:00", "call_id": "tg-5523073095", "stage": "loop_stopped", "data": {"reason": "call_ended", "status": "ended"}}

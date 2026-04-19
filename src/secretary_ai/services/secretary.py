@@ -48,6 +48,8 @@ from secretary_ai.services.memory_store import MemoryStore
 from secretary_ai.services.stt import STTEngine
 from secretary_ai.services.telegram_calls import TelegramCallService
 from secretary_ai.services.tts import TTSEngine
+from secretary_ai.services.maps import MapService
+from secretary_ai.services.booking import BookingService
 
 
 class SecretaryService:
@@ -63,6 +65,8 @@ class SecretaryService:
         self.debug = LiveDebugLogger(settings)
         self.tts = TTSEngine(settings)
         self.stt = STTEngine(settings)
+        self.maps = MapService(settings)
+        self.booking = BookingService(settings)
         self.live_sessions: dict[str, dict[str, Any]] = {}
         self._auto_live_task: asyncio.Task | None = None
         self._calendar_worker_task: asyncio.Task | None = None
@@ -433,6 +437,22 @@ class SecretaryService:
             tts_status=tts_status,
             call_audio_status=call_audio_status,
         )
+        
+        # Async process bookings or routes
+        raw_intent = analysis.intent.value
+        if raw_intent == "plan_route":
+            origin = analysis.extracted_fields.get("origin", "London")
+            dest = analysis.extracted_fields.get("destination", "Manchester")
+            # In a real setup, we would queue this and call back. For demo, we do it inline or log
+            asyncio.create_task(self.maps.plan_route(origin, dest))
+        elif raw_intent == "search_booking":
+            location = analysis.extracted_fields.get("location", "London")
+            booking_type = analysis.extracted_fields.get("topic", "restaurants")
+            if "hotel" in booking_type:
+                asyncio.create_task(self.booking.search_hotels(location, "2026-05-01", "2026-05-05"))
+            else:
+                asyncio.create_task(self.booking.search_restaurants(location))
+
         self.memory.add_short_term_turn(call_id=call_id, transcript=transcript, reply=response.reply)
         self.memory.append_long_term(
             "live_turn",

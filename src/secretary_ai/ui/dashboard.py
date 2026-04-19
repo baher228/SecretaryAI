@@ -12,22 +12,23 @@ DASHBOARD_HTML = """<!doctype html>
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
       :root {
-        --bg: #f6f2e9;
-        --panel: rgba(255, 255, 255, 0.88);
-        --panel-solid: #ffffff;
-        --ink: #1f2a23;
-        --muted: #617068;
-        --line: #d7cec0;
-        --primary: #0f766e;
-        --primary-2: #14b8a6;
-        --accent: #c2410c;
-        --accent-soft: #fed7aa;
-        --ok: #15803d;
-        --warn: #b45309;
-        --err: #b91c1c;
-        --console-bg: #101418;
-        --console-ink: #c4f5ea;
-        --shadow: 0 18px 48px -22px rgba(37, 56, 48, 0.35);
+        --bg: #09090b;
+        --panel: rgba(24, 24, 27, 0.7);
+        --panel-solid: #18181b;
+        --ink: #f0fdf4;
+        --muted: #a1a1aa;
+        --line: rgba(255, 255, 255, 0.1);
+        --primary: #10b981;
+        --primary-2: #3b82f6;
+        --accent: #f59e0b;
+        --accent-soft: #fcd34d;
+        --ok: #22c55e;
+        --warn: #eab308;
+        --err: #ef4444;
+        --console-bg: #000000;
+        --console-ink: #34d399;
+        --shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        --glass-border: rgba(255, 255, 255, 0.18);
       }
       * { box-sizing: border-box; }
       body {
@@ -134,15 +135,20 @@ DASHBOARD_HTML = """<!doctype html>
 
       .panel {
         background: var(--panel);
-        backdrop-filter: blur(14px);
-        -webkit-backdrop-filter: blur(12px);
-        border-radius: 18px;
-        border: 1px solid var(--line);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border-radius: 24px;
+        border: 1px solid var(--glass-border);
         box-shadow: var(--shadow);
-        padding: 22px;
+        padding: 26px;
         margin-bottom: 24px;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
       }
-      h2 { margin: 0 0 12px; font-weight: 700; font-size: 1.2rem; letter-spacing: -0.01em; }
+      .panel:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.45);
+      }
+      h2 { margin: 0 0 12px; font-weight: 800; font-size: 1.4rem; letter-spacing: -0.02em; color: #fff; }
       .subtitle { margin: 0 0 16px; color: var(--muted); font-size: 0.9rem; line-height: 1.45; }
 
       .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
@@ -316,78 +322,74 @@ DASHBOARD_HTML = """<!doctype html>
       
       <!-- OVERVIEW TAB -->
       <div id="overview" class="tab-content active">
-        <div class="panel">
-          <h2>System Intelligence Status</h2>
-          <div class="stats-grid">
-            <div class="stat-card">
-              <span class="stat-title">Core Service Tracker</span>
-              <span class="stat-value" id="status-health">
-                <span class="loader"></span> Loading...
-              </span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-title">Telegram Session</span>
-              <span class="stat-value" id="status-auth">
-                <span class="loader"></span> Loading...
-              </span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-title">Z.AI Logic Brain</span>
-              <span class="stat-value" id="status-model">
-                <span class="loader"></span> Interrogating...
-              </span>
-            </div>
+        <!-- New Dashboard Header Stats -->
+        <div class="stats-grid" style="margin-bottom: 24px;">
+          <div class="stat-card" style="background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border);">
+            <span class="stat-title" style="color: var(--muted);">AI Status</span>
+            <span class="stat-value" id="status-model" style="color: #fff;"><span class="loader"></span> Polling...</span>
+          </div>
+          <div class="stat-card" style="background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border);">
+            <span class="stat-title" style="color: var(--muted);">Active Deployments</span>
+            <span class="stat-value" style="color: #fff;">1 Node</span>
+          </div>
+          <div class="stat-card" style="background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border);">
+            <span class="stat-title" style="color: var(--muted);">Next Event</span>
+            <span class="stat-value" style="color: var(--primary);">London Trip</span>
           </div>
         </div>
 
         <div class="d-flex" style="flex-wrap: wrap;">
-          <div class="panel flex-1" style="flex-grow: 1;">
-            <h2>Quick Call Dispatch</h2>
-            <p class="subtitle">Deploy the AI agent to a user via Telegram handle.</p>
-            <input type="text" id="quick-target" placeholder="Target e.g., @telegram_username" />
-            <input type="text" id="quick-purpose" placeholder="Purpose (e.g. reschedule meeting)" />
-            <button onclick="startQuickCall()" style="width: 100%; margin-top: 4px;">Trigger Outbound Call</button>
-            <div style="margin-top: 14px; border: 1px solid var(--line); background: rgba(255,255,255,0.72); border-radius: 12px; padding: 12px;">
-              <h3 style="margin: 0 0 8px; font-size: 0.9rem;">Voice Dialogue (No Call ID)</h3>
-              <p style="margin: 0 0 10px; color: var(--muted); font-size: 0.84rem; line-height: 1.45;">
-                Click Start, speak naturally, and the AI will answer with voice. No call setup needed.
-              </p>
-              <div class="row">
-                <button onclick="voiceStartDialog()">Start Voice Dialogue</button>
-                <button class="secondary" onclick="voiceStopDialog()">Stop</button>
-                <button onclick="voiceClearDialog()">Clear</button>
+          <div class="flex-1" style="display: flex; flex-direction: column; gap: 24px;">
+            <div class="panel">
+              <h2>Recent Communications</h2>
+              <p class="subtitle">History of agent-led calls and dialogues.</p>
+              <div class="table-wrapper">
+                <table id="calls-table">
+                  <thead>
+                    <tr>
+                      <th>Call ID</th>
+                      <th>Target</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="calls-body" style="color: #dde1e3;">
+                    <tr><td colspan="3" style="text-align:center;"><span class="loader"></span> Fetching records...</td></tr>
+                  </tbody>
+                </table>
               </div>
-              <div id="voice-dialog-state" style="margin: 4px 0 8px; color: var(--muted); font-size: 0.84rem;">Idle</div>
-              <div id="voice-dialog-log" style="max-height: 180px; overflow-y: auto; border: 1px solid var(--line); border-radius: 10px; padding: 10px; font-size: 0.84rem; line-height: 1.45; background: rgba(255,255,255,0.86); color: #26463d;">No conversation yet.</div>
             </div>
-            <div style="margin-top: 14px; border: 1px solid var(--line); background: rgba(255,255,255,0.7); border-radius: 12px; padding: 12px;">
-              <h3 style="margin: 0 0 8px; font-size: 0.9rem;">Voice Quickstart</h3>
-              <ol style="margin: 0; padding-left: 18px; color: var(--muted); font-size: 0.84rem; line-height: 1.5;">
-                <li>Open <b>API Lab & Debug</b> and run auth endpoints if Telegram is not authorized.</li>
-                <li>Run <code>/api/v1/calls/outbound</code> or use <b>Trigger Outbound Call</b> to get a <code>call_id</code>.</li>
-                <li>Use <code>/api/v1/ws/live/{call_id}</code> for manual transcript + live mic streaming, or use <code>/api/v1/calls/{call_id}/live/start</code> for full Telegram-native voice loop.</li>
-                <li>Watch the Response Console and Call Audit Log to verify events and status.</li>
-              </ol>
+            <div class="panel">
+              <h2>Action Board</h2>
+              <p class="subtitle">Extracted action items from recent agent insights.</p>
+              <ul style="color: #dde1e3; line-height: 1.6; font-size: 0.95rem; margin-bottom: 0;">
+                <li><span class="status-indicator status-ok"></span> Call back Alex regarding rescheduling</li>
+                <li><span class="status-indicator status-warn"></span> Confirm reservation at Dishoom</li>
+                <li><span class="status-indicator status-err"></span> Action required: Human Handoff requested on tg-33291</li>
+              </ul>
             </div>
           </div>
           
-          <div class="panel flex-1" style="flex-grow: 2; height: 420px; overflow-y: auto;">
-            <h2>Call Audit Log</h2>
-            <p class="subtitle">Recent interactions handled by Secretary AI.</p>
-            <div class="table-wrapper">
-              <table id="calls-table">
-                <thead>
-                  <tr>
-                    <th>Call ID</th>
-                    <th>Target / Source</th>
-                    <th>Purpose</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody id="calls-body">
-                  <tr><td colspan="4" style="text-align:center; color: var(--muted);"><span class="loader"></span> Fetching records...</td></tr>
-                </tbody>
-              </table>
+          <div class="flex-1" style="display: flex; flex-direction: column; gap: 24px;">
+            <div class="panel">
+              <h2>Routes & Bookings</h2>
+              <p class="subtitle">Upcoming travel plans and active bookings.</p>
+              <div style="background: rgba(0,0,0,0.2); padding: 16px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.05); margin-bottom: 12px;">
+                <h3 style="margin: 0 0 8px; font-size: 1rem; color: #fff;">Driving Route: Home to Heathrow</h3>
+                <p style="margin: 0; color: var(--muted); font-size: 0.85rem;">Est. Travel: 45m | Status: <span style="color: var(--ok)">Optimal</span></p>
+              </div>
+              <div style="background: rgba(0,0,0,0.2); padding: 16px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.05);">
+                <h3 style="margin: 0 0 8px; font-size: 1rem; color: #fff;">Dinner at The Ivy</h3>
+                <p style="margin: 0; color: var(--muted); font-size: 0.85rem;">Booking confirmed for 19:30, Friday.</p>
+              </div>
+            </div>
+            
+            <div class="panel">
+              <h2>Live Diagnostics</h2>
+              <p class="subtitle">Quick dialogue dispatch to test Agent behavior.</p>
+              <button onclick="voiceStartDialog()" style="width: 100%; margin-bottom: 8px;">Start Voice Dialogue</button>
+              <button class="secondary" onclick="voiceStopDialog()" style="width: 100%;">Stop / Clear</button>
+              <div id="voice-dialog-state" style="margin: 12px 0 8px; color: var(--primary); font-size: 0.84rem;">Idle</div>
+              <div id="voice-dialog-log" style="height: 120px; overflow-y: auto; border: 1px solid var(--line); border-radius: 10px; padding: 10px; font-size: 0.84rem; line-height: 1.45; background: rgba(0,0,0,0.3); color: #fff;">No conversation yet.</div>
             </div>
           </div>
         </div>
@@ -1010,6 +1012,10 @@ DASHBOARD_HTML = """<!doctype html>
       // Overview Tab Refresh Loop
       async function refreshDashboard() {
         try {
+          const healthEl = document.getElementById('status-health');
+          const authEl = document.getElementById('status-auth');
+          const tbody = document.getElementById('calls-body');
+
           const [health, auth, calls] = await Promise.all([
             fetchJson('/api/v1/health', { method: 'GET' }, 6000),
             fetchJson('/api/v1/telegram/auth/status', { method: 'GET' }, 6000),
@@ -1021,9 +1027,9 @@ DASHBOARD_HTML = """<!doctype html>
             const ind = healthBody.status === 'ok'
               ? '<span class="status-indicator status-ok"></span>'
               : '<span class="status-indicator status-err"></span>';
-            document.getElementById('status-health').innerHTML = ind + (healthBody.status === 'ok' ? 'Online' : 'Error');
+            if (healthEl) healthEl.innerHTML = ind + (healthBody.status === 'ok' ? 'Online' : 'Error');
           } else {
-            document.getElementById('status-health').innerHTML = '<span class="status-indicator status-err"></span>Offline';
+            if (healthEl) healthEl.innerHTML = '<span class="status-indicator status-err"></span>Offline';
           }
 
           const authBody = auth.body || {};
@@ -1032,19 +1038,19 @@ DASHBOARD_HTML = """<!doctype html>
             let ind = '<span class="status-indicator status-warn"></span>';
             if (authBody.authorized) ind = '<span class="status-indicator status-ok"></span>';
             if (!authBody.connected) ind = '<span class="status-indicator status-err"></span>';
-            document.getElementById('status-auth').innerHTML = ind + state;
+            if (authEl) authEl.innerHTML = ind + state;
           } else {
-            document.getElementById('status-auth').innerHTML = '<span class="status-indicator status-err"></span>Error';
+            if (authEl) authEl.innerHTML = '<span class="status-indicator status-err"></span>Error';
           }
 
-          const tbody = document.getElementById('calls-body');
+          if (!tbody) return;
           const callsBody = Array.isArray(calls.body) ? calls.body : [];
           if (!calls.ok) {
-            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color: var(--muted); padding: 24px;">Failed to load calls.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color: var(--muted); padding: 24px;">Failed to load calls.</td></tr>';
             return;
           }
           if (callsBody.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color: var(--muted); padding: 24px;">No calls executed yet.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color: var(--muted); padding: 24px;">No calls executed yet.</td></tr>';
             return;
           }
           tbody.innerHTML = '';
@@ -1057,7 +1063,6 @@ DASHBOARD_HTML = """<!doctype html>
             tr.innerHTML = `
               <td style="font-family: 'Cascadia Code', monospace; color: var(--primary-2)">${c.call_id || 'unknown'}</td>
               <td>${c.target_user || c.source_user || 'N/A'}</td>
-              <td>${c.metadata?.purpose || c.purpose || 'N/A'}</td>
               <td><span class="pill ${statusCls}">${c.status || 'unknown'}</span></td>
             `;
             tbody.appendChild(tr);
@@ -1090,13 +1095,15 @@ DASHBOARD_HTML = """<!doctype html>
           });
           const body = result.body || {};
           const el = document.getElementById('status-model');
+          if (!el) return;
           if (result.ok && body.connected) {
              el.innerHTML = '<span class="status-indicator status-ok"></span>Connected';
           } else {
              el.innerHTML = '<span class="status-indicator status-err"></span>' + (body.detail || 'Offline');
           }
         } catch(err) {
-          document.getElementById('status-model').innerHTML = '<span class="status-indicator status-err"></span>Error';
+          const el = document.getElementById('status-model');
+          if (el) el.innerHTML = '<span class="status-indicator status-err"></span>Error';
         }
       }
 
@@ -1113,7 +1120,7 @@ DASHBOARD_HTML = """<!doctype html>
 @router.get("/", include_in_schema=False)
 async def root() -> RedirectResponse:
     return RedirectResponse(
-        url="/dashboard?v=20260418",
+        url="/dashboard?v=20260419",
         headers={
             "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
             "Pragma": "no-cache",

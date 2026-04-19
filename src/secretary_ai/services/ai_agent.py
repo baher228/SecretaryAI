@@ -12,6 +12,8 @@ _FALLBACK_REPLIES = {
     IntentType.RESCHEDULE_EVENT.value: "Understood. I can reschedule this, please confirm your preferred new time.",
     IntentType.CANCEL_EVENT.value: "Understood. I can cancel that after one quick confirmation.",
     IntentType.TRANSFER_HUMAN.value: "I will connect you with a human teammate now.",
+    IntentType.PLAN_ROUTE.value: "I will calculate the fastest route for you right away.",
+    IntentType.SEARCH_BOOKING.value: "Searching for availability now, one moment.",
 }
 
 _HEURISTIC_RULES: list[tuple[IntentType, tuple[str, ...], str]] = [
@@ -20,6 +22,8 @@ _HEURISTIC_RULES: list[tuple[IntentType, tuple[str, ...], str]] = [
     (IntentType.CANCEL_EVENT, ("cancel", "call it off"), "Locate matching event and cancel after confirmation."),
     (IntentType.TRANSFER_HUMAN, ("human", "agent", "person"), "Escalate to human teammate."),
     (IntentType.REMINDER, ("remind", "reminder"), "Create reminder task in follow-up queue."),
+    (IntentType.PLAN_ROUTE, ("route", "directions", "drive to", "navigate"), "Plan route and provide estimated time."),
+    (IntentType.SEARCH_BOOKING, ("find a restaurant", "hotel", "flight", "tickets"), "Search online for booking options."),
 ]
 
 
@@ -125,7 +129,7 @@ class SecretaryAIAgent:
             "Return ONLY valid JSON with this schema: "
             "{"
             '"intent": "book_event|reschedule_event|cancel_event|reminder|confirmation|follow_up|'
-            'transfer_human|leave_message|general_query|unknown", '
+            'transfer_human|leave_message|general_query|plan_route|search_booking|unknown", '
             '"confidence": number between 0 and 1, '
             '"reply": short voice-ready response sentence, '
             '"requires_human": boolean, '
