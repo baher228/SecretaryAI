@@ -71,6 +71,7 @@ class Settings(BaseSettings):
     telegram_live_debug_log_path: str = ".telegram/logs/live_debug.jsonl"
     telegram_live_log_transcript_preview_chars: int = 120
     telegram_stream_play_timeout_seconds: float = 2.5
+    template_reply_cooldown_seconds: float = 6.0
 
     calendar_enabled: bool = False
     calendar_timezone: str = "Europe/London"

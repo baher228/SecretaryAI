@@ -73,6 +73,7 @@ class SecretaryService:
         self._auto_live_task: asyncio.Task | None = None
         self._calendar_worker_task: asyncio.Task | None = None
         self._template_audio_cache: dict[str, str] = {}
+        self._template_reply_state: dict[str, dict[str, Any]] = {}
         self._reminder_flow_state: dict[str, dict[str, Any]] = {}
 
     async def startup(self) -> None:
@@ -437,7 +438,22 @@ class SecretaryService:
             )
 
             template_id = str((template_hit or {}).get("id") or "") if template_hit else ""
+            if template_id:
+                if not self._can_emit_template(call_id, template_id, transcript):
+                    self.debug.log(
+                        call_id,
+                        "template_suppressed",
+                        {"template_id": template_id, "transcript": transcript[:120]},
+                    )
+                    return await self._fast_fallback_response(
+                        call_id=call_id,
+                        snippet=transcript,
+                        reply="Got it. I’m listening.",
+                        action_item="template_suppressed_ack",
+                        speak_response=False,
+                    )
             if template_id == "reminder_set":
+                self._mark_template_emitted(call_id, template_id, transcript)
                 return await self._handle_reminder_flow(call_id=call_id, transcript=transcript, speak_response=speak_response)
 
             # Critical for latency: do NOT run remote analysis when we already have deterministic reply.
@@ -481,6 +497,7 @@ class SecretaryService:
             )
 
             if template_id:
+                self._mark_template_emitted(call_id, template_id, transcript)
                 if template_id in self._template_audio_cache:
                     tts_audio_path = self._template_audio_cache[template_id]
                     tts_status = "cached"
@@ -1201,6 +1218,37 @@ class SecretaryService:
             except Exception:
                 pass
             await asyncio.sleep(poll_seconds)
+
+    def _can_emit_template(self, call_id: str, template_id: str, transcript: str) -> bool:
+        now = datetime.now(timezone.utc)
+        state = self._template_reply_state.setdefault(call_id, {})
+        item = state.get(template_id) or {}
+
+        prev_text = str(item.get("last_transcript") or "")
+        prev_at_raw = item.get("last_at")
+        prev_at: datetime | None = None
+        if isinstance(prev_at_raw, str):
+            try:
+                prev_at = datetime.fromisoformat(prev_at_raw)
+                if prev_at.tzinfo is None:
+                    prev_at = prev_at.replace(tzinfo=timezone.utc)
+            except Exception:
+                prev_at = None
+
+        if prev_at is not None:
+            cooldown = max(0.5, float(self.settings.template_reply_cooldown_seconds))
+            if (now - prev_at).total_seconds() < cooldown:
+                sim = SequenceMatcher(None, prev_text.lower(), transcript.lower()).ratio() if prev_text else 0.0
+                if sim >= 0.6:
+                    return False
+        return True
+
+    def _mark_template_emitted(self, call_id: str, template_id: str, transcript: str) -> None:
+        state = self._template_reply_state.setdefault(call_id, {})
+        state[template_id] = {
+            "last_at": datetime.now(timezone.utc).isoformat(),
+            "last_transcript": transcript,
+        }
 
     async def _handle_reminder_flow(
         self,
