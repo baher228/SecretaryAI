@@ -39,15 +39,63 @@ class SecretaryAIAgent:
         context = context or {}
         history = self.histories.setdefault(call_id, [])
         history.append({"role": "caller", "content": transcript})
+        return await self._analyze_with_profile(
+            call_id=call_id,
+            transcript=transcript,
+            context=context,
+            history=history,
+            max_tokens=self.settings.agent_max_tokens,
+            history_turns=self.settings.agent_history_turns,
+            temperature=0.15,
+            live_mode=False,
+        )
 
+    async def analyze_turn_live(
+        self,
+        call_id: str,
+        transcript: str,
+        context: dict[str, Any] | None = None,
+    ) -> AgentAnalyzeResponse:
+        context = context or {}
+        history = self.histories.setdefault(call_id, [])
+        history.append({"role": "caller", "content": transcript})
+        return await self._analyze_with_profile(
+            call_id=call_id,
+            transcript=transcript,
+            context=context,
+            history=history,
+            max_tokens=max(32, int(self.settings.agent_live_max_tokens)),
+            history_turns=max(0, int(self.settings.agent_live_history_turns)),
+            temperature=float(self.settings.agent_live_temperature),
+            live_mode=True,
+        )
+
+    async def _analyze_with_profile(
+        self,
+        call_id: str,
+        transcript: str,
+        context: dict[str, Any],
+        history: list[dict[str, str]],
+        max_tokens: int,
+        history_turns: int,
+        temperature: float,
+        live_mode: bool,
+    ) -> AgentAnalyzeResponse:
         if not self.settings.zai_api_key:
             return self._heuristic_response(call_id, transcript, context)
 
         payload = {
             "model": self.settings.zai_model,
-            "messages": self._build_messages(call_id, transcript, context, history),
-            "temperature": 0.15,
-            "max_tokens": self.settings.agent_max_tokens,
+            "messages": self._build_messages(
+                call_id=call_id,
+                transcript=transcript,
+                context=context,
+                history=history,
+                history_turns=history_turns,
+                live_mode=live_mode,
+            ),
+            "temperature": temperature,
+            "max_tokens": max_tokens,
         }
         result = await self._zai_chat_completion(payload)
         if result.get("error"):
@@ -69,6 +117,8 @@ class SecretaryAIAgent:
         transcript: str,
         context: dict[str, Any],
         history: list[dict[str, str]],
+        history_turns: int,
+        live_mode: bool,
     ) -> list[dict[str, str]]:
         system = (
             "You are a highly reliable AI secretary for phone calls. "
@@ -87,7 +137,9 @@ class SecretaryAIAgent:
             "Be concise and practical. Keep reply under 18 words. "
             "If unsure, use intent=unknown with lower confidence."
         )
-        compact_history = history[-max(1, int(self.settings.agent_history_turns)) :]
+        if live_mode:
+            system += " Live-call mode: prioritize immediate short reply and minimal planning overhead."
+        compact_history = history[-max(0, int(history_turns)) :] if history_turns > 0 else []
         history_text = "\n".join(f"{t.get('role', 'unknown')}: {t.get('content', '')}" for t in compact_history)
         return [
             {"role": "system", "content": system},

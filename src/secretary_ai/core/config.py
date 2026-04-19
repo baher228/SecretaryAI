@@ -23,7 +23,10 @@ class Settings(BaseSettings):
     zai_timeout_seconds: float = 30.0
     agent_max_tokens: int = 160
     agent_history_turns: int = 4
-    agent_live_timeout_seconds: float = 4.5
+    agent_live_max_tokens: int = 72
+    agent_live_history_turns: int = 1
+    agent_live_temperature: float = 0.1
+    agent_live_timeout_seconds: float = 1.8
     agent_live_low_quality_reply: str = "Sorry, I didn’t catch that clearly. Please repeat briefly."
     chat_max_tokens: int = 64
     chat_temperature: float = 0.15

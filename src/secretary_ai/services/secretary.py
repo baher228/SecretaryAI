@@ -427,7 +427,11 @@ class SecretaryService:
         context: dict[str, Any],
     ) -> AgentAnalyzeResponse:
         self.telegram.append_transcript(call_id, transcript, metadata=context)
-        analysis = await self.ai.analyze_turn(call_id=call_id, transcript=transcript, context=context)
+        live_mode = str((context or {}).get("source") or "") == "telegram_live_loop"
+        if live_mode:
+            analysis = await self.ai.analyze_turn_live(call_id=call_id, transcript=transcript, context=context)
+        else:
+            analysis = await self.ai.analyze_turn(call_id=call_id, transcript=transcript, context=context)
 
         call = self.telegram.get_call(call_id)
         if call is not None:
@@ -727,36 +731,27 @@ class SecretaryService:
             session["last_transcript_delta"] = snippet
 
             try:
-                if self._is_low_quality_snippet(snippet):
+                context = dict(session.get("context") or {})
+                context["source"] = "telegram_live_loop"
+                context["stt_provider"] = self.settings.stt_provider
+                try:
+                    response = await asyncio.wait_for(
+                        self.live_agent_respond(
+                            call_id=call_id,
+                            transcript=snippet,
+                            context=context,
+                            speak_response=bool(session.get("speak_response", True)),
+                        ),
+                        timeout=max(0.9, float(self.settings.agent_live_timeout_seconds)),
+                    )
+                except asyncio.TimeoutError:
                     response = await self._fast_fallback_response(
                         call_id=call_id,
                         snippet=snippet,
-                        reply=self.settings.agent_live_low_quality_reply,
-                        action_item="clarify_user_request",
+                        reply="Sorry, I’m slow right now. Please repeat in one short sentence.",
+                        action_item="latency_fallback",
                         speak_response=bool(session.get("speak_response", True)),
                     )
-                else:
-                    context = dict(session.get("context") or {})
-                    context["source"] = "telegram_live_loop"
-                    context["stt_provider"] = self.settings.stt_provider
-                    try:
-                        response = await asyncio.wait_for(
-                            self.live_agent_respond(
-                                call_id=call_id,
-                                transcript=snippet,
-                                context=context,
-                                speak_response=bool(session.get("speak_response", True)),
-                            ),
-                            timeout=max(1.0, float(self.settings.agent_live_timeout_seconds)),
-                        )
-                    except asyncio.TimeoutError:
-                        response = await self._fast_fallback_response(
-                            call_id=call_id,
-                            snippet=snippet,
-                            reply="Sorry, I’m slow right now. Please repeat in one short sentence.",
-                            action_item="latency_fallback",
-                            speak_response=bool(session.get("speak_response", True)),
-                        )
 
                 session["last_processed_snippet"] = snippet
                 session["responses_sent"] = int(session.get("responses_sent") or 0) + 1
