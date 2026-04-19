@@ -271,6 +271,17 @@ class SecretaryService:
             return "I'm good, thanks. How can I help?"
         return "Understood. Tell me what you need, and I'll keep it brief."
 
+    @staticmethod
+    def _tighten_live_reply(reply: str) -> str:
+        text = " ".join((reply or "").split()).strip()
+        if not text:
+            return "Okay. Please continue."
+        sentences = re.split(r"(?<=[.!?])\s+", text)
+        short = sentences[0].strip() if sentences else text
+        if len(short) > 80:
+            short = short[:77].rstrip() + "..."
+        return short
+
     async def telegram_auth_status(self) -> TelegramAuthStatusResponse:
         payload = await self.telegram.auth_status()
         return TelegramAuthStatusResponse(**payload)
@@ -376,15 +387,24 @@ class SecretaryService:
         )
 
         forced_reply = calendar_turn.get("reply") if isinstance(calendar_turn, dict) else None
+
+        use_remote = bool(self.settings.agent_live_use_remote_llm)
         if forced_reply:
-            analysis = await self.analyze_agent_turn(call_id=call_id, transcript=transcript, context=context)
+            if use_remote:
+                analysis = await self.analyze_agent_turn(call_id=call_id, transcript=transcript, context=context)
+            else:
+                analysis = await self.ai._heuristic_response(call_id=call_id, transcript=transcript, context=context)
             analysis.reply = str(forced_reply)
             if bool(calendar_turn.get("queued")):
                 action_items = list(analysis.action_items)
                 action_items.append(f"calendar_queue:{calendar_turn.get('task_id')}")
                 analysis.action_items = action_items[:8]
         else:
-            analysis = await self.analyze_agent_turn(call_id=call_id, transcript=transcript, context=context)
+            if use_remote:
+                analysis = await self.analyze_agent_turn(call_id=call_id, transcript=transcript, context=context)
+            else:
+                analysis = await self.ai._heuristic_response(call_id=call_id, transcript=transcript, context=context)
+                analysis.reply = self._tighten_live_reply(analysis.reply)
 
         tts_audio_path: str | None = None
         tts_status: str | None = None
@@ -400,7 +420,7 @@ class SecretaryService:
             if call_audio_status == "streaming_out":
                 session = self.live_sessions.get(call_id)
                 if session is not None:
-                    cooldown = max(0.5, float(self.settings.telegram_live_tts_cooldown_seconds))
+                    cooldown = max(0.4, float(self.settings.telegram_live_tts_cooldown_seconds))
                     session["pause_until"] = datetime.now(timezone.utc) + timedelta(seconds=cooldown)
                     session["last_call_audio_status"] = call_audio_status
 
