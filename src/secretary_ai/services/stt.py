@@ -48,18 +48,27 @@ class STTEngine:
                     source_path = temp_clip
 
             model = await asyncio.to_thread(self._ensure_model)
-            text = await asyncio.to_thread(self._transcribe_with_model, model, source_path)
+            timeout = max(1.5, float(self.settings.stt_transcribe_timeout_seconds))
+            text = await asyncio.wait_for(
+                asyncio.to_thread(self._transcribe_with_model, model, source_path),
+                timeout=timeout,
+            )
             text = " ".join(text.split())
 
             # Fallback: tail-only clip can miss speech at segment boundaries.
             # Retry on full recording before declaring no_speech.
             if not text and source_path != path:
-                full_text = await asyncio.to_thread(self._transcribe_with_model, model, path)
+                full_text = await asyncio.wait_for(
+                    asyncio.to_thread(self._transcribe_with_model, model, path),
+                    timeout=timeout,
+                )
                 text = " ".join(full_text.split())
 
             if not text:
                 return "", "no_speech"
             return text, "ok"
+        except asyncio.TimeoutError:
+            return "", "transcription_timeout"
         except Exception as exc:
             return "", f"transcription_error:{exc.__class__.__name__}"
         finally:

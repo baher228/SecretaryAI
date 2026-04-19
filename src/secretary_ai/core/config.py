@@ -63,6 +63,8 @@ class Settings(BaseSettings):
     stt_tail_seconds: float = 2.0
     stt_min_new_bytes: int = 1200
     stt_repeat_similarity_threshold: float = 0.9
+    stt_transcribe_timeout_seconds: float = 8.0
+    stt_prewarm_on_startup: bool = True
     telegram_live_poll_seconds: float = 0.3
     telegram_live_tts_cooldown_seconds: float = 1.2
     telegram_live_debug: bool = True

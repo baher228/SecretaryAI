@@ -76,6 +76,14 @@ class SecretaryService:
         await self.calendar.refresh_cache()
         self.memory.prune_short_term(max_age_hours=24)
         self.memory.set_mid_term_upcoming(self.calendar.cache_snapshot(limit=50).get("events", []))
+
+        if self.settings.stt_prewarm_on_startup:
+            try:
+                await asyncio.wait_for(asyncio.to_thread(self.stt._ensure_model), timeout=20.0)  # type: ignore[attr-defined]
+                self.debug.log("system", "stt_prewarm_ok", {"model": self.settings.stt_model})
+            except Exception as exc:
+                self.debug.log("system", "stt_prewarm_failed", {"error": exc.__class__.__name__, "detail": str(exc)})
+
         if self.settings.telegram_auto_start_live_agent:
             self._auto_live_task = asyncio.create_task(self._auto_attach_live_loop())
         if self.settings.calendar_worker_enabled:
@@ -843,9 +851,20 @@ class SecretaryService:
                     "file_size": file_size,
                     "tail_seconds": self.settings.stt_tail_seconds,
                     "recent_only": self.settings.stt_recent_only,
+                    "timeout_sec": self.settings.stt_transcribe_timeout_seconds,
                 },
             )
+            stt_started = monotonic()
             text, stt_status = await self.stt.transcribe(str(recording_path))
+            self.debug.log(
+                call_id,
+                "stt_transcribe_done",
+                {
+                    "status": stt_status,
+                    "elapsed_sec": round(monotonic() - stt_started, 3),
+                    "chars": len((text or "").strip()),
+                },
+            )
             session["last_stt_status"] = stt_status
             preview_chars = max(20, int(self.settings.telegram_live_log_transcript_preview_chars))
             if stt_status != "ok":
