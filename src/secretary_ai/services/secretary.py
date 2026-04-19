@@ -42,6 +42,7 @@ from secretary_ai.domain.models import (
 )
 from secretary_ai.services.ai_agent import SecretaryAIAgent
 from secretary_ai.services.calendar import CalendarService
+from secretary_ai.services.live_debug import LiveDebugLogger
 from secretary_ai.services.live_templates import LiveTemplateMatcher
 from secretary_ai.services.memory_store import MemoryStore
 from secretary_ai.services.stt import STTEngine
@@ -59,6 +60,7 @@ class SecretaryService:
         self.ai = SecretaryAIAgent(settings)
         self.template_matcher = LiveTemplateMatcher(settings)
         self.memory = MemoryStore(settings)
+        self.debug = LiveDebugLogger(settings)
         self.tts = TTSEngine(settings)
         self.stt = STTEngine(settings)
         self.live_sessions: dict[str, dict[str, Any]] = {}
@@ -613,6 +615,8 @@ class SecretaryService:
             "responses_sent": 0,
             "last_response_at": None,
             "last_processed_snippet": "",
+            "loop_ticks": 0,
+            "stt_ok_count": 0,
         }
         session["task"] = asyncio.create_task(self._telegram_live_loop(call_id))
         self.live_sessions[call_id] = session
@@ -622,6 +626,16 @@ class SecretaryService:
             "started_at": session["started_at"],
             "recording_path": str(recording_path),
         }
+
+        self.debug.log(
+            call_id,
+            "live_start",
+            {
+                "recording_path": str(recording_path),
+                "speak_response": payload.speak_response,
+                "context": payload.context,
+            },
+        )
 
         return TelegramLiveAgentResponse(
             call_id=call_id,
@@ -697,13 +711,16 @@ class SecretaryService:
 
         poll_seconds = max(0.2, float(self.settings.telegram_live_poll_seconds))
         while True:
+            session["loop_ticks"] = int(session.get("loop_ticks") or 0) + 1
             if not session.get("running"):
+                self.debug.log(call_id, "loop_stopped", {"reason": "session_not_running"})
                 return
 
             call = self.telegram.get_call(call_id) or {}
             if str(call.get("status", "")).lower() in {"ended", "discarded", "failed"}:
                 session["running"] = False
                 session["last_stt_status"] = "call_ended"
+                self.debug.log(call_id, "loop_stopped", {"reason": "call_ended", "status": call.get("status")})
                 return
 
             pause_until = session.get("pause_until")
@@ -717,6 +734,17 @@ class SecretaryService:
                 continue
 
             file_size = recording_path.stat().st_size
+            if session["loop_ticks"] % 15 == 0:
+                self.debug.log(
+                    call_id,
+                    "loop_tick",
+                    {
+                        "tick": session["loop_ticks"],
+                        "file_size": file_size,
+                        "last_audio_size": int(session.get("last_audio_size") or 0),
+                        "last_stt_status": session.get("last_stt_status"),
+                    },
+                )
             previous_size = int(session.get("last_audio_size") or 0)
             min_new_bytes = max(256, int(self.settings.stt_min_new_bytes // 2))
 
@@ -735,8 +763,20 @@ class SecretaryService:
             text, stt_status = await self.stt.transcribe(str(recording_path))
             session["last_stt_status"] = stt_status
             if stt_status != "ok":
+                self.debug.log(call_id, "stt_not_ok", {"status": stt_status})
                 await asyncio.sleep(poll_seconds)
                 continue
+
+            session["stt_ok_count"] = int(session.get("stt_ok_count") or 0) + 1
+            self.debug.log(
+                call_id,
+                "stt_ok",
+                {
+                    "chars": len((text or "").strip()),
+                    "sample": (text or "")[:120],
+                    "count": session["stt_ok_count"],
+                },
+            )
 
             previous = str(session.get("last_full_transcript") or "")
             delta = self._extract_new_text(previous, text)
@@ -744,6 +784,7 @@ class SecretaryService:
             min_chars = max(3, int(self.settings.stt_min_chars) - 1)
             if len(snippet) < min_chars:
                 session["last_full_transcript"] = text
+                self.debug.log(call_id, "snippet_too_short", {"chars": len(snippet), "snippet": snippet})
                 await asyncio.sleep(poll_seconds)
                 continue
 
@@ -753,6 +794,14 @@ class SecretaryService:
                 similarity = SequenceMatcher(None, normalized_snippet, normalized_last).ratio()
                 if similarity >= float(self.settings.stt_repeat_similarity_threshold):
                     session["last_full_transcript"] = text
+                    self.debug.log(
+                        call_id,
+                        "snippet_deduped",
+                        {
+                            "similarity": similarity,
+                            "snippet": snippet[:120],
+                        },
+                    )
                     await asyncio.sleep(poll_seconds)
                     continue
 
@@ -764,6 +813,7 @@ class SecretaryService:
                 context["source"] = "telegram_live_loop"
                 context["stt_provider"] = self.settings.stt_provider
                 try:
+                    started = monotonic()
                     response = await asyncio.wait_for(
                         self.live_agent_respond(
                             call_id=call_id,
@@ -773,7 +823,17 @@ class SecretaryService:
                         ),
                         timeout=max(0.9, float(self.settings.agent_live_timeout_seconds)),
                     )
+                    self.debug.log(
+                        call_id,
+                        "live_respond_ok",
+                        {
+                            "elapsed_sec": round(monotonic() - started, 3),
+                            "reply_chars": len((response.reply or "").strip()),
+                            "call_audio_status": response.call_audio_status,
+                        },
+                    )
                 except asyncio.TimeoutError:
+                    self.debug.log(call_id, "live_respond_timeout", {"timeout_sec": self.settings.agent_live_timeout_seconds})
                     response = await self._fast_fallback_response(
                         call_id=call_id,
                         snippet=snippet,
@@ -807,6 +867,7 @@ class SecretaryService:
                     )
             except Exception as exc:
                 session["last_stt_status"] = "agent_error"
+                self.debug.log(call_id, "live_turn_error", {"error": exc.__class__.__name__, "detail": str(exc)})
                 self.telegram._append_event(  # type: ignore[attr-defined]
                     call_id,
                     "live_turn_error",
@@ -936,9 +997,19 @@ class SecretaryService:
 
         if speak_response:
             tts_audio_path, tts_status = await self.tts.synthesize(reply, call_id=call_id)
+            self.debug.log(
+                call_id,
+                "fallback_tts",
+                {"tts_status": tts_status, "has_audio": bool(tts_audio_path), "reply": reply[:120]},
+            )
             if tts_audio_path:
                 stream_result = await self.telegram.stream_audio_out(call_id, tts_audio_path)
                 call_audio_status = str(stream_result.get("status"))
+                self.debug.log(
+                    call_id,
+                    "fallback_audio_out",
+                    {"audio_path": tts_audio_path, "status": call_audio_status, "detail": stream_result.get("detail")},
+                )
             else:
                 call_audio_status = "not_streamed"
 
