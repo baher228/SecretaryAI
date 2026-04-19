@@ -61,6 +61,21 @@ _DEFAULT_TEMPLATES = [
         "priority": 11,
     },
     {
+        "id": "meeting_followup_details",
+        "keywords": ["what time works", "propose a time", "find a slot", "next available slot"],
+        "reply": "Sure. I’ll check your availability and suggest the best slot.",
+        "calendar_check": True,
+        "calendar_enqueue": True,
+        "priority": 12,
+    },
+    {
+        "id": "meeting_duration",
+        "keywords": ["for 30 minutes", "for 1 hour", "for one hour", "duration"],
+        "reply": "Noted. I’ll include that duration when I schedule it.",
+        "calendar_enqueue": True,
+        "priority": 10,
+    },
+    {
         "id": "calendar_today",
         "keywords": ["calendar", "today", "schedule", "upcoming"],
         "reply": "I can check your upcoming schedule now.",
@@ -75,6 +90,21 @@ _DEFAULT_TEMPLATES = [
         "priority": 9,
     },
     {
+        "id": "calendar_move_day",
+        "keywords": ["move to tomorrow", "move to monday", "move it to", "change day"],
+        "reply": "Understood. I’ll queue that reschedule request.",
+        "calendar_enqueue": True,
+        "priority": 10,
+    },
+    {
+        "id": "calendar_conflict",
+        "keywords": ["conflict", "double booked", "overlap", "clash"],
+        "reply": "Got it. I’ll check conflicts and suggest an alternative.",
+        "calendar_check": True,
+        "calendar_enqueue": True,
+        "priority": 12,
+    },
+    {
         "id": "time_query",
         "keywords": ["what time", "when is", "next meeting"],
         "reply": "I can check that now. Give me one second.",
@@ -87,6 +117,19 @@ _DEFAULT_TEMPLATES = [
         "reply": "Understood. I can help reschedule it.",
         "calendar_enqueue": True,
         "priority": 9,
+    },
+    {
+        "id": "reschedule_confirmation",
+        "keywords": ["yes reschedule", "confirm reschedule", "go ahead reschedule"],
+        "reply": "Great. I’ll proceed with the reschedule request now.",
+        "calendar_enqueue": True,
+        "priority": 11,
+    },
+    {
+        "id": "reschedule_reject",
+        "keywords": ["dont reschedule", "don't reschedule", "keep it", "leave it"],
+        "reply": "Understood. I’ll keep the current schedule unchanged.",
+        "priority": 11,
     },
     {
         "id": "confirm",
@@ -107,6 +150,27 @@ _DEFAULT_TEMPLATES = [
         "priority": 1,
     },
     {
+        "id": "status_update",
+        "keywords": ["status", "did you do it", "is it done", "update me"],
+        "reply": "Sure. I’ll check and give you a quick status update.",
+        "calendar_check": True,
+        "priority": 8,
+    },
+    {
+        "id": "urgent_priority",
+        "keywords": ["urgent", "asap", "right now", "immediately"],
+        "reply": "Understood. I’ll mark this as urgent and process it first.",
+        "calendar_enqueue": True,
+        "priority": 12,
+    },
+    {
+        "id": "timezone_change",
+        "keywords": ["my timezone", "in london time", "in utc", "time zone"],
+        "reply": "Got it. I’ll handle this in the correct timezone.",
+        "calendar_enqueue": True,
+        "priority": 9,
+    },
+    {
         "id": "hold_on",
         "keywords": ["wait", "hold on", "one second"],
         "reply": "Sure, I’ll wait.",
@@ -117,6 +181,24 @@ _DEFAULT_TEMPLATES = [
         "keywords": ["bye", "goodbye", "hang up", "that is all"],
         "reply": "Got it. I’ll wrap up now.",
         "priority": 2,
+    },
+    {
+        "id": "smalltalk_how_are_you",
+        "keywords": ["how are you", "hows it going", "how are things"],
+        "reply": "I’m good and ready to help. What would you like to schedule?",
+        "priority": 2,
+    },
+    {
+        "id": "smalltalk_name",
+        "keywords": ["who are you", "what are you", "your name"],
+        "reply": "I’m your AI secretary. I can help with reminders and scheduling.",
+        "priority": 2,
+    },
+    {
+        "id": "short_ack",
+        "keywords": ["okay", "ok", "alright", "sounds good"],
+        "reply": "Perfect. What’s the next detail?",
+        "priority": 1,
     },
 ]
 

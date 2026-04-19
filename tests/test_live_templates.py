@@ -47,3 +47,12 @@ def test_template_matcher_handles_stt_typos_for_hello(tmp_path) -> None:
     hit = matcher.match("helo there")
     assert hit is not None
     assert hit.get("id") == "greeting"
+
+
+def test_template_matcher_prioritizes_urgent_keyword(tmp_path) -> None:
+    template_path = tmp_path / "templates.json"
+    matcher = LiveTemplateMatcher(Settings(agent_live_template_path=str(template_path)))
+
+    hit = matcher.match("set a reminder urgently right now")
+    assert hit is not None
+    assert hit.get("id") == "urgent_priority"
