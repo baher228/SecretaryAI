@@ -578,6 +578,7 @@ class SecretaryService:
             "started_monotonic": monotonic(),
             "responses_sent": 0,
             "last_response_at": None,
+            "last_processed_snippet": "",
         }
         session["task"] = asyncio.create_task(self._telegram_live_loop(call_id))
         self.live_sessions[call_id] = session
@@ -706,13 +707,25 @@ class SecretaryService:
 
             previous = str(session.get("last_full_transcript") or "")
             delta = self._extract_new_text(previous, text)
+            snippet = delta.strip() if delta.strip() else text.strip()
             min_chars = max(3, int(self.settings.stt_min_chars) - 2)
-            if len(delta.strip()) < min_chars:
+            if len(snippet) < min_chars:
+                session["last_full_transcript"] = text
+                await asyncio.sleep(poll_seconds)
+                continue
+
+            # With stt_recent_only=True, transcript often represents a moving tail window,
+            # not a cumulative full transcript. De-duplicate by snippet, not only by prefix delta.
+            last_snippet = str(session.get("last_processed_snippet") or "")
+            normalized_snippet = " ".join(snippet.split()).strip().lower()
+            normalized_last = " ".join(last_snippet.split()).strip().lower()
+            if normalized_snippet and normalized_snippet == normalized_last:
+                session["last_full_transcript"] = text
                 await asyncio.sleep(poll_seconds)
                 continue
 
             session["last_full_transcript"] = text
-            session["last_transcript_delta"] = delta
+            session["last_transcript_delta"] = snippet
             context = dict(session.get("context") or {})
             context["source"] = "telegram_live_loop"
             context["stt_provider"] = self.settings.stt_provider
@@ -720,23 +733,33 @@ class SecretaryService:
             try:
                 response = await self.live_agent_respond(
                     call_id=call_id,
-                    transcript=delta,
+                    transcript=snippet,
                     context=context,
                     speak_response=bool(session.get("speak_response", True)),
                 )
+                session["last_processed_snippet"] = snippet
                 session["responses_sent"] = int(session.get("responses_sent") or 0) + 1
                 session["last_response_at"] = self._now_iso()
                 self.telegram._append_event(  # type: ignore[attr-defined]
                     call_id,
                     "live_turn",
                     {
-                        "delta_chars": len(delta.strip()),
+                        "delta_chars": len(snippet),
                         "reply_chars": len((response.reply or "").strip()),
                         "tts_status": response.tts_status,
                         "call_audio_status": response.call_audio_status,
                         "responses_sent": session["responses_sent"],
                     },
                 )
+                if str(response.call_audio_status or "") != "streaming_out":
+                    self.telegram._append_event(  # type: ignore[attr-defined]
+                        call_id,
+                        "live_turn_audio_not_streaming",
+                        {
+                            "tts_status": response.tts_status,
+                            "call_audio_status": response.call_audio_status,
+                        },
+                    )
             except Exception as exc:
                 session["last_stt_status"] = "agent_error"
                 self.telegram._append_event(  # type: ignore[attr-defined]
