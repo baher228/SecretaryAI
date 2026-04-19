@@ -2,6 +2,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+import re
 
 from secretary_ai.core.config import Settings
 
@@ -93,6 +94,64 @@ class MemoryStore:
                 "path": str(self.long_path),
             },
         }
+
+    def add_user_fact_if_requested(self, call_id: str, transcript: str) -> dict[str, Any] | None:
+        text = " ".join((transcript or "").split()).strip()
+        lower = text.lower()
+        if not text:
+            return None
+
+        triggers = ("remember that", "remember this", "note that", "write this down", "don't forget", "dont forget")
+        if not any(t in lower for t in triggers):
+            return None
+
+        fact = text
+        for t in triggers:
+            idx = lower.find(t)
+            if idx >= 0:
+                fact = text[idx + len(t) :].strip(" .,:;") or text
+                break
+
+        record = {
+            "call_id": call_id,
+            "fact": fact,
+            "kind": "user_fact",
+        }
+        self.append_long_term("user_fact", record)
+        return record
+
+    def retrieve_user_fact(self, query: str, limit: int = 3) -> list[dict[str, Any]]:
+        query_text = " ".join((query or "").split()).strip().lower()
+        if not query_text or not self.long_path.exists():
+            return []
+
+        query_tokens = set(re.findall(r"[a-z0-9]+", query_text))
+        if not query_tokens:
+            return []
+
+        matches: list[tuple[int, dict[str, Any]]] = []
+        try:
+            for line in self.long_path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                except Exception:
+                    continue
+                if str(row.get("type")) != "user_fact":
+                    continue
+                payload = row.get("payload") or {}
+                fact = str(payload.get("fact") or "")
+                tokens = set(re.findall(r"[a-z0-9]+", fact.lower()))
+                score = len(query_tokens.intersection(tokens))
+                if score > 0:
+                    matches.append((score, {"fact": fact, "ts": row.get("ts"), "call_id": payload.get("call_id")}))
+        except Exception:
+            return []
+
+        matches.sort(key=lambda item: item[0], reverse=True)
+        return [item[1] for item in matches[: max(1, limit)]]
 
     @staticmethod
     def _load_json(path: Path, default: dict[str, Any]) -> dict[str, Any]:

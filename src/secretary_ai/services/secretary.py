@@ -393,6 +393,29 @@ class SecretaryService:
         context: dict[str, Any],
         speak_response: bool,
     ) -> AgentLiveRespondResponse:
+        fact_record = self.memory.add_user_fact_if_requested(call_id=call_id, transcript=transcript)
+        if fact_record is not None:
+            remember_reply = f"Got it. I wrote it down: {fact_record.get('fact')}"
+            return await self._fast_fallback_response(
+                call_id=call_id,
+                snippet=transcript,
+                reply=remember_reply,
+                action_item="memory_write",
+                speak_response=speak_response,
+            )
+
+        retrieval_hits = self.memory.retrieve_user_fact(transcript, limit=1)
+        if retrieval_hits and any(k in transcript.lower() for k in ("remember", "what did i", "about me", "my favorite", "what do i")):
+            recalled = str(retrieval_hits[0].get("fact") or "")
+            recall_reply = f"You told me: {recalled}"
+            return await self._fast_fallback_response(
+                call_id=call_id,
+                snippet=transcript,
+                reply=recall_reply,
+                action_item="memory_recall",
+                speak_response=speak_response,
+            )
+
         calendar_turn = await self.calendar.quick_reply_or_enqueue(
             call_id=call_id,
             transcript=transcript,
@@ -1253,6 +1276,13 @@ class SecretaryService:
             speak_response=speak_response,
         )
 
+        # Adaptive template augmentation for likely follow-up asks.
+        await self._update_predictive_templates(
+            call_id=call_id,
+            trigger_text=transcript,
+            busy_count=busy_count,
+        )
+
         result.action_items = list(result.action_items) + [f"calendar_checked:{busy_count}"]
         if queued_id:
             result.action_items.append(f"calendar_queue:{queued_id}")
@@ -1278,6 +1308,53 @@ class SecretaryService:
         )
 
         return result
+
+    async def _update_predictive_templates(self, call_id: str, trigger_text: str, busy_count: int) -> None:
+        try:
+            path = Path(self.settings.agent_live_template_path)
+            if not path.exists():
+                return
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(data, list):
+                return
+
+            if busy_count >= 4:
+                dynamic_reply = "You are busy around that time. I can suggest the next available slot."
+            elif busy_count >= 1:
+                dynamic_reply = "You have some events, but I can fit this reminder in."
+            else:
+                dynamic_reply = "You are available, so I can set this reminder now."
+
+            dynamic_item = {
+                "id": "predictive_reminder_followup",
+                "keywords": ["is that possible", "am i available", "can i do that", "do i have time"],
+                "reply": dynamic_reply,
+                "priority": 13,
+                "calendar_check": True,
+            }
+
+            replaced = False
+            for idx, item in enumerate(data):
+                if str(item.get("id")) == "predictive_reminder_followup":
+                    data[idx] = dynamic_item
+                    replaced = True
+                    break
+            if not replaced:
+                data.append(dynamic_item)
+
+            path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+            self.template_matcher = LiveTemplateMatcher(self.settings)
+            self.memory.append_long_term(
+                "predictive_template_update",
+                {
+                    "call_id": call_id,
+                    "trigger_text": trigger_text,
+                    "busy_count": busy_count,
+                    "template_id": "predictive_reminder_followup",
+                },
+            )
+        except Exception as exc:
+            self.debug.log(call_id, "predictive_template_update_failed", {"error": exc.__class__.__name__, "detail": str(exc)})
 
     async def _fast_fallback_response(
         self,
