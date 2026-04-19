@@ -1,6 +1,8 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
+import hashlib
+import json
 from pathlib import Path
 import re
 from time import monotonic
@@ -71,6 +73,7 @@ class SecretaryService:
         self._auto_live_task: asyncio.Task | None = None
         self._calendar_worker_task: asyncio.Task | None = None
         self._template_audio_cache: dict[str, str] = {}
+        self._reminder_flow_state: dict[str, dict[str, Any]] = {}
 
     async def startup(self) -> None:
         await self.telegram.start()
@@ -409,6 +412,11 @@ class SecretaryService:
                     "transcript": transcript[:160],
                 },
             )
+
+            template_id = str((template_hit or {}).get("id") or "") if template_hit else ""
+            if template_id == "reminder_set":
+                return await self._handle_reminder_flow(call_id=call_id, transcript=transcript, speak_response=speak_response)
+
             # Critical for latency: do NOT run remote analysis when we already have deterministic reply.
             selected_reply = str(forced_reply or (template_hit or {}).get("reply") or "")
             analysis = AgentAnalyzeResponse(
@@ -449,7 +457,6 @@ class SecretaryService:
                 },
             )
 
-            template_id = str((template_hit or {}).get("id") or "") if template_hit else ""
             if template_id:
                 if template_id in self._template_audio_cache:
                     tts_audio_path = self._template_audio_cache[template_id]
@@ -1171,6 +1178,106 @@ class SecretaryService:
             except Exception:
                 pass
             await asyncio.sleep(poll_seconds)
+
+    async def _handle_reminder_flow(
+        self,
+        call_id: str,
+        transcript: str,
+        speak_response: bool,
+    ) -> AgentLiveRespondResponse:
+        normalized = " ".join((transcript or "").split()).strip().lower()
+        fingerprint = hashlib.sha1(normalized.encode("utf-8", "ignore")).hexdigest()[:16]
+        existing = self._reminder_flow_state.get(call_id, {})
+
+        if existing.get("awaiting_result") and existing.get("fingerprint") == fingerprint:
+            reply = "I’m still checking your availability. One moment please."
+            return await self._fast_fallback_response(
+                call_id=call_id,
+                snippet=transcript,
+                reply=reply,
+                action_item="reminder_flow_waiting",
+                speak_response=speak_response,
+            )
+
+        # Step 1: immediate pre-recorded acknowledgment
+        ack_reply = "Let me check your availability for that reminder."
+        ack = await self._fast_fallback_response(
+            call_id=call_id,
+            snippet=transcript,
+            reply=ack_reply,
+            action_item="reminder_flow_ack",
+            speak_response=speak_response,
+        )
+
+        self._reminder_flow_state[call_id] = {
+            "awaiting_result": True,
+            "fingerprint": fingerprint,
+            "requested_at": self._now_iso(),
+        }
+
+        # Step 2: fast availability decision using cached schedule + optional planner queue
+        snapshot = self.calendar.cache_snapshot(limit=8)
+        events = snapshot.get("events", []) if isinstance(snapshot, dict) else []
+        busy_count = len(events)
+
+        queued = await self.calendar.quick_reply_or_enqueue(
+            call_id=call_id,
+            transcript=transcript,
+            context={"source": "reminder_flow"},
+        )
+        queued_id = queued.get("task_id") if isinstance(queued, dict) else None
+
+        # Heuristic decision phrase (pre-recorded family)
+        if busy_count >= 5:
+            result_reply = "You’re not very available. I can still queue this reminder around your schedule."
+        elif busy_count >= 1:
+            result_reply = "You have some events, but yes, I can place this reminder."
+        else:
+            result_reply = "Yes, you’re available. I can set this reminder now."
+
+        # Prime template cache for repeated flows
+        if "reminder_result_available" not in self._template_audio_cache:
+            path, _ = await self.tts.synthesize("Yes, you’re available. I can set this reminder now.", call_id="template-reminder_result_available")
+            if path:
+                self._template_audio_cache["reminder_result_available"] = path
+        if "reminder_result_busy" not in self._template_audio_cache:
+            path, _ = await self.tts.synthesize("You’re not very available. I can still queue this reminder around your schedule.", call_id="template-reminder_result_busy")
+            if path:
+                self._template_audio_cache["reminder_result_busy"] = path
+
+        result = await self._fast_fallback_response(
+            call_id=call_id,
+            snippet=transcript,
+            reply=result_reply,
+            action_item="reminder_flow_result",
+            speak_response=speak_response,
+        )
+
+        result.action_items = list(result.action_items) + [f"calendar_checked:{busy_count}"]
+        if queued_id:
+            result.action_items.append(f"calendar_queue:{queued_id}")
+        result.action_items = result.action_items[:8]
+
+        self._reminder_flow_state[call_id] = {
+            "awaiting_result": False,
+            "fingerprint": fingerprint,
+            "last_result": result_reply,
+            "completed_at": self._now_iso(),
+            "busy_count": busy_count,
+        }
+
+        self.memory.append_long_term(
+            "reminder_flow",
+            {
+                "call_id": call_id,
+                "transcript": transcript,
+                "busy_count": busy_count,
+                "queued_id": queued_id,
+                "result_reply": result_reply,
+            },
+        )
+
+        return result
 
     async def _fast_fallback_response(
         self,
