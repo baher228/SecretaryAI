@@ -16,6 +16,7 @@ from bot.files import (
     describe_image, transcribe_audio,
 )
 from bot.tools import _store_context
+from bot.reminders import reminder_loop
 from db.session import init_db
 
 bot = Bot(token=TELEGRAM_BOT_TOKEN)
@@ -148,8 +149,10 @@ async def handle_text_internal(
     last_edit = 0.0
     new_history = None
 
+    use_stream = initial_message is None
+
     try:
-        async for chunk, maybe_history in run_agent(text, history):
+        async for chunk, maybe_history in run_agent(text, history, stream=use_stream):
             if maybe_history is not None:
                 new_history = maybe_history
                 break
@@ -162,10 +165,14 @@ async def handle_text_internal(
                     last_edit = now
         if accumulated.strip():
             clean_text, contextual_kb = extract_buttons(accumulated)
-            keyboard = contextual_kb if contextual_kb else build_default_keyboard()
+            if initial_message is not None:
+                keyboard = contextual_kb  # collapse flow: no default keyboard
+            else:
+                keyboard = contextual_kb if contextual_kb else build_default_keyboard()
             await _safe_edit(placeholder, clean_text or "(empty response)", reply_markup=keyboard)
         else:
-            await _safe_edit(placeholder, "(empty response)", reply_markup=build_default_keyboard())
+            fallback_kb = None if initial_message is not None else build_default_keyboard()
+            await _safe_edit(placeholder, "(empty response)", reply_markup=fallback_kb)
     except Exception as e:
         await _safe_edit(placeholder, f"Error: {e}")
         return
@@ -340,33 +347,55 @@ async def handle_callback(cq: CallbackQuery):
         await handle_text_internal(cq.message, CALLBACK_PROMPTS[data], uid_override=cq.from_user.id)
         return
 
-    if data == "confirm:yes":
-        await handle_text_internal(
-            cq.message,
-            "[User clicked ✅ Yes, confirm on your previous proposal. Proceed with that exact action now.]",
-            uid_override=cq.from_user.id,
+    if data.startswith("confirm:"):
+        try:
+            await cq.message.edit_text(
+                "⏳ <i>Working on it…</i>",
+                parse_mode="HTML",
+                reply_markup=None,
+            )
+        except Exception:
+            pass
+        synthetic = (
+            "[User clicked ✅ Yes, confirm on your previous proposal. Proceed with that exact action now.]"
+            if data == "confirm:yes"
+            else "[User clicked ❌ Cancel on your previous proposal. Acknowledge and don't take action.]"
         )
-    elif data == "confirm:no":
         await handle_text_internal(
-            cq.message,
-            "[User clicked ❌ Cancel on your previous proposal. Acknowledge and don't take action.]",
+            cq.message, synthetic,
             uid_override=cq.from_user.id,
+            initial_message=cq.message,
         )
-    elif data.startswith("task:done:"):
+        return
+
+    if data.startswith("task:done:"):
         task_id = data.split(":")[-1]
+        try:
+            await cq.message.edit_text(
+                "⏳ <i>Marking as done…</i>",
+                parse_mode="HTML",
+                reply_markup=None,
+            )
+        except Exception:
+            pass
+        synthetic = f"[User tapped ✓ Done for task ID {task_id}. Mark it as completed and confirm briefly.]"
         await handle_text_internal(
-            cq.message,
-            f"[User tapped ✓ Done for task ID {task_id}. Mark it as completed and confirm.]",
+            cq.message, synthetic,
             uid_override=cq.from_user.id,
+            initial_message=cq.message,
         )
-    elif data.startswith("event:delete:"):
+        return
+
+    if data.startswith("event:delete:"):
         event_id = data.split(":", 2)[-1]
         await handle_text_internal(
             cq.message,
             f"[User tapped 🗑️ Delete for event ID {event_id}. Delete it and confirm.]",
             uid_override=cq.from_user.id,
         )
-    elif data.startswith("book:"):
+        return
+
+    if data.startswith("book:"):
         # Format: book:TYPE:YYYY-MM-DDTHH:MM:NAME (timestamp is exactly 16 chars)
         remainder = data[len("book:"):]
         first_colon = remainder.find(":")
@@ -375,11 +404,23 @@ async def handle_callback(cq: CallbackQuery):
             after_type = remainder[first_colon + 1:]
             timestamp = after_type[:16]
             name = after_type[17:]
+            try:
+                await cq.message.edit_text(
+                    "⏳ <i>Adding to your calendar…</i>",
+                    parse_mode="HTML",
+                    reply_markup=None,
+                )
+            except Exception:
+                pass
             synthetic = (
                 f"[User chose booking slot: type={btype}, time={timestamp}, venue={name}. "
                 f"Create calendar event and confirm.]"
             )
-            await handle_text_internal(cq.message, synthetic, uid_override=cq.from_user.id)
+            await handle_text_internal(
+                cq.message, synthetic,
+                uid_override=cq.from_user.id,
+                initial_message=cq.message,
+            )
 
 
 async def main():
@@ -392,6 +433,8 @@ async def main():
         BotCommand(command="calendar", description="Show this week's calendar"),
         BotCommand(command="help", description="What I can do"),
     ])
+    asyncio.create_task(reminder_loop(bot))
+    print("[reminders] Background reminder loop started (1-hour lead time, checks every 60s)")
     print("Bot starting...")
     await dp.start_polling(bot)
 
