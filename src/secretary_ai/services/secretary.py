@@ -849,17 +849,37 @@ class SecretaryService:
             session["last_stt_status"] = stt_status
             preview_chars = max(20, int(self.settings.telegram_live_log_transcript_preview_chars))
             if stt_status != "ok":
-                self.debug.log(
-                    call_id,
-                    "stt_not_ok",
-                    {
-                        "status": stt_status,
-                        "chars": len((text or "").strip()),
-                        "sample": (text or "")[:preview_chars],
-                    },
-                )
-                await asyncio.sleep(poll_seconds)
-                continue
+                # Secondary rescue pass: when recent-only missed, try full file once here too.
+                if stt_status == "no_speech":
+                    full_text, full_status = await self.stt.transcribe(str(recording_path))
+                    if full_status == "ok" and full_text.strip():
+                        text = full_text
+                        stt_status = "ok"
+                        session["last_stt_status"] = stt_status
+                    else:
+                        self.debug.log(
+                            call_id,
+                            "stt_not_ok",
+                            {
+                                "status": stt_status,
+                                "chars": len((text or "").strip()),
+                                "sample": (text or "")[:preview_chars],
+                            },
+                        )
+                        await asyncio.sleep(poll_seconds)
+                        continue
+                else:
+                    self.debug.log(
+                        call_id,
+                        "stt_not_ok",
+                        {
+                            "status": stt_status,
+                            "chars": len((text or "").strip()),
+                            "sample": (text or "")[:preview_chars],
+                        },
+                    )
+                    await asyncio.sleep(poll_seconds)
+                    continue
 
             session["stt_ok_count"] = int(session.get("stt_ok_count") or 0) + 1
             self.debug.log(
