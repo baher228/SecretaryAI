@@ -391,16 +391,29 @@ class SecretaryService:
         template_reply = self.template_matcher.match(transcript) if not forced_reply else None
 
         if forced_reply or template_reply:
-            analysis = await self.analyze_agent_turn(call_id=call_id, transcript=transcript, context=context)
-            analysis.reply = str(forced_reply or template_reply)
+            # Critical for latency: do NOT run remote analysis when we already have deterministic reply.
+            analysis = AgentAnalyzeResponse(
+                call_id=call_id,
+                reply=str(forced_reply or template_reply),
+                model=self.settings.zai_model,
+            )
             if template_reply and not forced_reply:
-                action_items = list(analysis.action_items)
-                action_items.append("template_reply")
-                analysis.action_items = action_items[:8]
+                analysis.action_items = ["template_reply"]
             if bool(calendar_turn.get("queued")):
-                action_items = list(analysis.action_items)
-                action_items.append(f"calendar_queue:{calendar_turn.get('task_id')}")
-                analysis.action_items = action_items[:8]
+                analysis.action_items = list(analysis.action_items) + [
+                    f"calendar_queue:{calendar_turn.get('task_id')}"
+                ]
+                analysis.action_items = analysis.action_items[:8]
+            self.memory.add_short_term_turn(call_id=call_id, transcript=transcript, reply=analysis.reply)
+            self.memory.append_long_term(
+                "live_turn_template",
+                {
+                    "call_id": call_id,
+                    "transcript": transcript,
+                    "reply": analysis.reply,
+                    "source": "calendar_forced" if forced_reply else "template",
+                },
+            )
         else:
             analysis = await self.analyze_agent_turn(call_id=call_id, transcript=transcript, context=context)
 
@@ -782,8 +795,17 @@ class SecretaryService:
 
             text, stt_status = await self.stt.transcribe(str(recording_path))
             session["last_stt_status"] = stt_status
+            preview_chars = max(20, int(self.settings.telegram_live_log_transcript_preview_chars))
             if stt_status != "ok":
-                self.debug.log(call_id, "stt_not_ok", {"status": stt_status})
+                self.debug.log(
+                    call_id,
+                    "stt_not_ok",
+                    {
+                        "status": stt_status,
+                        "chars": len((text or "").strip()),
+                        "sample": (text or "")[:preview_chars],
+                    },
+                )
                 await asyncio.sleep(poll_seconds)
                 continue
 
@@ -793,7 +815,7 @@ class SecretaryService:
                 "stt_ok",
                 {
                     "chars": len((text or "").strip()),
-                    "sample": (text or "")[:120],
+                    "sample": (text or "")[:preview_chars],
                     "count": session["stt_ok_count"],
                 },
             )
@@ -832,6 +854,11 @@ class SecretaryService:
                 context = dict(session.get("context") or {})
                 context["source"] = "telegram_live_loop"
                 context["stt_provider"] = self.settings.stt_provider
+                status_before = str(call.get("status") or "").lower()
+                if status_before in {"ended", "discarded", "failed"}:
+                    self.debug.log(call_id, "skip_live_respond_call_not_active", {"status": status_before})
+                    await asyncio.sleep(poll_seconds)
+                    continue
                 try:
                     started = monotonic()
                     response = await asyncio.wait_for(
@@ -852,6 +879,17 @@ class SecretaryService:
                             "call_audio_status": response.call_audio_status,
                         },
                     )
+                    if str((response.call_audio_status or "").lower()) == "error":
+                        self.debug.log(
+                            call_id,
+                            "audio_out_error_after_response",
+                            {
+                                "reply": (response.reply or "")[:140],
+                                "tts_status": response.tts_status,
+                                "call_audio_status": response.call_audio_status,
+                                "call_status": call.get("status"),
+                            },
+                        )
                 except asyncio.TimeoutError:
                     self.debug.log(call_id, "live_respond_timeout", {"timeout_sec": self.settings.agent_live_timeout_seconds})
                     response = await self._fast_fallback_response(
@@ -887,7 +925,16 @@ class SecretaryService:
                     )
             except Exception as exc:
                 session["last_stt_status"] = "agent_error"
-                self.debug.log(call_id, "live_turn_error", {"error": exc.__class__.__name__, "detail": str(exc)})
+                self.debug.log(
+                    call_id,
+                    "live_turn_error",
+                    {
+                        "error": exc.__class__.__name__,
+                        "detail": str(exc),
+                        "call_status": call.get("status"),
+                        "responses_sent": session.get("responses_sent"),
+                    },
+                )
                 self.telegram._append_event(  # type: ignore[attr-defined]
                     call_id,
                     "live_turn_error",
