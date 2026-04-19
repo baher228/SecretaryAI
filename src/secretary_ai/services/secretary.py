@@ -42,6 +42,7 @@ from secretary_ai.domain.models import (
 )
 from secretary_ai.services.ai_agent import SecretaryAIAgent
 from secretary_ai.services.calendar import CalendarService
+from secretary_ai.services.live_templates import LiveTemplateMatcher
 from secretary_ai.services.stt import STTEngine
 from secretary_ai.services.telegram_calls import TelegramCallService
 from secretary_ai.services.tts import TTSEngine
@@ -55,6 +56,7 @@ class SecretaryService:
         self.telegram = TelegramCallService(settings)
         self.calendar = CalendarService(settings)
         self.ai = SecretaryAIAgent(settings)
+        self.template_matcher = LiveTemplateMatcher(settings)
         self.tts = TTSEngine(settings)
         self.stt = STTEngine(settings)
         self.live_sessions: dict[str, dict[str, Any]] = {}
@@ -376,9 +378,15 @@ class SecretaryService:
         )
 
         forced_reply = calendar_turn.get("reply") if isinstance(calendar_turn, dict) else None
-        if forced_reply:
+        template_reply = self.template_matcher.match(transcript) if not forced_reply else None
+
+        if forced_reply or template_reply:
             analysis = await self.analyze_agent_turn(call_id=call_id, transcript=transcript, context=context)
-            analysis.reply = str(forced_reply)
+            analysis.reply = str(forced_reply or template_reply)
+            if template_reply and not forced_reply:
+                action_items = list(analysis.action_items)
+                action_items.append("template_reply")
+                analysis.action_items = action_items[:8]
             if bool(calendar_turn.get("queued")):
                 action_items = list(analysis.action_items)
                 action_items.append(f"calendar_queue:{calendar_turn.get('task_id')}")
