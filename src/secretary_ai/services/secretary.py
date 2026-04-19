@@ -70,6 +70,7 @@ class SecretaryService:
         self.live_sessions: dict[str, dict[str, Any]] = {}
         self._auto_live_task: asyncio.Task | None = None
         self._calendar_worker_task: asyncio.Task | None = None
+        self._template_audio_cache: dict[str, str] = {}
 
     async def startup(self) -> None:
         await self.telegram.start()
@@ -79,7 +80,7 @@ class SecretaryService:
 
         if self.settings.stt_prewarm_on_startup:
             try:
-                await asyncio.wait_for(asyncio.to_thread(self.stt._ensure_model), timeout=20.0)  # type: ignore[attr-defined]
+                await asyncio.wait_for(asyncio.to_thread(self.stt._ensure_model), timeout=45.0)  # type: ignore[attr-defined]
                 self.debug.log("system", "stt_prewarm_ok", {"model": self.settings.stt_model})
             except Exception as exc:
                 self.debug.log("system", "stt_prewarm_failed", {"error": exc.__class__.__name__, "detail": str(exc)})
@@ -447,6 +448,38 @@ class SecretaryService:
                     "actions": analysis.action_items,
                 },
             )
+
+            template_id = str((template_hit or {}).get("id") or "") if template_hit else ""
+            if template_id:
+                if template_id in self._template_audio_cache:
+                    tts_audio_path = self._template_audio_cache[template_id]
+                    tts_status = "cached"
+                else:
+                    tts_audio_path, tts_status = await self.tts.synthesize(analysis.reply, call_id=f"template-{template_id}")
+                    if tts_audio_path:
+                        self._template_audio_cache[template_id] = tts_audio_path
+
+                call_audio_status = "not_streamed"
+                if speak_response and tts_audio_path:
+                    stream_result = await self.telegram.stream_audio_out(call_id, tts_audio_path)
+                    call_audio_status = str(stream_result.get("status"))
+
+                response = AgentLiveRespondResponse(
+                    call_id=call_id,
+                    transcript=transcript,
+                    reply=analysis.reply,
+                    intent=analysis.intent,
+                    confidence=analysis.confidence,
+                    requires_human=analysis.requires_human,
+                    transfer_reason=analysis.transfer_reason,
+                    action_items=analysis.action_items,
+                    extracted_fields=analysis.extracted_fields,
+                    model=analysis.model,
+                    tts_audio_path=tts_audio_path,
+                    tts_status=tts_status,
+                    call_audio_status=call_audio_status,
+                )
+                return response
         else:
             try:
                 analysis = await asyncio.wait_for(
@@ -475,7 +508,7 @@ class SecretaryService:
             if call_audio_status == "streaming_out":
                 session = self.live_sessions.get(call_id)
                 if session is not None:
-                    cooldown = max(0.5, float(self.settings.telegram_live_tts_cooldown_seconds))
+                    cooldown = max(0.2, float(self.settings.telegram_live_tts_cooldown_seconds))
                     session["pause_until"] = datetime.now(timezone.utc) + timedelta(seconds=cooldown)
                     session["last_call_audio_status"] = call_audio_status
 

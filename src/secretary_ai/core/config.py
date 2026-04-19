@@ -66,7 +66,7 @@ class Settings(BaseSettings):
     stt_transcribe_timeout_seconds: float = 8.0
     stt_prewarm_on_startup: bool = True
     telegram_live_poll_seconds: float = 0.3
-    telegram_live_tts_cooldown_seconds: float = 1.2
+    telegram_live_tts_cooldown_seconds: float = 0.3
     telegram_live_debug: bool = True
     telegram_live_debug_log_path: str = ".telegram/logs/live_debug.jsonl"
     telegram_live_log_transcript_preview_chars: int = 120
