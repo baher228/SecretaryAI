@@ -38,3 +38,12 @@ def test_template_matcher_returns_calendar_flags_for_reminder(tmp_path) -> None:
     assert hit is not None
     assert hit.get("calendar_check") is True
     assert hit.get("calendar_enqueue") is True
+
+
+def test_template_matcher_handles_stt_typos_for_hello(tmp_path) -> None:
+    template_path = tmp_path / "templates.json"
+    matcher = LiveTemplateMatcher(Settings(agent_live_template_path=str(template_path)))
+
+    hit = matcher.match("helo there")
+    assert hit is not None
+    assert hit.get("id") == "greeting"

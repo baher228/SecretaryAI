@@ -1,4 +1,5 @@
 import json
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
@@ -138,11 +139,31 @@ class LiveTemplateMatcher:
         best_item: dict[str, Any] | None = None
         best_score = 0
         best_priority = -1
+        words = [w for w in text.split() if w]
+
         for item in self.templates:
             keywords = [str(k).strip().lower() for k in item.get("keywords", []) if str(k).strip()]
             if not keywords:
                 continue
-            score = sum(1 for kw in keywords if kw in text)
+            score = 0
+            for kw in keywords:
+                if kw in text:
+                    score += 2
+                    continue
+
+                # Fuzzy single-token match only when similarity is high enough.
+                kw_parts = [p for p in kw.split() if p]
+                if len(kw_parts) == 1 and len(kw_parts[0]) >= 4:
+                    token = kw_parts[0]
+                    best_ratio = 0.0
+                    for w in words:
+                        if abs(len(w) - len(token)) > 2:
+                            continue
+                        ratio = SequenceMatcher(None, token, w).ratio()
+                        if ratio > best_ratio:
+                            best_ratio = ratio
+                    if best_ratio >= 0.82:
+                        score += 1
             if score <= 0:
                 continue
             priority = int(item.get("priority", 0))

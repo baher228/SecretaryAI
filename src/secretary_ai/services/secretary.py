@@ -391,6 +391,15 @@ class SecretaryService:
         template_hit = self.template_matcher.match(transcript) if not forced_reply else None
 
         if forced_reply or template_hit:
+            self.debug.log(
+                call_id,
+                "template_or_forced_reply",
+                {
+                    "forced_reply": bool(forced_reply),
+                    "template_hit": template_hit,
+                    "transcript": transcript[:160],
+                },
+            )
             # Critical for latency: do NOT run remote analysis when we already have deterministic reply.
             selected_reply = str(forced_reply or (template_hit or {}).get("reply") or "")
             analysis = AgentAnalyzeResponse(
@@ -795,6 +804,14 @@ class SecretaryService:
                     },
                 )
             previous_size = int(session.get("last_audio_size") or 0)
+            if file_size < previous_size:
+                self.debug.log(
+                    call_id,
+                    "recording_file_shrunk",
+                    {"file_size": file_size, "previous_size": previous_size},
+                )
+                previous_size = 0
+                session["last_audio_size"] = 0
             min_new_bytes = max(256, int(self.settings.stt_min_new_bytes // 2))
 
             started_monotonic = float(session.get("started_monotonic") or 0.0)
@@ -805,10 +822,29 @@ class SecretaryService:
                 await asyncio.sleep(min(0.4, poll_seconds))
                 continue
             if (file_size - previous_size) < min_new_bytes and not in_warmup:
+                self.debug.log(
+                    call_id,
+                    "wait_for_more_audio",
+                    {
+                        "delta_bytes": file_size - previous_size,
+                        "min_new_bytes": min_new_bytes,
+                        "in_warmup": in_warmup,
+                    },
+                )
                 await asyncio.sleep(min(0.4, poll_seconds))
                 continue
             session["last_audio_size"] = file_size
 
+            self.debug.log(
+                call_id,
+                "stt_transcribe_start",
+                {
+                    "recording_path": str(recording_path),
+                    "file_size": file_size,
+                    "tail_seconds": self.settings.stt_tail_seconds,
+                    "recent_only": self.settings.stt_recent_only,
+                },
+            )
             text, stt_status = await self.stt.transcribe(str(recording_path))
             session["last_stt_status"] = stt_status
             preview_chars = max(20, int(self.settings.telegram_live_log_transcript_preview_chars))
