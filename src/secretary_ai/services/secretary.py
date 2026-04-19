@@ -43,6 +43,7 @@ from secretary_ai.domain.models import (
 from secretary_ai.services.ai_agent import SecretaryAIAgent
 from secretary_ai.services.calendar import CalendarService
 from secretary_ai.services.live_templates import LiveTemplateMatcher
+from secretary_ai.services.memory_store import MemoryStore
 from secretary_ai.services.stt import STTEngine
 from secretary_ai.services.telegram_calls import TelegramCallService
 from secretary_ai.services.tts import TTSEngine
@@ -57,6 +58,7 @@ class SecretaryService:
         self.calendar = CalendarService(settings)
         self.ai = SecretaryAIAgent(settings)
         self.template_matcher = LiveTemplateMatcher(settings)
+        self.memory = MemoryStore(settings)
         self.tts = TTSEngine(settings)
         self.stt = STTEngine(settings)
         self.live_sessions: dict[str, dict[str, Any]] = {}
@@ -66,6 +68,8 @@ class SecretaryService:
     async def startup(self) -> None:
         await self.telegram.start()
         await self.calendar.refresh_cache()
+        self.memory.prune_short_term(max_age_hours=24)
+        self.memory.set_mid_term_upcoming(self.calendar.cache_snapshot(limit=50).get("events", []))
         if self.settings.telegram_auto_start_live_agent:
             self._auto_live_task = asyncio.create_task(self._auto_attach_live_loop())
         if self.settings.calendar_worker_enabled:
@@ -412,7 +416,7 @@ class SecretaryService:
                     session["pause_until"] = datetime.now(timezone.utc) + timedelta(seconds=cooldown)
                     session["last_call_audio_status"] = call_audio_status
 
-        return AgentLiveRespondResponse(
+        response = AgentLiveRespondResponse(
             call_id=call_id,
             transcript=transcript,
             reply=analysis.reply,
@@ -427,6 +431,18 @@ class SecretaryService:
             tts_status=tts_status,
             call_audio_status=call_audio_status,
         )
+        self.memory.add_short_term_turn(call_id=call_id, transcript=transcript, reply=response.reply)
+        self.memory.append_long_term(
+            "live_turn",
+            {
+                "call_id": call_id,
+                "transcript": transcript,
+                "reply": response.reply,
+                "intent": response.intent.value,
+                "confidence": response.confidence,
+            },
+        )
+        return response
 
     async def analyze_agent_turn(
         self,
@@ -435,6 +451,7 @@ class SecretaryService:
         context: dict[str, Any],
     ) -> AgentAnalyzeResponse:
         self.telegram.append_transcript(call_id, transcript, metadata=context)
+        self.memory.add_short_term_turn(call_id=call_id, transcript=transcript)
         live_mode = str((context or {}).get("source") or "") == "telegram_live_loop"
         if live_mode:
             analysis = await self.ai.analyze_turn_live(call_id=call_id, transcript=transcript, context=context)
@@ -481,6 +498,7 @@ class SecretaryService:
                 "cache": self.calendar.cache_snapshot(limit=3),
                 "queue": self.calendar.queue_snapshot(limit=5),
             },
+            "memory": self.memory.snapshot(),
             "notes": [
                 "Telegram bot accounts cannot receive voice calls directly.",
                 "Voice calls require authorized Telegram user session (API_ID/API_HASH + sign-in).",
@@ -530,7 +548,10 @@ class SecretaryService:
         )
 
     async def calendar_refresh(self, days: int = 7, max_results: int = 30) -> dict[str, Any]:
-        return await self.calendar.refresh_cache(days=days, max_results=max_results)
+        result = await self.calendar.refresh_cache(days=days, max_results=max_results)
+        self.memory.set_mid_term_upcoming(self.calendar.cache_snapshot(limit=50).get("events", []))
+        self.memory.append_long_term("calendar_refresh", {"days": days, "max_results": max_results})
+        return result
 
     async def start_telegram_live_agent(
         self,

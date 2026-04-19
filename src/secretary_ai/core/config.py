@@ -64,7 +64,7 @@ class Settings(BaseSettings):
     telegram_live_poll_seconds: float = 0.3
     telegram_live_tts_cooldown_seconds: float = 1.2
 
-    calendar_enabled: bool = True
+    calendar_enabled: bool = False
     calendar_timezone: str = "Europe/London"
     calendar_id: str | None = None
     calendar_service_account_json: str | None = None

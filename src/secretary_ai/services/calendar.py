@@ -115,6 +115,9 @@ class CalendarService:
         - Mutating requests are queued for smart planner.
         """
 
+        if not self.settings.calendar_enabled:
+            return {"status": "disabled", "detail": "calendar_disabled"}
+
         context = context or {}
         text = (transcript or "").strip()
         lower = text.lower()
