@@ -762,8 +762,17 @@ class SecretaryService:
 
             text, stt_status = await self.stt.transcribe(str(recording_path))
             session["last_stt_status"] = stt_status
+            preview_chars = max(20, int(self.settings.telegram_live_log_transcript_preview_chars))
             if stt_status != "ok":
-                self.debug.log(call_id, "stt_not_ok", {"status": stt_status})
+                self.debug.log(
+                    call_id,
+                    "stt_not_ok",
+                    {
+                        "status": stt_status,
+                        "chars": len((text or "").strip()),
+                        "sample": (text or "")[:preview_chars],
+                    },
+                )
                 await asyncio.sleep(poll_seconds)
                 continue
 
@@ -773,7 +782,7 @@ class SecretaryService:
                 "stt_ok",
                 {
                     "chars": len((text or "").strip()),
-                    "sample": (text or "")[:120],
+                    "sample": (text or "")[:preview_chars],
                     "count": session["stt_ok_count"],
                 },
             )
@@ -832,6 +841,17 @@ class SecretaryService:
                             "call_audio_status": response.call_audio_status,
                         },
                     )
+                    if str((response.call_audio_status or "").lower()) == "error":
+                        self.debug.log(
+                            call_id,
+                            "audio_out_error_after_response",
+                            {
+                                "reply": (response.reply or "")[:140],
+                                "tts_status": response.tts_status,
+                                "call_audio_status": response.call_audio_status,
+                                "call_status": call.get("status"),
+                            },
+                        )
                 except asyncio.TimeoutError:
                     self.debug.log(call_id, "live_respond_timeout", {"timeout_sec": self.settings.agent_live_timeout_seconds})
                     response = await self._fast_fallback_response(
@@ -867,7 +887,16 @@ class SecretaryService:
                     )
             except Exception as exc:
                 session["last_stt_status"] = "agent_error"
-                self.debug.log(call_id, "live_turn_error", {"error": exc.__class__.__name__, "detail": str(exc)})
+                self.debug.log(
+                    call_id,
+                    "live_turn_error",
+                    {
+                        "error": exc.__class__.__name__,
+                        "detail": str(exc),
+                        "call_status": call.get("status"),
+                        "responses_sent": session.get("responses_sent"),
+                    },
+                )
                 self.telegram._append_event(  # type: ignore[attr-defined]
                     call_id,
                     "live_turn_error",

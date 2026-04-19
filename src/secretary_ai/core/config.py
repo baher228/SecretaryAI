@@ -65,6 +65,7 @@ class Settings(BaseSettings):
     telegram_live_tts_cooldown_seconds: float = 1.2
     telegram_live_debug: bool = True
     telegram_live_debug_log_path: str = ".telegram/logs/live_debug.jsonl"
+    telegram_live_log_transcript_preview_chars: int = 120
 
     calendar_enabled: bool = False
     calendar_timezone: str = "Europe/London"
