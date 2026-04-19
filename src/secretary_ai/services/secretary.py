@@ -388,22 +388,45 @@ class SecretaryService:
         )
 
         forced_reply = calendar_turn.get("reply") if isinstance(calendar_turn, dict) else None
-        template_reply = self.template_matcher.match(transcript) if not forced_reply else None
+        template_hit = self.template_matcher.match(transcript) if not forced_reply else None
 
-        if forced_reply or template_reply:
+        if forced_reply or template_hit:
+            self.debug.log(
+                call_id,
+                "template_or_forced_reply",
+                {
+                    "forced_reply": bool(forced_reply),
+                    "template_hit": template_hit,
+                    "transcript": transcript[:160],
+                },
+            )
             # Critical for latency: do NOT run remote analysis when we already have deterministic reply.
+            selected_reply = str(forced_reply or (template_hit or {}).get("reply") or "")
             analysis = AgentAnalyzeResponse(
                 call_id=call_id,
-                reply=str(forced_reply or template_reply),
+                reply=selected_reply,
                 model=self.settings.zai_model,
             )
-            if template_reply and not forced_reply:
-                analysis.action_items = ["template_reply"]
+            action_items: list[str] = []
+
+            if template_hit and not forced_reply:
+                action_items.append(f"template_reply:{template_hit.get('id')}")
+                if bool(template_hit.get("calendar_check")):
+                    snapshot = self.calendar.cache_snapshot(limit=3)
+                    action_items.append(f"calendar_checked:{snapshot.get('total_events', 0)}")
+                if bool(template_hit.get("calendar_enqueue")):
+                    queued = await self.calendar.quick_reply_or_enqueue(
+                        call_id=call_id,
+                        transcript=transcript,
+                        context={**context, "source": "template_enqueue"},
+                    )
+                    if bool(queued.get("queued")):
+                        action_items.append(f"calendar_queue:{queued.get('task_id')}")
+
             if bool(calendar_turn.get("queued")):
-                analysis.action_items = list(analysis.action_items) + [
-                    f"calendar_queue:{calendar_turn.get('task_id')}"
-                ]
-                analysis.action_items = analysis.action_items[:8]
+                action_items.append(f"calendar_queue:{calendar_turn.get('task_id')}")
+
+            analysis.action_items = action_items[:8]
             self.memory.add_short_term_turn(call_id=call_id, transcript=transcript, reply=analysis.reply)
             self.memory.append_long_term(
                 "live_turn_template",
@@ -412,6 +435,8 @@ class SecretaryService:
                     "transcript": transcript,
                     "reply": analysis.reply,
                     "source": "calendar_forced" if forced_reply else "template",
+                    "template_id": (template_hit or {}).get("id") if template_hit else None,
+                    "actions": analysis.action_items,
                 },
             )
         else:
@@ -779,6 +804,14 @@ class SecretaryService:
                     },
                 )
             previous_size = int(session.get("last_audio_size") or 0)
+            if file_size < previous_size:
+                self.debug.log(
+                    call_id,
+                    "recording_file_shrunk",
+                    {"file_size": file_size, "previous_size": previous_size},
+                )
+                previous_size = 0
+                session["last_audio_size"] = 0
             min_new_bytes = max(256, int(self.settings.stt_min_new_bytes // 2))
 
             started_monotonic = float(session.get("started_monotonic") or 0.0)
@@ -789,25 +822,64 @@ class SecretaryService:
                 await asyncio.sleep(min(0.4, poll_seconds))
                 continue
             if (file_size - previous_size) < min_new_bytes and not in_warmup:
+                self.debug.log(
+                    call_id,
+                    "wait_for_more_audio",
+                    {
+                        "delta_bytes": file_size - previous_size,
+                        "min_new_bytes": min_new_bytes,
+                        "in_warmup": in_warmup,
+                    },
+                )
                 await asyncio.sleep(min(0.4, poll_seconds))
                 continue
             session["last_audio_size"] = file_size
 
+            self.debug.log(
+                call_id,
+                "stt_transcribe_start",
+                {
+                    "recording_path": str(recording_path),
+                    "file_size": file_size,
+                    "tail_seconds": self.settings.stt_tail_seconds,
+                    "recent_only": self.settings.stt_recent_only,
+                },
+            )
             text, stt_status = await self.stt.transcribe(str(recording_path))
             session["last_stt_status"] = stt_status
             preview_chars = max(20, int(self.settings.telegram_live_log_transcript_preview_chars))
             if stt_status != "ok":
-                self.debug.log(
-                    call_id,
-                    "stt_not_ok",
-                    {
-                        "status": stt_status,
-                        "chars": len((text or "").strip()),
-                        "sample": (text or "")[:preview_chars],
-                    },
-                )
-                await asyncio.sleep(poll_seconds)
-                continue
+                # Secondary rescue pass: when recent-only missed, try full file once here too.
+                if stt_status == "no_speech":
+                    full_text, full_status = await self.stt.transcribe(str(recording_path))
+                    if full_status == "ok" and full_text.strip():
+                        text = full_text
+                        stt_status = "ok"
+                        session["last_stt_status"] = stt_status
+                    else:
+                        self.debug.log(
+                            call_id,
+                            "stt_not_ok",
+                            {
+                                "status": stt_status,
+                                "chars": len((text or "").strip()),
+                                "sample": (text or "")[:preview_chars],
+                            },
+                        )
+                        await asyncio.sleep(poll_seconds)
+                        continue
+                else:
+                    self.debug.log(
+                        call_id,
+                        "stt_not_ok",
+                        {
+                            "status": stt_status,
+                            "chars": len((text or "").strip()),
+                            "sample": (text or "")[:preview_chars],
+                        },
+                    )
+                    await asyncio.sleep(poll_seconds)
+                    continue
 
             session["stt_ok_count"] = int(session.get("stt_ok_count") or 0) + 1
             self.debug.log(
