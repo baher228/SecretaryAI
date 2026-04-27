@@ -217,6 +217,13 @@ class GeminiLiveSession:
                     continue
 
             readable = file_size - read_offset
+            if readable < 0:
+                debug_log(
+                    "gemini_live_file_shrunk",
+                    {"file_size": file_size, "read_offset": read_offset},
+                )
+                read_offset = WAV_HEADER_SIZE
+                readable = file_size - read_offset
             if readable < 3200:
                 await asyncio.sleep(0.15)
                 continue
