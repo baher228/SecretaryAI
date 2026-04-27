@@ -85,7 +85,8 @@ class Settings(BaseSettings):
     calendar_smart_model: str | None = None
     calendar_planner_max_tokens: int = 140
 
-    # Gemini Live (audio-to-audio voice loop)
+    # Gemini Live (audio-to-audio voice loop).
+    # Enabled by default; falls back to STT/AI/TTS when the API key is absent.
     gemini_api_key: str | None = None
     gemini_live_model: str = "gemini-3.1-flash-live-preview"
     gemini_live_voice: str = "Zephyr"

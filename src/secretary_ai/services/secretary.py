@@ -8,8 +8,6 @@ import re
 from time import monotonic
 from typing import Any
 
-import httpx
-
 from secretary_ai.core.config import Settings
 from secretary_ai.domain.models import (
     AgentLiveRespondResponse,
@@ -53,6 +51,7 @@ from secretary_ai.services.tts import TTSEngine
 from secretary_ai.services.maps import MapService
 from secretary_ai.services.booking import BookingService
 from secretary_ai.services.gemini_live import GeminiLiveSession
+from secretary_ai.services.zai_client import extract_message, zai_chat_completion
 
 
 class SecretaryService:
@@ -140,7 +139,7 @@ class SecretaryService:
             "temperature": 0.1,
             "max_tokens": 100,
         }
-        result = await self._zai_chat_completion(payload)
+        result = await zai_chat_completion(self.settings, payload)
         if result.get("error"):
             return ModelCheckResponse(
                 model=self.settings.zai_model,
@@ -148,7 +147,7 @@ class SecretaryService:
                 detail=result["error"],
                 output=result.get("raw"),
             )
-        message = self._extract_message(result["data"])
+        message = extract_message(result["data"])
         return ModelCheckResponse(
             model=self.settings.zai_model,
             connected=True,
@@ -181,11 +180,11 @@ class SecretaryService:
                 "temperature": self.settings.chat_temperature,
                 "max_tokens": self.settings.chat_max_tokens,
             }
-            result = await self._zai_chat_completion(api_payload)
+            result = await zai_chat_completion(self.settings, api_payload)
             if result.get("error"):
                 reply = f"AI error: {result['error']}"
             else:
-                msg_data = self._extract_message(result["data"])
+                msg_data = extract_message(result["data"])
                 reply = self._extract_text_from_content(msg_data.get("content"))
                 if not reply:
                     retry_messages = [
@@ -204,9 +203,9 @@ class SecretaryService:
                         "temperature": 0.1,
                         "max_tokens": max(18, min(48, int(self.settings.chat_max_tokens))),
                     }
-                    retry_result = await self._zai_chat_completion(retry_payload)
+                    retry_result = await zai_chat_completion(self.settings, retry_payload)
                     if not retry_result.get("error"):
-                        retry_msg = self._extract_message(retry_result["data"])
+                        retry_msg = extract_message(retry_result["data"])
                         reply = self._extract_text_from_content(retry_msg.get("content"))
 
                 reply = self._normalize_chat_reply(reply)
@@ -1193,34 +1192,21 @@ class SecretaryService:
                 continue
 
     async def _stop_auto_live_task(self) -> None:
-        task = self._auto_live_task
-        self._auto_live_task = None
-        if not task:
-            return
-        if task.done():
-            return
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
-        except Exception:
-            pass
+        self._auto_live_task = await self._cancel_task(self._auto_live_task)
 
     async def _stop_calendar_worker_task(self) -> None:
-        task = self._calendar_worker_task
-        self._calendar_worker_task = None
-        if not task:
-            return
-        if task.done():
-            return
+        self._calendar_worker_task = await self._cancel_task(self._calendar_worker_task)
+
+    @staticmethod
+    async def _cancel_task(task: asyncio.Task | None) -> None:  # type: ignore[type-arg]
+        if not task or task.done():
+            return None
         task.cancel()
         try:
             await task
-        except asyncio.CancelledError:
+        except (asyncio.CancelledError, Exception):
             pass
-        except Exception:
-            pass
+        return None
 
     async def _auto_attach_live_loop(self) -> None:
         scan_seconds = max(0.5, float(self.settings.telegram_auto_start_scan_seconds))
@@ -1646,35 +1632,4 @@ class SecretaryService:
             return parsed.replace(tzinfo=timezone.utc)
         return parsed.astimezone(timezone.utc)
 
-    async def _zai_chat_completion(self, payload: dict[str, Any]) -> dict[str, Any]:
-        if not self.settings.zai_api_key:
-            return {"error": "Missing ZAI_API_KEY in environment."}
 
-        base_url = self.settings.zai_base_url.rstrip("/")
-        url = f"{base_url}/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {self.settings.zai_api_key}",
-            "Content-Type": "application/json",
-            "Accept-Language": "en-US,en",
-        }
-        try:
-            async with httpx.AsyncClient(timeout=self.settings.zai_timeout_seconds) as client:
-                response = await client.post(url, headers=headers, json=payload)
-            if response.status_code >= 300:
-                return {
-                    "error": f"GLM request failed ({response.status_code}).",
-                    "raw": response.text[:240],
-                }
-            return {"data": response.json()}
-        except Exception as exc:
-            return {"error": f"Connection error: {exc.__class__.__name__}"}
-
-    @staticmethod
-    def _extract_message(data: dict[str, Any]) -> dict[str, Any]:
-        choices = data.get("choices") or []
-        if not choices:
-            return {}
-        msg = choices[0].get("message") or {}
-        if not isinstance(msg, dict):
-            return {}
-        return msg

@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import struct
 import wave
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
@@ -26,13 +27,36 @@ except ImportError:
     types = None  # type: ignore[assignment]
     _GENAI_AVAILABLE = False
 
-
+# ---------------------------------------------------------------------------
+# Audio constants
+# ---------------------------------------------------------------------------
 SEND_SAMPLE_RATE = 16000
 RECEIVE_SAMPLE_RATE = 24000
+PLAYBACK_SAMPLE_RATE = 48000
 SEND_AUDIO_MIME = f"audio/pcm;rate={SEND_SAMPLE_RATE}"
-RECEIVE_AUDIO_MIME = f"audio/pcm;rate={RECEIVE_SAMPLE_RATE}"
 
 WAV_HEADER_SIZE = 44
+MIN_SEND_BYTES = 3200
+MAX_TRANSCRIPT_ENTRIES = 200
+
+# Sleep intervals (seconds)
+POLL_WAIT_FILE = 0.3
+POLL_WAIT_HEADER = 0.2
+POLL_WAIT_DATA = 0.15
+POLL_SEND_INTERVAL = 0.1
+POLL_SEND_ERROR = 0.5
+POLL_RECEIVE_ERROR = 0.5
+POLL_PLAY_TIMEOUT = 0.1
+
+# Logging cadence
+LOG_EVERY_N_CHUNKS = 50
+
+# ---------------------------------------------------------------------------
+# Callback type aliases
+# ---------------------------------------------------------------------------
+StopCheck = Callable[[], bool]
+DebugLog = Callable[[str, dict[str, Any]], None]
+AudioOutCallback = Callable[[str], Awaitable[dict[str, Any]]]
 
 
 def _resample_pcm16(data: bytes, src_rate: int, dst_rate: int) -> bytes:
@@ -106,9 +130,9 @@ class GeminiLiveSession:
     async def run(
         self,
         recording_path: Path,
-        audio_out_callback: Any,
-        stop_check: Any,
-        debug_log: Any,
+        audio_out_callback: AudioOutCallback,
+        stop_check: StopCheck,
+        debug_log: DebugLog,
     ) -> None:
         """Main entry point: bridges call audio <-> Gemini Live.
 
@@ -122,7 +146,7 @@ class GeminiLiveSession:
         stop_check:
             ``def() -> bool`` returns True when the loop should stop.
         debug_log:
-            ``def(call_id, event, payload)`` for structured debug logging.
+            ``def(event, payload)`` for structured debug logging.
         """
         if not _GENAI_AVAILABLE:
             debug_log("gemini_live_unavailable", {"reason": "google-genai not installed"})
@@ -184,12 +208,16 @@ class GeminiLiveSession:
         finally:
             self._running = False
 
+    # ------------------------------------------------------------------
+    # Send loop: recording WAV → Gemini
+    # ------------------------------------------------------------------
+
     async def _send_audio_loop(
         self,
         session: Any,
         recording_path: Path,
-        stop_check: Any,
-        debug_log: Any,
+        stop_check: StopCheck,
+        debug_log: DebugLog,
     ) -> None:
         """Read new audio from the recording WAV file and send to Gemini."""
         read_offset = 0
@@ -198,12 +226,12 @@ class GeminiLiveSession:
 
         while not stop_check():
             if not recording_path.exists():
-                await asyncio.sleep(0.3)
+                await asyncio.sleep(POLL_WAIT_FILE)
                 continue
 
             file_size = recording_path.stat().st_size
             if file_size <= WAV_HEADER_SIZE:
-                await asyncio.sleep(0.2)
+                await asyncio.sleep(POLL_WAIT_HEADER)
                 continue
 
             if src_rate is None:
@@ -213,7 +241,7 @@ class GeminiLiveSession:
                         read_offset = WAV_HEADER_SIZE
                     debug_log("gemini_live_wav_header", {"src_rate": src_rate})
                 except Exception:
-                    await asyncio.sleep(0.3)
+                    await asyncio.sleep(POLL_WAIT_FILE)
                     continue
 
             readable = file_size - read_offset
@@ -224,14 +252,14 @@ class GeminiLiveSession:
                 )
                 read_offset = WAV_HEADER_SIZE
                 readable = file_size - read_offset
-            if readable < 3200:
-                await asyncio.sleep(0.15)
+            if readable < MIN_SEND_BYTES:
+                await asyncio.sleep(POLL_WAIT_DATA)
                 continue
 
             try:
                 raw = await asyncio.to_thread(self._read_bytes, recording_path, read_offset, readable)
             except Exception:
-                await asyncio.sleep(0.2)
+                await asyncio.sleep(POLL_WAIT_HEADER)
                 continue
 
             read_offset += len(raw)
@@ -245,7 +273,7 @@ class GeminiLiveSession:
                     audio=types.Blob(data=pcm_16k, mimeType=SEND_AUDIO_MIME),
                 )
                 chunks_sent += 1
-                if chunks_sent == 1 or chunks_sent % 50 == 0:
+                if chunks_sent == 1 or chunks_sent % LOG_EVERY_N_CHUNKS == 0:
                     debug_log(
                         "gemini_live_audio_sent",
                         {"chunks": chunks_sent, "offset": read_offset},
@@ -255,15 +283,19 @@ class GeminiLiveSession:
                     "gemini_live_send_error",
                     {"error": exc.__class__.__name__, "detail": str(exc)[:200]},
                 )
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(POLL_SEND_ERROR)
 
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(POLL_SEND_INTERVAL)
+
+    # ------------------------------------------------------------------
+    # Receive loop: Gemini → audio queue + transcripts
+    # ------------------------------------------------------------------
 
     async def _receive_audio_loop(
         self,
         session: Any,
-        stop_check: Any,
-        debug_log: Any,
+        stop_check: StopCheck,
+        debug_log: DebugLog,
     ) -> None:
         """Receive audio/text responses from Gemini and queue them."""
         turns_received = 0
@@ -286,21 +318,7 @@ class GeminiLiveSession:
                     for chunk in audio_chunks:
                         self.audio_out_queue.put_nowait(chunk)
 
-                    input_tx = getattr(server_content, "input_transcription", None)
-                    if input_tx and getattr(input_tx, "text", None):
-                        self.transcript_in.append(input_tx.text)
-                        debug_log(
-                            "gemini_live_input_transcript",
-                            {"text": input_tx.text[:200]},
-                        )
-
-                    output_tx = getattr(server_content, "output_transcription", None)
-                    if output_tx and getattr(output_tx, "text", None):
-                        self.transcript_out.append(output_tx.text)
-                        debug_log(
-                            "gemini_live_output_transcript",
-                            {"text": output_tx.text[:200]},
-                        )
+                    self._record_transcripts(server_content, debug_log)
 
                     if getattr(server_content, "turn_complete", False):
                         turns_received += 1
@@ -318,39 +336,58 @@ class GeminiLiveSession:
                 )
                 if stop_check():
                     return
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(POLL_RECEIVE_ERROR)
+
+    def _record_transcripts(self, server_content: Any, debug_log: DebugLog) -> None:
+        """Append input/output transcriptions and trim to bounded size."""
+        input_tx = getattr(server_content, "input_transcription", None)
+        if input_tx and getattr(input_tx, "text", None):
+            self.transcript_in.append(input_tx.text)
+            if len(self.transcript_in) > MAX_TRANSCRIPT_ENTRIES:
+                self.transcript_in = self.transcript_in[-MAX_TRANSCRIPT_ENTRIES:]
+            debug_log("gemini_live_input_transcript", {"text": input_tx.text[:200]})
+
+        output_tx = getattr(server_content, "output_transcription", None)
+        if output_tx and getattr(output_tx, "text", None):
+            self.transcript_out.append(output_tx.text)
+            if len(self.transcript_out) > MAX_TRANSCRIPT_ENTRIES:
+                self.transcript_out = self.transcript_out[-MAX_TRANSCRIPT_ENTRIES:]
+            debug_log("gemini_live_output_transcript", {"text": output_tx.text[:200]})
+
+    # ------------------------------------------------------------------
+    # Play loop: audio queue → WAV → Telegram call
+    # ------------------------------------------------------------------
 
     async def _play_audio_loop(
         self,
         audio_dir: Path,
         call_prefix: str,
-        audio_out_callback: Any,
-        stop_check: Any,
-        debug_log: Any,
+        audio_out_callback: AudioOutCallback,
+        stop_check: StopCheck,
+        debug_log: DebugLog,
     ) -> None:
         """Drain received audio chunks, write WAV, and play into the call."""
         response_idx = 0
         audio_dir.mkdir(parents=True, exist_ok=True)
 
         while not stop_check():
-            if self.audio_out_queue.empty():
-                await asyncio.sleep(0.05)
+            try:
+                first = await asyncio.wait_for(
+                    self.audio_out_queue.get(), timeout=POLL_PLAY_TIMEOUT
+                )
+            except asyncio.TimeoutError:
                 continue
 
-            collected: list[bytes] = []
+            collected: list[bytes] = [first]
             while not self.audio_out_queue.empty():
                 collected.append(self.audio_out_queue.get_nowait())
 
-            if not collected:
-                continue
-
             pcm_data = b"".join(collected)
-            target_rate = 48000
-            pcm_48k = _resample_pcm16(pcm_data, RECEIVE_SAMPLE_RATE, target_rate)
+            pcm_48k = _resample_pcm16(pcm_data, RECEIVE_SAMPLE_RATE, PLAYBACK_SAMPLE_RATE)
 
             wav_path = audio_dir / f"gemini_{call_prefix}_{response_idx}.wav"
             try:
-                await asyncio.to_thread(_write_wav, wav_path, pcm_48k, target_rate)
+                await asyncio.to_thread(_write_wav, wav_path, pcm_48k, PLAYBACK_SAMPLE_RATE)
             except Exception as exc:
                 debug_log(
                     "gemini_live_wav_write_error",
@@ -372,6 +409,10 @@ class GeminiLiveSession:
                 )
 
             response_idx += 1
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
 
     @staticmethod
     def _extract_audio(response: Any, server_content: Any) -> list[bytes]:
