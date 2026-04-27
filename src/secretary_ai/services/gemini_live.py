@@ -140,14 +140,14 @@ class GeminiLiveSession:
                 config=self._live_config(),
             ) as session:
                 debug_log("gemini_live_connected", {"model": self.settings.gemini_live_model})
-                async with asyncio.TaskGroup() as tg:
-                    tg.create_task(
+                tasks = [
+                    asyncio.create_task(
                         self._send_audio_loop(session, recording_path, stop_check, debug_log)
-                    )
-                    tg.create_task(
+                    ),
+                    asyncio.create_task(
                         self._receive_audio_loop(session, stop_check, debug_log)
-                    )
-                    tg.create_task(
+                    ),
+                    asyncio.create_task(
                         self._play_audio_loop(
                             recording_path.parent,
                             recording_path.stem,
@@ -155,7 +155,25 @@ class GeminiLiveSession:
                             stop_check,
                             debug_log,
                         )
+                    ),
+                ]
+                try:
+                    done, pending = await asyncio.wait(
+                        tasks, return_when=asyncio.FIRST_COMPLETED
                     )
+                    for t in pending:
+                        t.cancel()
+                    if pending:
+                        await asyncio.wait(pending)
+                    for t in done:
+                        if t.exception() is not None:
+                            raise t.exception()  # type: ignore[misc]
+                except asyncio.CancelledError:
+                    raise
+                finally:
+                    for t in tasks:
+                        if not t.done():
+                            t.cancel()
         except asyncio.CancelledError:
             raise
         except Exception as exc:
