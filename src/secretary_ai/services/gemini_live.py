@@ -411,6 +411,8 @@ class GeminiLiveSession:
                     "gemini_live_play_error",
                     {"error": exc.__class__.__name__, "detail": str(exc)[:200]},
                 )
+            finally:
+                wav_path.unlink(missing_ok=True)
 
             response_idx += 1
 
