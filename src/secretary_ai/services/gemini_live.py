@@ -39,7 +39,8 @@ def _resample_pcm16(data: bytes, src_rate: int, dst_rate: int) -> bytes:
     """Resample 16-bit mono PCM by nearest-neighbour selection."""
     if src_rate == dst_rate:
         return data
-    src_samples = struct.unpack(f"<{len(data) // 2}h", data)
+    aligned = len(data) // 2 * 2
+    src_samples = struct.unpack(f"<{aligned // 2}h", data[:aligned])
     ratio = src_rate / dst_rate
     dst_count = int(len(src_samples) / ratio)
     dst_samples = [src_samples[min(int(i * ratio), len(src_samples) - 1)] for i in range(dst_count)]
@@ -148,7 +149,11 @@ class GeminiLiveSession:
                     )
                     tg.create_task(
                         self._play_audio_loop(
-                            recording_path.parent, audio_out_callback, stop_check, debug_log
+                            recording_path.parent,
+                            recording_path.stem,
+                            audio_out_callback,
+                            stop_check,
+                            debug_log,
                         )
                     )
         except asyncio.CancelledError:
@@ -292,6 +297,7 @@ class GeminiLiveSession:
     async def _play_audio_loop(
         self,
         audio_dir: Path,
+        call_prefix: str,
         audio_out_callback: Any,
         stop_check: Any,
         debug_log: Any,
@@ -316,7 +322,7 @@ class GeminiLiveSession:
             target_rate = 48000
             pcm_48k = _resample_pcm16(pcm_data, RECEIVE_SAMPLE_RATE, target_rate)
 
-            wav_path = audio_dir / f"gemini_response_{response_idx}.wav"
+            wav_path = audio_dir / f"gemini_{call_prefix}_{response_idx}.wav"
             try:
                 await asyncio.to_thread(_write_wav, wav_path, pcm_48k, target_rate)
             except Exception as exc:
