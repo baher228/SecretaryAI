@@ -85,6 +85,12 @@ class Settings(BaseSettings):
     calendar_smart_model: str | None = None
     calendar_planner_max_tokens: int = 140
 
+    # Gemini Live (audio-to-audio voice loop)
+    gemini_api_key: str | None = None
+    gemini_live_model: str = "gemini-3.1-flash-live-preview"
+    gemini_live_voice: str = "Zephyr"
+    gemini_live_enabled: bool = True
+
 
 @lru_cache
 def get_settings() -> Settings:

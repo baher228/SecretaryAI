@@ -52,6 +52,7 @@ from secretary_ai.services.telegram_calls import TelegramCallService
 from secretary_ai.services.tts import TTSEngine
 from secretary_ai.services.maps import MapService
 from secretary_ai.services.booking import BookingService
+from secretary_ai.services.gemini_live import GeminiLiveSession
 
 
 class SecretaryService:
@@ -109,11 +110,12 @@ class SecretaryService:
                 "Telegram MTProto (Telethon user session)",
                 "Telegram Calls Engine (py-tgcalls private calls)",
                 "AI Orchestrator (intent + response + actions)",
-                "STT Adapter (faster-whisper)",
-                "TTS Adapter (assistant voice generation)",
-                "Telegram Live Loop (recording -> STT -> AI -> TTS)",
+                "Gemini Live Bridge (audio-to-audio via Gemini 3.1 Flash Live)",
+                "STT Adapter (faster-whisper, fallback)",
+                "TTS Adapter (assistant voice generation, fallback)",
+                "Telegram Live Loop (Gemini Live or recording -> STT -> AI -> TTS)",
                 "Secretary Orchestrator (this service)",
-                "Z.AI Reasoning Endpoint",
+                "Z.AI Reasoning Endpoint (text chat)",
                 "Storage Layer (in-memory MVP)",
             ],
             notes=(
@@ -766,6 +768,12 @@ class SecretaryService:
                 speak_response=payload.speak_response,
             )
 
+        use_gemini = (
+            self.settings.gemini_live_enabled
+            and bool(self.settings.gemini_api_key)
+            and GeminiLiveSession.available()
+        )
+
         session: dict[str, Any] = {
             "call_id": call_id,
             "running": True,
@@ -784,8 +792,14 @@ class SecretaryService:
             "last_processed_snippet": "",
             "loop_ticks": 0,
             "stt_ok_count": 0,
+            "mode": "gemini_live" if use_gemini else "stt_ai_tts",
         }
-        session["task"] = asyncio.create_task(self._telegram_live_loop(call_id))
+        if use_gemini:
+            session["task"] = asyncio.create_task(
+                self._telegram_gemini_live_loop(call_id, recording_path)
+            )
+        else:
+            session["task"] = asyncio.create_task(self._telegram_live_loop(call_id))
         self.live_sessions[call_id] = session
 
         call["live_agent"] = {
@@ -794,6 +808,7 @@ class SecretaryService:
             "recording_path": str(recording_path),
         }
 
+        mode_label = "Gemini Live audio-to-audio" if use_gemini else "STT/AI/TTS"
         self.debug.log(
             call_id,
             "live_start",
@@ -801,13 +816,14 @@ class SecretaryService:
                 "recording_path": str(recording_path),
                 "speak_response": payload.speak_response,
                 "context": payload.context,
+                "mode": session["mode"],
             },
         )
 
         return TelegramLiveAgentResponse(
             call_id=call_id,
             status="running",
-            detail="Telegram live agent loop started.",
+            detail=f"Telegram live agent loop started ({mode_label}).",
             recording_path=str(recording_path),
             stt_status="waiting_audio",
             speak_response=payload.speak_response,
@@ -1121,6 +1137,52 @@ class SecretaryService:
                 )
 
             await asyncio.sleep(poll_seconds)
+
+    async def _telegram_gemini_live_loop(self, call_id: str, recording_path: Path) -> None:
+        """Gemini Live audio-to-audio loop for a single Telegram call.
+
+        Replaces the STT -> Z.AI -> TTS pipeline with a direct audio bridge
+        to the Gemini 3.1 Flash Live model.
+        """
+        session = self.live_sessions.get(call_id)
+        if session is None:
+            return
+
+        gemini = GeminiLiveSession(self.settings)
+
+        def stop_check() -> bool:
+            s = self.live_sessions.get(call_id)
+            if s is None or not s.get("running"):
+                return True
+            call = self.telegram.get_call(call_id) or {}
+            return str(call.get("status", "")).lower() in {"ended", "discarded", "failed"}
+
+        def debug_log(event: str, payload: dict[str, Any]) -> None:
+            self.debug.log(call_id, event, payload)
+
+        async def audio_out_callback(wav_path: str) -> dict[str, Any]:
+            return await self.telegram.stream_audio_out(call_id, wav_path)
+
+        try:
+            await gemini.run(
+                recording_path=recording_path,
+                audio_out_callback=audio_out_callback,
+                stop_check=stop_check,
+                debug_log=debug_log,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            self.debug.log(
+                call_id,
+                "gemini_live_loop_error",
+                {"error": exc.__class__.__name__, "detail": str(exc)[:300]},
+            )
+        finally:
+            s = self.live_sessions.get(call_id)
+            if s is not None:
+                s["running"] = False
+                s["last_stt_status"] = "gemini_live_ended"
 
     async def _stop_all_live_sessions(self) -> None:
         call_ids = list(self.live_sessions.keys())
