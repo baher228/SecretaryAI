@@ -8,8 +8,8 @@ pipeline with a single native audio-to-audio model.
 
 from __future__ import annotations
 
+import array
 import asyncio
-import struct
 import wave
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -36,17 +36,18 @@ PLAYBACK_SAMPLE_RATE = 48000
 SEND_AUDIO_MIME = f"audio/pcm;rate={SEND_SAMPLE_RATE}"
 
 WAV_HEADER_SIZE = 44
-MIN_SEND_BYTES = 3200
+MIN_SEND_BYTES = 1600
 MAX_TRANSCRIPT_ENTRIES = 200
+TMPFS_DIR = Path("/dev/shm/secretary_ai")
 
 # Sleep intervals (seconds)
 POLL_WAIT_FILE = 0.3
 POLL_WAIT_HEADER = 0.2
-POLL_WAIT_DATA = 0.15
-POLL_SEND_INTERVAL = 0.1
-POLL_SEND_ERROR = 0.5
-POLL_RECEIVE_ERROR = 0.5
-POLL_PLAY_TIMEOUT = 0.1
+POLL_WAIT_DATA = 0.08
+POLL_SEND_INTERVAL = 0.05
+POLL_SEND_ERROR = 0.3
+POLL_RECEIVE_ERROR = 0.3
+POLL_PLAY_TIMEOUT = 0.05
 
 # Logging cadence
 LOG_EVERY_N_CHUNKS = 50
@@ -64,11 +65,13 @@ def _resample_pcm16(data: bytes, src_rate: int, dst_rate: int) -> bytes:
     if src_rate == dst_rate:
         return data
     aligned = len(data) // 2 * 2
-    src_samples = struct.unpack(f"<{aligned // 2}h", data[:aligned])
+    src = array.array("h")
+    src.frombytes(data[:aligned])
     ratio = src_rate / dst_rate
-    dst_count = int(len(src_samples) / ratio)
-    dst_samples = [src_samples[min(int(i * ratio), len(src_samples) - 1)] for i in range(dst_count)]
-    return struct.pack(f"<{len(dst_samples)}h", *dst_samples)
+    n = len(src)
+    dst_count = int(n / ratio)
+    dst = array.array("h", (src[min(int(i * ratio), n - 1)] for i in range(dst_count)))
+    return dst.tobytes()
 
 
 def _write_wav(path: Path, pcm_data: bytes, sample_rate: int) -> None:
@@ -368,7 +371,8 @@ class GeminiLiveSession:
     ) -> None:
         """Drain received audio chunks, write WAV, and play into the call."""
         response_idx = 0
-        audio_dir.mkdir(parents=True, exist_ok=True)
+        out_dir = TMPFS_DIR if TMPFS_DIR.parent.is_dir() else audio_dir
+        out_dir.mkdir(parents=True, exist_ok=True)
 
         while not stop_check():
             try:
@@ -385,7 +389,7 @@ class GeminiLiveSession:
             pcm_data = b"".join(collected)
             pcm_48k = _resample_pcm16(pcm_data, RECEIVE_SAMPLE_RATE, PLAYBACK_SAMPLE_RATE)
 
-            wav_path = audio_dir / f"gemini_{call_prefix}_{response_idx}.wav"
+            wav_path = out_dir / f"gemini_{call_prefix}_{response_idx}.wav"
             try:
                 await asyncio.to_thread(_write_wav, wav_path, pcm_48k, PLAYBACK_SAMPLE_RATE)
             except Exception as exc:

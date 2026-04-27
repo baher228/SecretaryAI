@@ -6,6 +6,16 @@ import httpx
 
 from secretary_ai.core.config import Settings
 
+_client: httpx.AsyncClient | None = None
+
+
+def _get_client(timeout: float) -> httpx.AsyncClient:
+    """Return a persistent httpx client, creating one if needed."""
+    global _client  # noqa: PLW0603
+    if _client is None or _client.is_closed:
+        _client = httpx.AsyncClient(timeout=timeout)
+    return _client
+
 
 async def zai_chat_completion(settings: Settings, payload: dict[str, Any]) -> dict[str, Any]:
     """Send a chat-completion request to the Z.AI GLM endpoint."""
@@ -19,8 +29,8 @@ async def zai_chat_completion(settings: Settings, payload: dict[str, Any]) -> di
         "Accept-Language": "en-US,en",
     }
     try:
-        async with httpx.AsyncClient(timeout=settings.zai_timeout_seconds) as client:
-            response = await client.post(url, headers=headers, json=payload)
+        client = _get_client(settings.zai_timeout_seconds)
+        response = await client.post(url, headers=headers, json=payload)
         if response.status_code >= 300:
             return {
                 "error": f"GLM request failed ({response.status_code}).",

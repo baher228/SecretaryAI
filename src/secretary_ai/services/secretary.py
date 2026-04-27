@@ -916,7 +916,7 @@ class SecretaryService:
                 continue
 
             file_size = recording_path.stat().st_size
-            if session["loop_ticks"] % 15 == 0:
+            if session["loop_ticks"] % 50 == 0:
                 self.debug.log(
                     call_id,
                     "loop_tick",
@@ -946,15 +946,6 @@ class SecretaryService:
                 await asyncio.sleep(min(0.4, poll_seconds))
                 continue
             if (file_size - previous_size) < min_new_bytes and not in_warmup:
-                self.debug.log(
-                    call_id,
-                    "wait_for_more_audio",
-                    {
-                        "delta_bytes": file_size - previous_size,
-                        "min_new_bytes": min_new_bytes,
-                        "in_warmup": in_warmup,
-                    },
-                )
                 await asyncio.sleep(min(0.4, poll_seconds))
                 continue
             session["last_audio_size"] = file_size
@@ -984,26 +975,13 @@ class SecretaryService:
             session["last_stt_status"] = stt_status
             preview_chars = max(20, int(self.settings.telegram_live_log_transcript_preview_chars))
             if stt_status != "ok":
-                # Secondary rescue pass: when recent-only missed, try full file once here too.
                 if stt_status == "no_speech":
                     full_text, full_status = await self.stt.transcribe(str(recording_path))
                     if full_status == "ok" and full_text.strip():
                         text = full_text
                         stt_status = "ok"
                         session["last_stt_status"] = stt_status
-                    else:
-                        self.debug.log(
-                            call_id,
-                            "stt_not_ok",
-                            {
-                                "status": stt_status,
-                                "chars": len((text or "").strip()),
-                                "sample": (text or "")[:preview_chars],
-                            },
-                        )
-                        await asyncio.sleep(poll_seconds)
-                        continue
-                else:
+                if stt_status != "ok":
                     self.debug.log(
                         call_id,
                         "stt_not_ok",
@@ -1308,21 +1286,22 @@ class SecretaryService:
             "last_transcript": transcript,
         }
 
+    _BACKGROUND_MARKERS = frozenset({
+        "fire has been reported",
+        "please leave the building",
+        "attention, please",
+        "nearest exit",
+        "evacuate",
+        "emergency",
+        "alarm",
+    })
+
     @staticmethod
     def _looks_like_background_announcement(transcript: str) -> bool:
         text = " ".join((transcript or "").split()).strip().lower()
         if not text:
             return False
-        markers = [
-            "fire has been reported",
-            "please leave the building",
-            "attention, please",
-            "nearest exit",
-            "evacuate",
-            "emergency",
-            "alarm",
-        ]
-        return any(marker in text for marker in markers)
+        return any(m in text for m in SecretaryService._BACKGROUND_MARKERS)
 
     async def _handle_reminder_flow(
         self,
@@ -1530,19 +1509,6 @@ class SecretaryService:
             call_audio_status=call_audio_status,
         )
 
-    @staticmethod
-    def _is_low_quality_snippet(text: str) -> bool:
-        normalized = " ".join((text or "").split()).strip()
-        if len(normalized) < 4:
-            return True
-        words = [w for w in re.split(r"\s+", normalized) if w]
-        if len(words) < 2:
-            return True
-        if len(set(w.lower() for w in words)) <= 1 and len(words) >= 3:
-            return True
-        alpha_chars = sum(ch.isalpha() for ch in normalized)
-        return alpha_chars < max(3, int(len(normalized) * 0.45))
-
     async def _play_greeting_with_retry(self, call_id: str, source: str) -> dict[str, Any]:
         tts_audio_path, tts_status = await self.tts.synthesize(
             self.settings.assistant_greeting_message,
@@ -1608,15 +1574,16 @@ class SecretaryService:
         if not prev:
             return cur
         if cur.startswith(prev):
-            return cur[len(prev) :].strip()
+            return cur[len(prev):].strip()
 
-        overlap = 0
+        # Find the longest suffix of prev that is a prefix of cur in O(n).
+        # Check decreasing suffix lengths using str.find for speed.
         max_check = min(len(prev), len(cur))
-        for size in range(max_check, 0, -1):
-            if prev.endswith(cur[:size]):
-                overlap = size
-                break
-        return cur[overlap:].strip()
+        for start in range(max(0, len(prev) - max_check), len(prev)):
+            suffix = prev[start:]
+            if cur.startswith(suffix):
+                return cur[len(suffix):].strip()
+        return cur
 
     @staticmethod
     def _now_iso() -> str:
