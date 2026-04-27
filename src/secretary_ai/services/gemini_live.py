@@ -273,6 +273,7 @@ class GeminiLiveSession:
                         while not self.audio_out_queue.empty():
                             self.audio_out_queue.get_nowait()
                         debug_log("gemini_live_interrupted", {})
+                        continue
 
                     audio_chunks = self._extract_audio(response, server_content)
                     for chunk in audio_chunks:
