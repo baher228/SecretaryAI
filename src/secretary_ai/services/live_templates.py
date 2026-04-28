@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from secretary_ai.core.config import Settings
+from secretary_ai.core.locales import get_templates
 
 
 _DEFAULT_TEMPLATES = [
@@ -209,6 +210,7 @@ class LiveTemplateMatcher:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.path = Path(self.settings.agent_live_template_path)
+        self._locale_defaults = get_templates(self.settings.language)
         self.templates = self._load_templates()
 
     def match(self, transcript: str) -> dict[str, Any] | None:
@@ -271,25 +273,42 @@ class LiveTemplateMatcher:
         }
 
     def _load_templates(self) -> list[dict[str, Any]]:
+        defaults = self._locale_defaults
+        lang = self.settings.language
+        lang_marker = self.path.with_suffix(".lang")
         self.path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Regenerate if language changed since last write.
+        stored_lang = ""
+        if lang_marker.exists():
+            stored_lang = lang_marker.read_text(encoding="utf-8").strip()
+        if stored_lang != lang:
+            self.path.write_text(json.dumps(defaults, ensure_ascii=False, indent=2), encoding="utf-8")
+            lang_marker.write_text(lang, encoding="utf-8")
+            return list(defaults)
+
         if not self.path.exists():
-            self.path.write_text(json.dumps(_DEFAULT_TEMPLATES, ensure_ascii=False, indent=2), encoding="utf-8")
-            return list(_DEFAULT_TEMPLATES)
+            self.path.write_text(json.dumps(defaults, ensure_ascii=False, indent=2), encoding="utf-8")
+            lang_marker.write_text(lang, encoding="utf-8")
+            return list(defaults)
 
         try:
             raw = json.loads(self.path.read_text(encoding="utf-8"))
             if isinstance(raw, list):
                 valid = [item for item in raw if isinstance(item, dict)]
                 if valid:
-                    merged = self._merge_with_defaults(valid)
+                    merged = self._merge_with_defaults(valid, defaults)
                     self.path.write_text(json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8")
                     return merged
         except Exception:
             pass
-        return list(_DEFAULT_TEMPLATES)
+        return list(defaults)
 
     @staticmethod
-    def _merge_with_defaults(existing: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _merge_with_defaults(
+        existing: list[dict[str, Any]],
+        defaults: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
         by_id: dict[str, dict[str, Any]] = {}
         for item in existing:
             item_id = str(item.get("id") or "").strip()
@@ -298,11 +317,11 @@ class LiveTemplateMatcher:
             by_id[item_id] = item
 
         merged: list[dict[str, Any]] = []
-        for default in _DEFAULT_TEMPLATES:
+        for default in defaults:
             default_id = str(default.get("id"))
             merged.append(by_id.get(default_id, default))
 
         for item_id, item in by_id.items():
-            if all(str(d.get("id")) != item_id for d in _DEFAULT_TEMPLATES):
+            if all(str(d.get("id")) != item_id for d in defaults):
                 merged.append(item)
         return merged

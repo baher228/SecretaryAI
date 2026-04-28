@@ -12,6 +12,7 @@ def test_quick_reply_reads_from_cache(tmp_path) -> None:
             calendar_enabled=True,
             calendar_cache_path=str(cache),
             calendar_queue_path=str(queue),
+            language="en",
         )
     )
     service.cache = {
@@ -47,6 +48,7 @@ def test_quick_reply_enqueues_mutation(tmp_path) -> None:
             calendar_enabled=True,
             calendar_cache_path=str(cache),
             calendar_queue_path=str(queue),
+            language="en",
         )
     )
 
@@ -72,6 +74,7 @@ def test_quick_reply_reminder_returns_final_confirmation_and_dedupes(tmp_path) -
             calendar_enabled=True,
             calendar_cache_path=str(cache),
             calendar_queue_path=str(queue),
+            language="en",
         )
     )
 

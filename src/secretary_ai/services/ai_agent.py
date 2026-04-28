@@ -2,18 +2,17 @@ import json
 from typing import Any
 
 from secretary_ai.core.config import Settings
+from secretary_ai.core.locales import (
+    AI_AGENT_LIVE_SUFFIX,
+    AI_AGENT_SYSTEM_PROMPT,
+    FALLBACK_DEFAULT,
+    FALLBACK_REPLIES,
+    TRANSFER_REASON_DEFAULT,
+    t,
+    t_dict,
+)
 from secretary_ai.domain.models import AgentAnalyzeResponse, IntentType
 from secretary_ai.services.zai_client import extract_message, zai_chat_completion
-
-
-_FALLBACK_REPLIES = {
-    IntentType.BOOK_EVENT.value: "Got it. I can help book that, please share the best date and time.",
-    IntentType.RESCHEDULE_EVENT.value: "Understood. I can reschedule this, please confirm your preferred new time.",
-    IntentType.CANCEL_EVENT.value: "Understood. I can cancel that after one quick confirmation.",
-    IntentType.TRANSFER_HUMAN.value: "I will connect you with a human teammate now.",
-    IntentType.PLAN_ROUTE.value: "I will calculate the fastest route for you right away.",
-    IntentType.SEARCH_BOOKING.value: "Searching for availability now, one moment.",
-}
 
 _HEURISTIC_RULES: list[tuple[IntentType, tuple[str, ...], str]] = [
     (IntentType.RESCHEDULE_EVENT, ("reschedule", "move meeting", "another time"), "Check available slots and propose alternatives."),
@@ -123,27 +122,12 @@ class SecretaryAIAgent:
         history_turns: int,
         live_mode: bool,
     ) -> list[dict[str, str]]:
-        system = (
-            "You are a highly reliable AI secretary for phone calls. "
-            "Return ONLY valid JSON with this schema: "
-            "{"
-            '"intent": "book_event|reschedule_event|cancel_event|reminder|confirmation|follow_up|'
-            'transfer_human|leave_message|general_query|plan_route|search_booking|unknown", '
-            '"confidence": number between 0 and 1, '
-            '"reply": short voice-ready response sentence, '
-            '"requires_human": boolean, '
-            '"transfer_reason": string or null, '
-            '"action_items": array of strings, '
-            '"extracted_fields": object with useful slots like date/time/name/phone/topic'
-            "}. "
-            "Output must be a single JSON object only, no markdown, no code fences, no extra text. "
-            "Be concise and practical. Keep reply under 18 words. "
-            "If unsure, use intent=unknown with lower confidence."
-        )
+        lang = self.settings.language
+        system = t(AI_AGENT_SYSTEM_PROMPT, lang)
         if live_mode:
-            system += " Live-call mode: prioritize immediate short reply and minimal planning overhead."
+            system += t(AI_AGENT_LIVE_SUFFIX, lang)
         compact_history = history[-max(0, int(history_turns)) :] if history_turns > 0 else []
-        history_text = "\n".join(f"{t.get('role', 'unknown')}: {t.get('content', '')}" for t in compact_history)
+        history_text = "\n".join(f"{h.get('role', 'unknown')}: {h.get('content', '')}" for h in compact_history)
         return [
             {"role": "system", "content": system},
             {
@@ -164,7 +148,8 @@ class SecretaryAIAgent:
         if raw_intent not in {i.value for i in IntentType}:
             raw_intent = IntentType.UNKNOWN.value
 
-        reply = str(parsed.get("reply") or "").strip() or self._fallback_reply_from_intent(raw_intent)
+        lang = self.settings.language
+        reply = str(parsed.get("reply") or "").strip() or self._fallback_reply_from_intent(raw_intent, lang)
         confidence = self._normalized_confidence(parsed.get("confidence", 0.0))
 
         action_items_raw = parsed.get("action_items")
@@ -175,7 +160,7 @@ class SecretaryAIAgent:
         )
 
         requires_human = bool(parsed.get("requires_human", False)) or raw_intent == IntentType.TRANSFER_HUMAN.value
-        transfer_reason = self._normalized_transfer_reason(parsed.get("transfer_reason"), requires_human)
+        transfer_reason = self._normalized_transfer_reason(parsed.get("transfer_reason"), requires_human, self.settings.language)
         extracted_fields = parsed.get("extracted_fields") if isinstance(parsed.get("extracted_fields"), dict) else {}
 
         return AgentAnalyzeResponse(
@@ -214,17 +199,17 @@ class SecretaryAIAgent:
             call_id=call_id,
             intent=intent,
             confidence=0.45,
-            reply=self._fallback_reply_from_intent(intent.value),
+            reply=self._fallback_reply_from_intent(intent.value, self.settings.language),
             requires_human=intent == IntentType.TRANSFER_HUMAN,
-            transfer_reason="Caller asked for a human." if intent == IntentType.TRANSFER_HUMAN else None,
+            transfer_reason=t(TRANSFER_REASON_DEFAULT, self.settings.language) if intent == IntentType.TRANSFER_HUMAN else None,
             action_items=action_items,
             extracted_fields=extracted,
             model=self.settings.zai_model,
         )
 
     @staticmethod
-    def _fallback_reply_from_intent(intent: str) -> str:
-        return _FALLBACK_REPLIES.get(intent, "Thanks, I captured that and will proceed with the next step.")
+    def _fallback_reply_from_intent(intent: str, lang: str = "en") -> str:
+        return t_dict(FALLBACK_REPLIES, lang).get(intent, t(FALLBACK_DEFAULT, lang))
 
     @staticmethod
     def _normalized_confidence(raw_confidence: Any) -> float:
@@ -234,12 +219,12 @@ class SecretaryAIAgent:
             return 0.0
 
     @staticmethod
-    def _normalized_transfer_reason(transfer_reason: Any, requires_human: bool) -> str | None:
+    def _normalized_transfer_reason(transfer_reason: Any, requires_human: bool, lang: str = "en") -> str | None:
         reason = str(transfer_reason).strip() if transfer_reason is not None else None
         if reason == "":
             reason = None
         if requires_human and not reason:
-            reason = "Caller requested a person."
+            reason = t(TRANSFER_REASON_DEFAULT, lang)
         return reason
 
 

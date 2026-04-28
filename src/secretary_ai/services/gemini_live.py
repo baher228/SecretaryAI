@@ -104,14 +104,9 @@ class GeminiLiveSession:
         )
 
     def _live_config(self) -> Any:
-        system_prompt = (
-            "You are a professional AI phone secretary. "
-            "You answer calls on behalf of your employer. "
-            "Be concise, warm, and helpful. "
-            "Keep each spoken response to 1-2 short sentences. "
-            "If someone wants to schedule a meeting, ask for date and time. "
-            "If unsure, offer to take a message and pass it along."
-        )
+        from secretary_ai.core.locales import GEMINI_LIVE_SYSTEM_PROMPT, t
+
+        system_prompt = t(GEMINI_LIVE_SYSTEM_PROMPT, self.settings.language)
         return types.LiveConnectConfig(
             responseModalities=[types.Modality.AUDIO],
             systemInstruction=system_prompt,

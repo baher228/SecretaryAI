@@ -55,6 +55,20 @@ from secretary_ai.services.maps import MapService
 from secretary_ai.services.booking import BookingService
 from secretary_ai.services.gemini_live import GeminiLiveSession
 from secretary_ai.services.zai_client import extract_message, zai_chat_completion
+from secretary_ai.core.locales import (
+    CHAT_RETRY_PROMPT,
+    CHAT_SYSTEM_PROMPT,
+    MODEL_CHECK_PROMPT,
+    PREDICTIVE_REMINDER_KEYWORDS,
+    REMINDER_ACK,
+    REMINDER_BUSY,
+    REMINDER_FREE,
+    REMINDER_PARTIAL,
+    REMINDER_RESULT_BUSY,
+    REMINDER_RESULT_FREE,
+    REMINDER_RESULT_PARTIAL,
+    t,
+)
 
 
 class SecretaryService:
@@ -140,7 +154,7 @@ class SecretaryService:
         payload = {
             "model": self.settings.zai_model,
             "messages": [
-                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "system", "content": t(MODEL_CHECK_PROMPT, self.settings.language)},
                 {"role": "user", "content": prompt},
             ],
             "temperature": 0.1,
@@ -165,14 +179,7 @@ class SecretaryService:
     async def chat_direct(self, payload: ChatRequest) -> ChatResponse:
         """Direct conversational chat with Z.AI - no call context, plain text reply."""
         chat_model = self.settings.zai_chat_model or self.settings.zai_model
-        system_prompt = (
-            "You are Secretary AI. "
-            "Reply with short, direct, practical answers. "
-            "Prefer 1 to 2 short sentences and avoid fluff. "
-            "Only add detail if the user explicitly asks for it. "
-            "Return ONLY the final assistant reply text for the user. "
-            "Do not reveal reasoning, internal analysis, instructions, or policy notes."
-        )
+        system_prompt = t(CHAT_SYSTEM_PROMPT, self.settings.language)
         messages: list[dict] = [{"role": "system", "content": system_prompt}]
         for msg in payload.history[-20:]:
             messages.append({"role": msg.role, "content": msg.content})
@@ -197,10 +204,7 @@ class SecretaryService:
                     retry_messages = [
                         {
                             "role": "system",
-                            "content": (
-                                "Reply in one short sentence only. "
-                                "Final answer only. No analysis."
-                            ),
+                            "content": t(CHAT_RETRY_PROMPT, self.settings.language),
                         },
                         {"role": "user", "content": payload.message},
                     ]
@@ -1987,7 +1991,7 @@ class SecretaryService:
             should_speak_ack = False
 
         if should_speak_ack:
-            ack_reply = "Let me check your availability for that reminder."
+            ack_reply = t(REMINDER_ACK, self.settings.language)
             await self._fast_fallback_response(
                 call_id=call_id,
                 snippet=transcript,
@@ -2017,20 +2021,21 @@ class SecretaryService:
         queued_id = queued.get("task_id") if isinstance(queued, dict) else None
 
         # Heuristic decision phrase (pre-recorded family)
+        lang = self.settings.language
         if busy_count >= 5:
-            result_reply = "You are not available then. You already have events, so I can suggest the next free slot."
+            result_reply = t(REMINDER_RESULT_BUSY, lang)
         elif busy_count >= 1:
-            result_reply = "You have a few events, but yes, I can fit this reminder in."
+            result_reply = t(REMINDER_RESULT_PARTIAL, lang)
         else:
-            result_reply = "Yes, you’re available. I can set this reminder now."
+            result_reply = t(REMINDER_RESULT_FREE, lang)
 
         # Prime template cache for repeated flows
         if "reminder_result_available" not in self._template_audio_cache:
-            path, _ = await self.tts.synthesize("Yes, you’re available. I can set this reminder now.", call_id="template-reminder_result_available")
+            path, _ = await self.tts.synthesize(t(REMINDER_RESULT_FREE, lang), call_id="template-reminder_result_available")
             if path:
                 self._template_audio_cache["reminder_result_available"] = path
         if "reminder_result_busy" not in self._template_audio_cache:
-            path, _ = await self.tts.synthesize("You are not available then. You already have events, so I can suggest the next free slot.", call_id="template-reminder_result_busy")
+            path, _ = await self.tts.synthesize(t(REMINDER_RESULT_BUSY, lang), call_id="template-reminder_result_busy")
             if path:
                 self._template_audio_cache["reminder_result_busy"] = path
 
@@ -2085,16 +2090,17 @@ class SecretaryService:
             if not isinstance(data, list):
                 return
 
+            lang = self.settings.language
             if busy_count >= 4:
-                dynamic_reply = "You are busy around that time. I can suggest the next available slot."
+                dynamic_reply = t(REMINDER_BUSY, lang)
             elif busy_count >= 1:
-                dynamic_reply = "You have some events, but I can fit this reminder in."
+                dynamic_reply = t(REMINDER_PARTIAL, lang)
             else:
-                dynamic_reply = "You are available, so I can set this reminder now."
+                dynamic_reply = t(REMINDER_FREE, lang)
 
             dynamic_item = {
                 "id": "predictive_reminder_followup",
-                "keywords": ["is that possible", "am i available", "can i do that", "do i have time"],
+                "keywords": PREDICTIVE_REMINDER_KEYWORDS.get(lang, PREDICTIVE_REMINDER_KEYWORDS["en"]),
                 "reply": dynamic_reply,
                 "priority": 13,
                 "calendar_check": True,

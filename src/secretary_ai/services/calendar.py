@@ -8,6 +8,33 @@ from typing import Any
 import httpx
 
 from secretary_ai.core.config import Settings
+from secretary_ai.core.locales import (
+    CALENDAR_CREATE_KEYWORDS,
+    CALENDAR_DATETIME_FORMAT,
+    CALENDAR_DAY_TODAY,
+    CALENDAR_DAY_TOMORROW,
+    CALENDAR_DELETE_KEYWORDS,
+    CALENDAR_EVENT_DONE,
+    CALENDAR_EVENT_DUPLICATE,
+    CALENDAR_EVENT_LINE,
+    CALENDAR_MUTATION_DUPLICATE,
+    CALENDAR_MUTATION_KEYWORDS,
+    CALENDAR_MUTATION_QUEUED,
+    CALENDAR_NO_EVENTS,
+    CALENDAR_PLANNER_PROMPT,
+    CALENDAR_READ_KEYWORDS,
+    CALENDAR_REMINDER_DONE,
+    CALENDAR_REMINDER_DUPLICATE,
+    CALENDAR_REMINDER_KEYWORDS,
+    CALENDAR_TIME_FORMAT,
+    CALENDAR_TODAY_KEYWORDS,
+    CALENDAR_TOMORROW_KEYWORDS,
+    CALENDAR_UNKNOWN_TIME,
+    CALENDAR_UNTITLED,
+    CALENDAR_UPCOMING_PREFIX,
+    WEEKDAY_NAMES,
+    t,
+)
 
 try:
     from google.oauth2 import service_account
@@ -132,11 +159,11 @@ class CalendarService:
             if not upcoming:
                 return {
                     "status": "served_from_cache",
-                    "reply": "I don’t see upcoming calendar events in cache right now.",
+                    "reply": t(CALENDAR_NO_EVENTS, self.settings.language),
                     "queued": False,
                 }
             lines = [self._event_voice_line(ev) for ev in upcoming]
-            reply = "Upcoming: " + " ".join(lines)
+            reply = t(CALENDAR_UPCOMING_PREFIX, self.settings.language) + " ".join(lines)
             return {
                 "status": "served_from_cache",
                 "reply": reply,
@@ -245,12 +272,7 @@ class CalendarService:
             "messages": [
                 {
                     "role": "system",
-                    "content": (
-                        "You are a calendar planner. Return ONLY JSON. "
-                        "Schema: {action: create|delete|none, title: string|null, "
-                        "start_iso: string|null, end_iso: string|null, event_id: string|null, reason: string}. "
-                        "If no safe mutation can be inferred, return action=none."
-                    ),
+                    "content": t(CALENDAR_PLANNER_PROMPT, self.settings.language),
                 },
                 {
                     "role": "user",
@@ -306,7 +328,9 @@ class CalendarService:
         lower = text.lower()
         context = task.get("context") if isinstance(task.get("context"), dict) else {}
 
-        if any(token in lower for token in ("delete", "remove", "cancel event")):
+        lang = self.settings.language
+        delete_kw = CALENDAR_DELETE_KEYWORDS.get(lang, ()) + CALENDAR_DELETE_KEYWORDS.get("en", ())
+        if any(token in lower for token in delete_kw):
             event_id = self._extract_event_id(lower)
             return {
                 "action": "delete",
@@ -318,19 +342,8 @@ class CalendarService:
                 "planner_model": "heuristic",
             }
 
-        if any(
-            token in lower
-            for token in (
-                "schedule",
-                "book",
-                "add to calendar",
-                "create event",
-                "set a reminder",
-                "set reminder",
-                "remind me",
-                "reminder",
-            )
-        ):
+        create_kw = CALENDAR_CREATE_KEYWORDS.get(lang, ()) + CALENDAR_CREATE_KEYWORDS.get("en", ())
+        if any(token in lower for token in create_kw):
             context_start = str(context.get("start_iso") or "").strip()
             context_end = str(context.get("end_iso") or "").strip()
             if context_start and context_end:
@@ -437,44 +450,28 @@ class CalendarService:
                 break
         return out
 
-    @staticmethod
-    def _is_read_query(text: str) -> bool:
-        checks = (
-            "what\'s on my calendar",
-            "whats on my calendar",
-            "what is on my calendar",
-            "calendar today",
-            "calendar tomorrow",
-            "my next meeting",
-            "upcoming events",
-            "show calendar",
-        )
-        return any(token in text for token in checks)
+    def _is_read_query(self, text: str) -> bool:
+        lang = self.settings.language
+        for lng in (lang, "en"):
+            checks = CALENDAR_READ_KEYWORDS.get(lng, ())
+            if any(token in text for token in checks):
+                return True
+        return False
 
-    @staticmethod
-    def _is_mutation_query(text: str) -> bool:
-        checks = (
-            "add to calendar",
-            "create event",
-            "schedule",
-            "book",
-            "set a reminder",
-            "set reminder",
-            "remind me",
-            "reminder",
-            "reschedule",
-            "delete event",
-            "cancel event",
-            "remove event",
-        )
-        return any(token in text for token in checks)
+    def _is_mutation_query(self, text: str) -> bool:
+        lang = self.settings.language
+        for lng in (lang, "en"):
+            checks = CALENDAR_MUTATION_KEYWORDS.get(lng, ())
+            if any(token in text for token in checks):
+                return True
+        return False
 
-    @staticmethod
-    def _event_voice_line(ev: dict[str, Any]) -> str:
-        title = str(ev.get("summary") or "untitled")
+    def _event_voice_line(self, ev: dict[str, Any]) -> str:
+        lang = self.settings.language
+        title = str(ev.get("summary") or t(CALENDAR_UNTITLED, lang))
         start = str(ev.get("start") or "")
-        when = start.replace("T", " ")[:16] if start else "unknown time"
-        return f"{title} at {when}."
+        when = start.replace("T", " ")[:16] if start else t(CALENDAR_UNKNOWN_TIME, lang)
+        return t(CALENDAR_EVENT_LINE, lang).format(title=title, when=when)
 
     @staticmethod
     def _extract_event_id(text: str) -> str | None:
@@ -494,14 +491,16 @@ class CalendarService:
             return compact
         return compact[:57].rstrip() + "..."
 
-    @staticmethod
-    def _extract_datetime_from_text(text: str) -> datetime | None:
+    def _extract_datetime_from_text(self, text: str) -> datetime | None:
+        lang = self.settings.language
         lower = (text or "").lower()
         base = datetime.now(timezone.utc)
         day_offset = 1
-        if "today" in lower:
+        today_kw = CALENDAR_TODAY_KEYWORDS.get(lang, ()) + CALENDAR_TODAY_KEYWORDS.get("en", ())
+        tomorrow_kw = CALENDAR_TOMORROW_KEYWORDS.get(lang, ()) + CALENDAR_TOMORROW_KEYWORDS.get("en", ())
+        if any(kw in lower for kw in today_kw):
             day_offset = 0
-        elif "tomorrow" in lower:
+        elif any(kw in lower for kw in tomorrow_kw):
             day_offset = 1
 
         lower = lower.replace("a.m.", "am").replace("p.m.", "pm")
@@ -531,7 +530,7 @@ class CalendarService:
 
     def _mutation_signature(self, text: str, start: datetime | None) -> str:
         normalized = " ".join((text or "").lower().split())
-        normalized = re.sub(r"[^a-z0-9: ]+", "", normalized)
+        normalized = re.sub(r"[^\w: ]+", "", normalized)
         if start is not None:
             rounded = start.replace(second=0, microsecond=0).isoformat()
             return f"{normalized}|{rounded}"
@@ -553,34 +552,39 @@ class CalendarService:
         }
 
     def _build_mutation_reply(self, text: str, start: datetime | None, duplicate: bool) -> str:
+        lang = self.settings.language
         lower = (text or "").lower()
-        is_reminder = any(token in lower for token in ("remind", "reminder", "set reminder", "set a reminder"))
+        reminder_kw = CALENDAR_REMINDER_KEYWORDS.get(lang, ()) + CALENDAR_REMINDER_KEYWORDS.get("en", ())
+        is_reminder = any(token in lower for token in reminder_kw)
         if start is None:
             if duplicate:
-                return "I already queued that request."
-            return "Got it. I queued this calendar request and will apply it shortly."
+                return t(CALENDAR_MUTATION_DUPLICATE, lang)
+            return t(CALENDAR_MUTATION_QUEUED, lang)
 
         when = self._human_datetime_phrase(start)
         if is_reminder:
             if duplicate:
-                return f"I already set that reminder for {when}. I will call you one hour before."
-            return f"Done. Reminder scheduled for {when}. I will call you one hour before."
+                return t(CALENDAR_REMINDER_DUPLICATE, lang).format(when=when)
+            return t(CALENDAR_REMINDER_DONE, lang).format(when=when)
         if duplicate:
-            return f"I already queued that event for {when}."
-        return f"Done. I queued this event for {when}."
+            return t(CALENDAR_EVENT_DUPLICATE, lang).format(when=when)
+        return t(CALENDAR_EVENT_DONE, lang).format(when=when)
 
-    @staticmethod
-    def _human_datetime_phrase(value: datetime) -> str:
+    def _human_datetime_phrase(self, value: datetime) -> str:
+        lang = self.settings.language
         now = datetime.now(timezone.utc)
         today = now.date()
-        date_value = value.astimezone(timezone.utc).date()
-        day_label = value.strftime("%A")
+        utc_value = value.astimezone(timezone.utc)
+        date_value = utc_value.date()
+        weekday_names = WEEKDAY_NAMES.get(lang, WEEKDAY_NAMES["en"])
+        day_label = weekday_names[utc_value.weekday()]
         if date_value == today:
-            day_label = "today"
+            day_label = t(CALENDAR_DAY_TODAY, lang)
         elif date_value == (today + timedelta(days=1)):
-            day_label = "tomorrow"
-        time_label = value.astimezone(timezone.utc).strftime("%I:%M %p").lstrip("0")
-        return f"{day_label} at {time_label}"
+            day_label = t(CALENDAR_DAY_TOMORROW, lang)
+        time_fmt = t(CALENDAR_TIME_FORMAT, lang)
+        time_label = utc_value.strftime(time_fmt).lstrip("0") if "%I" in time_fmt else utc_value.strftime(time_fmt)
+        return t(CALENDAR_DATETIME_FORMAT, lang).format(day=day_label, time=time_label)
 
     @staticmethod
     def _parse_iso_datetime(value: str) -> datetime | None:
