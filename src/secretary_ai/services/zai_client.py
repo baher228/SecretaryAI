@@ -9,11 +9,11 @@ from secretary_ai.core.config import Settings
 _client: httpx.AsyncClient | None = None
 
 
-def _get_client(timeout: float) -> httpx.AsyncClient:
+def _get_client() -> httpx.AsyncClient:
     """Return a persistent httpx client, creating one if needed."""
     global _client  # noqa: PLW0603
     if _client is None or _client.is_closed:
-        _client = httpx.AsyncClient(timeout=timeout)
+        _client = httpx.AsyncClient()
     return _client
 
 
@@ -29,8 +29,11 @@ async def zai_chat_completion(settings: Settings, payload: dict[str, Any]) -> di
         "Accept-Language": "en-US,en",
     }
     try:
-        client = _get_client(settings.zai_timeout_seconds)
-        response = await client.post(url, headers=headers, json=payload)
+        client = _get_client()
+        response = await client.post(
+            url, headers=headers, json=payload,
+            timeout=settings.zai_timeout_seconds,
+        )
         if response.status_code >= 300:
             return {
                 "error": f"GLM request failed ({response.status_code}).",
