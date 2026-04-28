@@ -1,5 +1,6 @@
 {
-  "upcoming": [
+  "updated_at": "2026-04-19T11:00:00.714141+00:00",
+  "events": [
     {
       "id": "m41kn4d8olen2l51tkqgqth4t0",
       "summary": "Meeting with Gaga",
@@ -49,6 +50,16 @@
       "location": null,
       "attendees": [],
       "html_link": "https://www.google.com/calendar/event?eid=OHI3MWttcjg0anAxMjBldDNzcjNtNXRpYWMgZG9tb3NhaTIzNDVAbQ"
+    },
+    {
+      "id": "6gane8kksgrhgk4k7jevdjabqs",
+      "summary": "set a reminder to buy stocks today at 11.35",
+      "start": "2026-04-19T12:35:00+01:00",
+      "end": "2026-04-19T13:05:00+01:00",
+      "description": null,
+      "location": null,
+      "attendees": [],
+      "html_link": "https://www.google.com/calendar/event?eid=NmdhbmU4a2tzZ3JoZ2s0azdqZXZkamFicXMgZG9tb3NhaTIzNDVAbQ"
     },
     {
       "id": "3pv9h67hjt4536risdl7l6asb4",
@@ -159,7 +170,26 @@
       "location": null,
       "attendees": [],
       "html_link": "https://www.google.com/calendar/event?eid=cHI3OW5na3M5ZGNwNXBoa2ViNmMyaWI0NG8gZG9tb3NhaTIzNDVAbQ"
+    },
+    {
+      "id": "agv1tn5m3qv3u84jll1phahis4",
+      "summary": "Can you set a reminder at 12?",
+      "start": "2026-04-20T11:00:00+01:00",
+      "end": "2026-04-20T11:30:00+01:00",
+      "description": null,
+      "location": null,
+      "attendees": [],
+      "html_link": "https://www.google.com/calendar/event?eid=YWd2MXRuNW0zcXYzdTg0amxsMXBoYWhpczQgZG9tb3NhaTIzNDVAbQ"
+    },
+    {
+      "id": "me98qasap4nhb3a5jiua867vrk",
+      "summary": "Can you set a reminder at 12 o'clock today to buy shoes?...",
+      "start": "2026-04-20T11:00:00+01:00",
+      "end": "2026-04-20T11:30:00+01:00",
+      "description": null,
+      "location": null,
+      "attendees": [],
+      "html_link": "https://www.google.com/calendar/event?eid=bWU5OHFhc2FwNG5oYjNhNWppdWE4Njd2cmsgZG9tb3NhaTIzNDVAbQ"
     }
-  ],
-  "updated_at": "2026-04-19T10:38:06.082586+00:00"
+  ]
 }

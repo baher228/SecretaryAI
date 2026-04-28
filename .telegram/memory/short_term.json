@@ -1,19 +1,244 @@
 {
   "calls": {
-    "tg-5523073095": {
+    "route-1": {
       "turns": [
         {
-          "ts": "2026-04-19T07:17:22.284809+00:00",
-          "transcript": "Set the room.",
+          "ts": "2026-04-19T09:29:26.081093+00:00",
+          "transcript": "How long is the route from London to Heathrow Airport?",
           "reply": null
         },
         {
-          "ts": "2026-04-19T07:17:50.601113+00:00",
-          "transcript": "Set a reminder for tomorrow. Set a reminder for tomorrow.",
+          "ts": "2026-04-19T09:29:26.086132+00:00",
+          "transcript": "How long is the route from London to Heathrow Airport?",
+          "reply": "Calculating route now. ETA is 28 mins from London to Heathrow Airport, covering 19 km."
+        },
+        {
+          "ts": "2026-04-19T09:29:44.677489+00:00",
+          "transcript": "How long is the route from London to Heathrow Airport?",
           "reply": null
+        },
+        {
+          "ts": "2026-04-19T09:29:44.678602+00:00",
+          "transcript": "How long is the route from London to Heathrow Airport?",
+          "reply": "Calculating route now. ETA is 28 mins from London to Heathrow Airport, covering 19 km."
+        },
+        {
+          "ts": "2026-04-19T09:33:18.399694+00:00",
+          "transcript": "How long is the route from London to Heathrow Airport?",
+          "reply": null
+        },
+        {
+          "ts": "2026-04-19T09:33:18.402831+00:00",
+          "transcript": "How long is the route from London to Heathrow Airport?",
+          "reply": "Calculating route now. ETA is 28 mins from London to Heathrow Airport, covering 19 km."
+        },
+        {
+          "ts": "2026-04-19T09:33:37.061148+00:00",
+          "transcript": "How long is the route from London to Heathrow Airport?",
+          "reply": null
+        },
+        {
+          "ts": "2026-04-19T09:33:37.062364+00:00",
+          "transcript": "How long is the route from London to Heathrow Airport?",
+          "reply": "Calculating route now. ETA is 28 mins from London to Heathrow Airport, covering 19 km."
+        },
+        {
+          "ts": "2026-04-19T09:49:11.640896+00:00",
+          "transcript": "How long is the route from London to Heathrow Airport?",
+          "reply": null
+        },
+        {
+          "ts": "2026-04-19T09:49:11.664978+00:00",
+          "transcript": "How long is the route from London to Heathrow Airport?",
+          "reply": "Calculating route now. ETA is 28 mins from London to Heathrow Airport, covering 19 km."
+        },
+        {
+          "ts": "2026-04-19T09:49:41.634514+00:00",
+          "transcript": "How long is the route from London to Heathrow Airport?",
+          "reply": null
+        },
+        {
+          "ts": "2026-04-19T09:49:41.636125+00:00",
+          "transcript": "How long is the route from London to Heathrow Airport?",
+          "reply": "Calculating route now. ETA is 28 mins from London to Heathrow Airport, covering 19 km."
+        },
+        {
+          "ts": "2026-04-19T09:50:59.869266+00:00",
+          "transcript": "How long is the route from London to Heathrow Airport?",
+          "reply": null
+        },
+        {
+          "ts": "2026-04-19T09:50:59.871434+00:00",
+          "transcript": "How long is the route from London to Heathrow Airport?",
+          "reply": "Calculating route now. ETA is 28 mins from London to Heathrow Airport, covering 19 km."
+        },
+        {
+          "ts": "2026-04-19T09:55:28.158868+00:00",
+          "transcript": "How long is the route from London to Heathrow Airport?",
+          "reply": null
+        },
+        {
+          "ts": "2026-04-19T09:55:28.162190+00:00",
+          "transcript": "How long is the route from London to Heathrow Airport?",
+          "reply": "Calculating route now. ETA is 28 mins from London to Heathrow Airport, covering 19 km."
+        },
+        {
+          "ts": "2026-04-19T09:56:02.555097+00:00",
+          "transcript": "How long is the route from London to Heathrow Airport?",
+          "reply": null
+        },
+        {
+          "ts": "2026-04-19T09:56:02.556531+00:00",
+          "transcript": "How long is the route from London to Heathrow Airport?",
+          "reply": "Calculating route now. ETA is 28 mins from London to Heathrow Airport, covering 19 km."
+        },
+        {
+          "ts": "2026-04-19T09:56:33.066220+00:00",
+          "transcript": "How long is the route from London to Heathrow Airport?",
+          "reply": null
+        },
+        {
+          "ts": "2026-04-19T09:56:33.067410+00:00",
+          "transcript": "How long is the route from London to Heathrow Airport?",
+          "reply": "Calculating route now. ETA is 28 mins from London to Heathrow Airport, covering 19 km."
+        },
+        {
+          "ts": "2026-04-19T09:56:57.160226+00:00",
+          "transcript": "How long is the route from London to Heathrow Airport?",
+          "reply": null
+        },
+        {
+          "ts": "2026-04-19T09:56:57.161842+00:00",
+          "transcript": "How long is the route from London to Heathrow Airport?",
+          "reply": "Calculating route now. ETA is 28 mins from London to Heathrow Airport, covering 19 km."
+        },
+        {
+          "ts": "2026-04-19T10:06:25.575668+00:00",
+          "transcript": "How long is the route from London to Heathrow Airport?",
+          "reply": null
+        },
+        {
+          "ts": "2026-04-19T10:06:25.578008+00:00",
+          "transcript": "How long is the route from London to Heathrow Airport?",
+          "reply": "Calculating route now. ETA is 28 mins from London to Heathrow Airport, covering 19 km."
+        },
+        {
+          "ts": "2026-04-19T10:08:10.841466+00:00",
+          "transcript": "How long is the route from London to Heathrow Airport?",
+          "reply": null
+        },
+        {
+          "ts": "2026-04-19T10:08:10.845379+00:00",
+          "transcript": "How long is the route from London to Heathrow Airport?",
+          "reply": "Calculating route now. ETA is 28 mins from London to Heathrow Airport, covering 19 km."
+        },
+        {
+          "ts": "2026-04-19T10:12:31.075344+00:00",
+          "transcript": "How long is the route from London to Heathrow Airport?",
+          "reply": null
+        },
+        {
+          "ts": "2026-04-19T10:12:31.077504+00:00",
+          "transcript": "How long is the route from London to Heathrow Airport?",
+          "reply": "Calculating route now. ETA is 28 mins from London to Heathrow Airport, covering 19 km."
+        },
+        {
+          "ts": "2026-04-19T10:28:20.846067+00:00",
+          "transcript": "How long is the route from London to Heathrow Airport?",
+          "reply": null
+        },
+        {
+          "ts": "2026-04-19T10:28:20.849062+00:00",
+          "transcript": "How long is the route from London to Heathrow Airport?",
+          "reply": "Calculating route now. ETA is 28 mins from London to Heathrow Airport, covering 19 km."
         }
       ],
-      "updated_at": "2026-04-19T07:17:50.601126+00:00"
+      "updated_at": "2026-04-19T10:28:20.849072+00:00"
+    },
+    "tg-debug": {
+      "turns": [
+        {
+          "ts": "2026-04-19T10:28:01.461948+00:00",
+          "transcript": "Set a reminder for today at 5pm.",
+          "reply": "Done. Reminder scheduled for today at 5:00 PM. I will call you one hour before."
+        },
+        {
+          "ts": "2026-04-19T10:28:01.522979+00:00",
+          "transcript": "Set a reminder for today at 5pm.",
+          "reply": "Done. Reminder scheduled for today at 5:00 PM. I will call you one hour before."
+        },
+        {
+          "ts": "2026-04-19T10:28:01.599863+00:00",
+          "transcript": "Set a reminder for today at 5pm.",
+          "reply": "I already set that reminder for today at 5:00 PM. I will call you one hour before."
+        },
+        {
+          "ts": "2026-04-19T10:28:01.620932+00:00",
+          "transcript": "Set a reminder for today at 5pm.",
+          "reply": "I already set that reminder for today at 5:00 PM. I will call you one hour before."
+        }
+      ],
+      "updated_at": "2026-04-19T10:28:01.620974+00:00"
+    },
+    "tg-imm": {
+      "turns": [
+        {
+          "ts": "2026-04-19T10:37:45.762406+00:00",
+          "transcript": "set reminder today at five",
+          "reply": "Done. Scheduled 'Buy stocks' for Tuesday at 5:00 PM."
+        },
+        {
+          "ts": "2026-04-19T10:37:45.763243+00:00",
+          "transcript": "set reminder today at five",
+          "reply": "Done. Scheduled 'Buy stocks' for Tuesday at 5:00 PM."
+        }
+      ],
+      "updated_at": "2026-04-19T10:37:45.763250+00:00"
+    },
+    "tg-immediate-demo": {
+      "turns": [
+        {
+          "ts": "2026-04-19T10:38:50.881175+00:00",
+          "transcript": "set a reminder to buy stocks today at 11.35",
+          "reply": "Done. Scheduled 'set a reminder to buy stocks today at 11.35' for today at 11:35 AM."
+        },
+        {
+          "ts": "2026-04-19T10:38:50.905128+00:00",
+          "transcript": "set a reminder to buy stocks today at 11.35",
+          "reply": "Done. Scheduled 'set a reminder to buy stocks today at 11.35' for today at 11:35 AM."
+        }
+      ],
+      "updated_at": "2026-04-19T10:38:50.905153+00:00"
+    },
+    "tg-5523073095": {
+      "turns": [
+        {
+          "ts": "2026-04-19T10:59:08.287246+00:00",
+          "transcript": "Can you set a reminder at 12?",
+          "reply": "Done. Scheduled 'Can you set a reminder at 12?' for tomorrow at 10:00 AM."
+        },
+        {
+          "ts": "2026-04-19T10:59:09.181675+00:00",
+          "transcript": "Can you set a reminder at 12?",
+          "reply": "Done. Scheduled 'Can you set a reminder at 12?' for tomorrow at 10:00 AM."
+        },
+        {
+          "ts": "2026-04-19T10:59:37.613099+00:00",
+          "transcript": "Can you repeat?",
+          "reply": "Sure. I can repeat that. What part should I repeat?"
+        },
+        {
+          "ts": "2026-04-19T11:00:00.741124+00:00",
+          "transcript": "Can you set a reminder at 12 o'clock today to buy shoes? repeat Can you repeat?",
+          "reply": "Done. Scheduled 'Can you set a reminder at 12 o'clock today to buy shoes?...' for tomorrow at 10:00 AM."
+        },
+        {
+          "ts": "2026-04-19T11:00:01.354986+00:00",
+          "transcript": "Can you set a reminder at 12 o'clock today to buy shoes? repeat Can you repeat?",
+          "reply": "Done. Scheduled 'Can you set a reminder at 12 o'clock today to buy shoes?...' for tomorrow at 10:00 AM."
+        }
+      ],
+      "updated_at": "2026-04-19T11:00:01.355011+00:00"
     }
   }
 }

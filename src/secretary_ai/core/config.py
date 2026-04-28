@@ -84,6 +84,18 @@ class Settings(BaseSettings):
     calendar_worker_batch_size: int = 4
     calendar_smart_model: str | None = None
     calendar_planner_max_tokens: int = 140
+    calendar_refresh_interval_seconds: float = 300.0
+
+    reminder_enabled: bool = True
+    reminder_target_user: str | None = None
+    reminder_lead_minutes: int = 60
+    reminder_scan_horizon_hours: int = 48
+    reminder_state_path: str = ".telegram/cache/reminder_state.json"
+
+    audio_cleanup_enabled: bool = True
+    audio_cleanup_interval_seconds: float = 600.0
+    audio_cleanup_max_age_hours: float = 24.0
+    audio_cleanup_keep_recent_files: int = 60
 
 
 @lru_cache

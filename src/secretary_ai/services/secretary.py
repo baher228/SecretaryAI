@@ -31,7 +31,10 @@ from secretary_ai.domain.models import (
     ChatResponse,
     InboundCallResponse,
     ModelCheckResponse,
+    MapRouteRequest,
+    MapRouteResponse,
     OutboundCallRequest,
+    OutboundPurpose,
     OutboundCallResponse,
     PostCallEventRequest,
     PostCallSummary,
@@ -75,6 +78,10 @@ class SecretaryService:
         self._template_audio_cache: dict[str, str] = {}
         self._template_reply_state: dict[str, dict[str, Any]] = {}
         self._reminder_flow_state: dict[str, dict[str, Any]] = {}
+        self._reminder_state_path = Path(self.settings.reminder_state_path)
+        self._reminder_state: dict[str, dict[str, Any]] = self._load_reminder_state()
+        self._last_calendar_refresh: datetime | None = None
+        self._last_audio_cleanup: datetime | None = None
 
     async def startup(self) -> None:
         await self.telegram.start()
@@ -327,11 +334,15 @@ class SecretaryService:
             metadata=payload.metadata,
         )
         response = OutboundCallResponse(**result)
+        metadata_source = str((payload.metadata or {}).get("source") or "").strip().lower()
+        metadata_announcement = bool((payload.metadata or {}).get("announcement_only"))
+        reminder_announcement = metadata_announcement or metadata_source == "calendar_reminder"
         should_greet = (
             response.status == "active"
             and bool(response.call_id)
             and not payload.initial_audio_path
             and bool(self.settings.assistant_auto_greet_on_connect)
+            and not reminder_announcement
         )
         if should_greet:
             greeting = await self._play_greeting_with_retry(response.call_id, source="outbound")
@@ -344,6 +355,7 @@ class SecretaryService:
             response.status == "active"
             and bool(response.call_id)
             and bool(self.settings.telegram_auto_start_live_agent)
+            and not reminder_announcement
         )
         if should_auto_live:
             auto_live = await self.start_telegram_live_agent(
@@ -394,6 +406,14 @@ class SecretaryService:
         context: dict[str, Any],
         speak_response: bool,
     ) -> AgentLiveRespondResponse:
+        reminder_followup = await self._maybe_handle_reminder_time_followup(
+            call_id=call_id,
+            transcript=transcript,
+            speak_response=speak_response,
+        )
+        if reminder_followup is not None:
+            return reminder_followup
+
         fact_record = self.memory.add_user_fact_if_requested(call_id=call_id, transcript=transcript)
         if fact_record is not None:
             remember_reply = f"Got it. I wrote it down: {fact_record.get('fact')}"
@@ -414,6 +434,15 @@ class SecretaryService:
                 action_item="background_ignored",
                 speak_response=False,
             )
+        if self._should_ignore_live_snippet(transcript):
+            self.debug.log(call_id, "system_noise_ignored", {"sample": transcript[:180]})
+            return await self._fast_fallback_response(
+                call_id=call_id,
+                snippet=transcript,
+                reply="",
+                action_item="system_noise_ignored",
+                speak_response=False,
+            )
 
         retrieval_hits = self.memory.retrieve_user_fact(transcript, limit=1)
         if retrieval_hits and any(k in transcript.lower() for k in ("remember", "what did i", "about me", "my favorite", "what do i")):
@@ -432,6 +461,14 @@ class SecretaryService:
             transcript=transcript,
             context=context,
         )
+        if isinstance(calendar_turn, dict) and bool(calendar_turn.get("queued")):
+            immediate = await self._process_queued_calendar_task(
+                call_id=call_id,
+                task_id=str(calendar_turn.get("task_id") or "").strip(),
+            )
+            if immediate:
+                calendar_turn["reply"] = immediate.get("reply") or calendar_turn.get("reply")
+                calendar_turn["processed_status"] = immediate.get("status")
 
         forced_reply = calendar_turn.get("reply") if isinstance(calendar_turn, dict) else None
         template_hit = self.template_matcher.match(transcript) if not forced_reply else None
@@ -467,7 +504,9 @@ class SecretaryService:
                 return await self._handle_reminder_flow(call_id=call_id, transcript=transcript, speak_response=speak_response)
 
             # Critical for latency: do NOT run remote analysis when we already have deterministic reply.
-            selected_reply = str(forced_reply or (template_hit or {}).get("reply") or "")
+            selected_reply = str(forced_reply or (template_hit or {}).get("reply") or "").strip()
+            if not selected_reply:
+                selected_reply = "Could you repeat that in one short sentence?"
             analysis = AgentAnalyzeResponse(
                 call_id=call_id,
                 reply=selected_reply,
@@ -491,6 +530,9 @@ class SecretaryService:
 
             if bool(calendar_turn.get("queued")):
                 action_items.append(f"calendar_queue:{calendar_turn.get('task_id')}")
+            processed_status = str(calendar_turn.get("processed_status") or "").strip()
+            if processed_status:
+                action_items.append(f"calendar_processed:{processed_status}")
 
             analysis.action_items = action_items[:8]
             self.memory.add_short_term_turn(call_id=call_id, transcript=transcript, reply=analysis.reply)
@@ -520,6 +562,7 @@ class SecretaryService:
                 if speak_response and tts_audio_path:
                     stream_result = await self.telegram.stream_audio_out(call_id, tts_audio_path)
                     call_audio_status = str(stream_result.get("status"))
+                    self._apply_live_tts_pause(call_id, call_audio_status)
 
                 response = AgentLiveRespondResponse(
                     call_id=call_id,
@@ -544,12 +587,27 @@ class SecretaryService:
                     timeout=max(0.9, float(self.settings.agent_live_timeout_seconds)),
                 )
             except asyncio.TimeoutError:
+                timeout_reply = "Sorry, I am slow right now. Please repeat in one short sentence."
+                if self._should_suppress_latency_reply(call_id):
+                    timeout_reply = ""
                 analysis = AgentAnalyzeResponse(
                     call_id=call_id,
-                    reply="Sorry, I’m slow right now. Please repeat in one short sentence.",
+                    reply=timeout_reply,
                     model=self.settings.zai_model,
-                    action_items=["latency_fallback"],
+                    action_items=["latency_fallback_suppressed" if not timeout_reply else "latency_fallback"],
                 )
+
+        if analysis.intent.value == "plan_route":
+            analysis = await self._resolve_route_intent(
+                call_id=call_id,
+                transcript=transcript,
+                context=context,
+                analysis=analysis,
+            )
+        if not str(analysis.reply or "").strip():
+            analysis.reply = "Could you repeat that in one short sentence?"
+            analysis.action_items = list(analysis.action_items) + ["empty_reply_fallback"]
+            analysis.action_items = analysis.action_items[:8]
 
         tts_audio_path: str | None = None
         tts_status: str | None = None
@@ -559,15 +617,9 @@ class SecretaryService:
             if tts_audio_path:
                 stream_result = await self.telegram.stream_audio_out(call_id, tts_audio_path)
                 call_audio_status = str(stream_result.get("status"))
+                self._apply_live_tts_pause(call_id, call_audio_status)
             else:
                 call_audio_status = "not_streamed"
-
-            if call_audio_status == "streaming_out":
-                session = self.live_sessions.get(call_id)
-                if session is not None:
-                    cooldown = max(0.2, float(self.settings.telegram_live_tts_cooldown_seconds))
-                    session["pause_until"] = datetime.now(timezone.utc) + timedelta(seconds=cooldown)
-                    session["last_call_audio_status"] = call_audio_status
 
         response = AgentLiveRespondResponse(
             call_id=call_id,
@@ -585,14 +637,9 @@ class SecretaryService:
             call_audio_status=call_audio_status,
         )
         
-        # Async process bookings or routes
+        # Async process bookings
         raw_intent = analysis.intent.value
-        if raw_intent == "plan_route":
-            origin = analysis.extracted_fields.get("origin", "London")
-            dest = analysis.extracted_fields.get("destination", "Manchester")
-            # In a real setup, we would queue this and call back. For demo, we do it inline or log
-            asyncio.create_task(self.maps.plan_route(origin, dest))
-        elif raw_intent == "search_booking":
+        if raw_intent == "search_booking":
             location = analysis.extracted_fields.get("location", "London")
             booking_type = analysis.extracted_fields.get("topic", "restaurants")
             if "hotel" in booking_type:
@@ -722,6 +769,101 @@ class SecretaryService:
         self.memory.append_long_term("calendar_refresh", {"days": days, "max_results": max_results})
         return result
 
+    async def map_route(self, payload: MapRouteRequest) -> MapRouteResponse:
+        route = await self.maps.plan_route(
+            origin=payload.origin,
+            destination=payload.destination,
+            mode=payload.mode,
+        )
+        return MapRouteResponse(
+            call_id=payload.call_id,
+            status=str(route.get("status") or "error"),
+            detail=str(route.get("detail")) if route.get("detail") is not None else None,
+            origin=str(route.get("origin")) if route.get("origin") is not None else payload.origin,
+            destination=str(route.get("destination")) if route.get("destination") is not None else payload.destination,
+            mode=str(route.get("mode")) if route.get("mode") is not None else payload.mode,
+            eta_text=str(route.get("eta_text")) if route.get("eta_text") is not None else None,
+            eta_minutes=int(route.get("eta_minutes")) if route.get("eta_minutes") is not None else None,
+            distance_text=str(route.get("distance_text")) if route.get("distance_text") is not None else None,
+            map_url=str(route.get("map_url")) if route.get("map_url") is not None else None,
+            route_details=str(route.get("details")) if route.get("details") is not None else None,
+        )
+
+    async def _resolve_route_intent(
+        self,
+        call_id: str,
+        transcript: str,
+        context: dict[str, Any],
+        analysis: AgentAnalyzeResponse,
+    ) -> AgentAnalyzeResponse:
+        extracted = dict(analysis.extracted_fields or {})
+        origin = str(extracted.get("origin") or context.get("origin") or "").strip()
+        destination = str(
+            extracted.get("destination")
+            or extracted.get("location")
+            or context.get("destination")
+            or context.get("location")
+            or ""
+        ).strip()
+        mode = str(extracted.get("mode") or context.get("mode") or "driving").strip().lower()
+
+        inferred_origin, inferred_destination = self._infer_route_points(transcript)
+        if not origin and inferred_origin:
+            origin = inferred_origin
+        if not destination and inferred_destination:
+            destination = inferred_destination
+
+        if not destination:
+            analysis.reply = "Calculating route now. Please share the destination address or place name."
+            analysis.action_items = list(analysis.action_items) + ["route_lookup_missing_destination"]
+            analysis.action_items = analysis.action_items[:8]
+            analysis.extracted_fields = {**extracted, "mode": mode}
+            return analysis
+        if not origin:
+            origin = str(context.get("current_location") or "London").strip() or "London"
+
+        analysis.reply = "Calculating route now."
+        analysis.action_items = list(analysis.action_items) + ["route_lookup_started"]
+        analysis.action_items = analysis.action_items[:8]
+
+        route_response = await self.map_route(
+            MapRouteRequest(
+                call_id=call_id,
+                origin=origin,
+                destination=destination,
+                mode=mode or "driving",
+            )
+        )
+
+        route_fields = {
+            "origin": route_response.origin,
+            "destination": route_response.destination,
+            "mode": route_response.mode,
+            "eta_text": route_response.eta_text,
+            "eta_minutes": route_response.eta_minutes,
+            "distance_text": route_response.distance_text,
+            "map_url": route_response.map_url,
+        }
+
+        if route_response.status == "success":
+            eta_text = route_response.eta_text or "unavailable"
+            distance_text = f", covering {route_response.distance_text}" if route_response.distance_text else ""
+            analysis.reply = (
+                f"Calculating route now. ETA is {eta_text} from {origin} to {destination}{distance_text}."
+            )
+            analysis.action_items = list(analysis.action_items) + ["route_lookup_success"]
+        else:
+            detail = route_response.detail or "I could not retrieve route data right now."
+            analysis.reply = (
+                "Calculating route now. I couldn't fetch live ETA at the moment. "
+                f"Reason: {detail}"
+            )
+            analysis.action_items = list(analysis.action_items) + ["route_lookup_failed"]
+
+        analysis.action_items = analysis.action_items[:8]
+        analysis.extracted_fields = {**extracted, **{k: v for k, v in route_fields.items() if v is not None}}
+        return analysis
+
     async def start_telegram_live_agent(
         self,
         call_id: str,
@@ -750,7 +892,8 @@ class SecretaryService:
 
         recordings_root = Path(self.settings.telegram_audio_root) / "recordings"
         recordings_root.mkdir(parents=True, exist_ok=True)
-        recording_path = (recordings_root / f"{call_id}.wav").resolve()
+        suffix = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+        recording_path = (recordings_root / f"{call_id}-{suffix}.wav").resolve()
 
         record_ack = await self.stream_audio_in(
             call_id,
@@ -787,6 +930,11 @@ class SecretaryService:
         }
         session["task"] = asyncio.create_task(self._telegram_live_loop(call_id))
         self.live_sessions[call_id] = session
+
+        # Reset per-call ephemeral state so a new call starts clean.
+        self._template_reply_state.pop(call_id, None)
+        self._reminder_flow_state.pop(call_id, None)
+        self.memory.clear_short_term_call(call_id)
 
         call["live_agent"] = {
             "running": True,
@@ -969,37 +1117,17 @@ class SecretaryService:
             session["last_stt_status"] = stt_status
             preview_chars = max(20, int(self.settings.telegram_live_log_transcript_preview_chars))
             if stt_status != "ok":
-                # Secondary rescue pass: when recent-only missed, try full file once here too.
-                if stt_status == "no_speech":
-                    full_text, full_status = await self.stt.transcribe(str(recording_path))
-                    if full_status == "ok" and full_text.strip():
-                        text = full_text
-                        stt_status = "ok"
-                        session["last_stt_status"] = stt_status
-                    else:
-                        self.debug.log(
-                            call_id,
-                            "stt_not_ok",
-                            {
-                                "status": stt_status,
-                                "chars": len((text or "").strip()),
-                                "sample": (text or "")[:preview_chars],
-                            },
-                        )
-                        await asyncio.sleep(poll_seconds)
-                        continue
-                else:
-                    self.debug.log(
-                        call_id,
-                        "stt_not_ok",
-                        {
-                            "status": stt_status,
-                            "chars": len((text or "").strip()),
-                            "sample": (text or "")[:preview_chars],
-                        },
-                    )
-                    await asyncio.sleep(poll_seconds)
-                    continue
+                self.debug.log(
+                    call_id,
+                    "stt_not_ok",
+                    {
+                        "status": stt_status,
+                        "chars": len((text or "").strip()),
+                        "sample": (text or "")[:preview_chars],
+                    },
+                )
+                await asyncio.sleep(poll_seconds)
+                continue
 
             session["stt_ok_count"] = int(session.get("stt_ok_count") or 0) + 1
             self.debug.log(
@@ -1175,6 +1303,8 @@ class SecretaryService:
                     status = str(call.get("status") or "").strip().lower()
                     if status != "active":
                         continue
+                    if self._is_announcement_only_call(call):
+                        continue
 
                     should_greet = (
                         bool(self.settings.assistant_auto_greet_on_connect)
@@ -1222,12 +1352,309 @@ class SecretaryService:
 
         while True:
             try:
-                await self.calendar.process_queue(max_items=batch_size)
+                queue_result = await self.calendar.process_queue(max_items=batch_size)
+                await self._maybe_schedule_reminders_from_queue_result(queue_result)
+
+                refresh_interval = max(20.0, float(self.settings.calendar_refresh_interval_seconds))
+                now = datetime.now(timezone.utc)
+                should_refresh = (
+                    self._last_calendar_refresh is None
+                    or (now - self._last_calendar_refresh).total_seconds() >= refresh_interval
+                )
+                if should_refresh:
+                    await self.calendar.refresh_cache(days=7, max_results=80)
+                    self._last_calendar_refresh = now
+
+                await self._sync_reminders_from_calendar_cache()
+                await self._dispatch_due_reminder_calls()
+                self._cleanup_generated_audio_files_if_needed()
             except asyncio.CancelledError:
                 raise
             except Exception:
                 pass
             await asyncio.sleep(poll_seconds)
+
+    def _load_reminder_state(self) -> dict[str, dict[str, Any]]:
+        try:
+            if self._reminder_state_path.exists():
+                raw = json.loads(self._reminder_state_path.read_text(encoding="utf-8"))
+                if isinstance(raw, dict):
+                    return {str(k): v for k, v in raw.items() if isinstance(v, dict)}
+        except Exception:
+            pass
+        return {}
+
+    def _persist_reminder_state(self) -> None:
+        try:
+            self._reminder_state_path.parent.mkdir(parents=True, exist_ok=True)
+            self._reminder_state_path.write_text(
+                json.dumps(self._reminder_state, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except Exception:
+            pass
+
+    async def _maybe_schedule_reminders_from_queue_result(self, queue_result: dict[str, Any]) -> None:
+        if not self.settings.reminder_enabled:
+            return
+        if not isinstance(queue_result, dict):
+            return
+        results = queue_result.get("results")
+        if not isinstance(results, list):
+            return
+        for item in results:
+            if not isinstance(item, dict):
+                continue
+            status = str(item.get("status") or "")
+            if status != "done":
+                continue
+            plan = item.get("plan")
+            if not isinstance(plan, dict) or str(plan.get("action") or "") != "create":
+                continue
+            apply_result = item.get("result")
+            if not isinstance(apply_result, dict):
+                continue
+            apply_status = str(apply_result.get("status") or "")
+            if apply_status not in {"ok", "cache_only"}:
+                continue
+            event = apply_result.get("event")
+            if not isinstance(event, dict):
+                continue
+            call_id = str(item.get("call_id") or "")
+            target_user = self._resolve_reminder_target_user(call_id)
+            if not target_user:
+                continue
+            await self._schedule_event_reminder(event=event, target_user=target_user, call_id=call_id)
+
+    async def _sync_reminders_from_calendar_cache(self) -> None:
+        if not self.settings.reminder_enabled:
+            return
+        fallback_target = str(self.settings.reminder_target_user or "").strip()
+        if not fallback_target:
+            return
+        horizon = datetime.now(timezone.utc) + timedelta(hours=max(1, int(self.settings.reminder_scan_horizon_hours)))
+        for event in self.calendar.cache.get("events", []) or []:
+            if not isinstance(event, dict):
+                continue
+            start_dt = self._parse_event_start(event)
+            if start_dt is None or start_dt <= datetime.now(timezone.utc) or start_dt > horizon:
+                continue
+            await self._schedule_event_reminder(event=event, target_user=fallback_target, call_id="")
+
+    async def _dispatch_due_reminder_calls(self) -> None:
+        if not self.settings.reminder_enabled:
+            return
+        now = datetime.now(timezone.utc)
+        changed = False
+        for event_id, state in list(self._reminder_state.items()):
+            status = str(state.get("status") or "scheduled")
+            if status in {"called", "expired"}:
+                continue
+            remind_at = self._parse_iso(str(state.get("remind_at") or ""))
+            start_at = self._parse_iso(str(state.get("start_iso") or ""))
+            if remind_at is None or start_at is None:
+                state["status"] = "failed"
+                state["last_error"] = "invalid_datetime"
+                changed = True
+                continue
+            if now > start_at + timedelta(minutes=10):
+                state["status"] = "expired"
+                changed = True
+                continue
+            if now < remind_at:
+                continue
+            target_user = str(state.get("target_user") or "").strip()
+            if not target_user:
+                state["status"] = "failed"
+                state["last_error"] = "missing_target_user"
+                changed = True
+                continue
+
+            audio_path = str(state.get("audio_path") or "").strip() or None
+            if audio_path and not Path(audio_path).exists():
+                audio_path = None
+            if not audio_path:
+                reminder_text = self._build_reminder_text_from_state(state)
+                regenerated = await self._safe_precache_reminder_audio(event_id, reminder_text)
+                if regenerated:
+                    audio_path = regenerated
+                    state["audio_path"] = regenerated
+            payload = OutboundCallRequest(
+                target_user=target_user,
+                purpose=OutboundPurpose.REMINDER,
+                initial_audio_path=audio_path,
+                metadata={
+                    "source": "calendar_reminder",
+                    "announcement_only": True,
+                    "event_id": event_id,
+                    "event_summary": state.get("summary"),
+                    "event_start": state.get("start_iso"),
+                    "remind_at": state.get("remind_at"),
+                },
+            )
+            response = await self.start_outbound_call(payload)
+            state["last_attempt_at"] = self._now_iso()
+            state["attempt_count"] = int(state.get("attempt_count") or 0) + 1
+            state["last_call_id"] = response.call_id
+            state["last_call_status"] = response.status
+            if response.status in {"active", "dialing"}:
+                state["status"] = "called"
+                state["triggered_at"] = self._now_iso()
+                state["last_error"] = None
+            else:
+                state["status"] = "failed"
+                state["last_error"] = response.detail
+            changed = True
+
+        if changed:
+            self._persist_reminder_state()
+
+    async def _schedule_event_reminder(self, event: dict[str, Any], target_user: str, call_id: str) -> None:
+        event_id = str(event.get("id") or "").strip()
+        if not event_id:
+            return
+        start_dt = self._parse_event_start(event)
+        if start_dt is None:
+            return
+        now = datetime.now(timezone.utc)
+        if start_dt <= now:
+            return
+        horizon = now + timedelta(hours=max(1, int(self.settings.reminder_scan_horizon_hours)))
+        if start_dt > horizon:
+            return
+
+        lead_minutes = max(1, int(self.settings.reminder_lead_minutes))
+        remind_at = start_dt - timedelta(minutes=lead_minutes)
+        summary = str(event.get("summary") or "your event").strip() or "your event"
+        start_local = start_dt.astimezone()
+        reminder_text = (
+            f"Reminder: {summary} starts in {lead_minutes} minutes at "
+            f"{start_local.strftime('%H:%M')}."
+        )
+        existing = self._reminder_state.get(event_id)
+        if existing:
+            existing_start = self._parse_iso(str(existing.get("start_iso") or ""))
+            if existing_start and existing_start == start_dt and str(existing.get("target_user") or "") == target_user:
+                return
+        audio_path = await self._safe_precache_reminder_audio(event_id, reminder_text)
+
+        self._reminder_state[event_id] = {
+            "event_id": event_id,
+            "summary": summary,
+            "start_iso": start_dt.isoformat(),
+            "remind_at": remind_at.isoformat(),
+            "target_user": target_user,
+            "source_call_id": call_id,
+            "audio_path": audio_path,
+            "status": "scheduled",
+            "created_at": self._now_iso(),
+            "attempt_count": 0,
+        }
+        self._persist_reminder_state()
+
+    async def _safe_precache_reminder_audio(self, event_id: str, reminder_text: str) -> str | None:
+        try:
+            path, status = await self.tts.synthesize(reminder_text, call_id=f"reminder-{event_id}")
+            if path and status in {"generated", "cached"}:
+                return path
+        except Exception:
+            return None
+        return None
+
+    def _build_reminder_text_from_state(self, state: dict[str, Any]) -> str:
+        summary = str(state.get("summary") or "your event").strip() or "your event"
+        start_iso = str(state.get("start_iso") or "").strip()
+        lead_minutes = max(1, int(self.settings.reminder_lead_minutes))
+        start_dt = self._parse_iso(start_iso)
+        if start_dt is not None:
+            start_local = start_dt.astimezone()
+            return (
+                f"Reminder: {summary} starts in {lead_minutes} minutes at "
+                f"{start_local.strftime('%H:%M')}."
+            )
+        return f"Reminder: {summary} starts in {lead_minutes} minutes."
+
+    def _resolve_reminder_target_user(self, call_id: str) -> str | None:
+        call = self.telegram.get_call(call_id) if call_id else None
+        candidates = [
+            str(self.settings.reminder_target_user or "").strip(),
+            str((call or {}).get("target_user") or "").strip(),
+            str((call or {}).get("source_user") or "").strip(),
+        ]
+        for candidate in candidates:
+            if candidate:
+                return candidate
+        return None
+
+    @staticmethod
+    def _is_announcement_only_call(call: dict[str, Any]) -> bool:
+        metadata = call.get("metadata") if isinstance(call.get("metadata"), dict) else {}
+        source = str(metadata.get("source") or "").strip().lower()
+        if bool(metadata.get("announcement_only")):
+            return True
+        return source == "calendar_reminder"
+
+    @staticmethod
+    def _parse_event_start(event: dict[str, Any]) -> datetime | None:
+        raw = str(event.get("start") or "").strip()
+        if not raw:
+            return None
+        if len(raw) == 10 and raw.count("-") == 2:
+            raw = f"{raw}T09:00:00+00:00"
+        try:
+            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return parsed.astimezone(timezone.utc)
+        except Exception:
+            return None
+
+    def _cleanup_generated_audio_files_if_needed(self) -> None:
+        if not self.settings.audio_cleanup_enabled:
+            return
+        now = datetime.now(timezone.utc)
+        interval = max(30.0, float(self.settings.audio_cleanup_interval_seconds))
+        if self._last_audio_cleanup and (now - self._last_audio_cleanup).total_seconds() < interval:
+            return
+        self._last_audio_cleanup = now
+
+        root = Path(self.settings.telegram_audio_root) / "generated"
+        if not root.exists():
+            return
+
+        files = [p for p in root.glob("*") if p.is_file()]
+        files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        keep_recent = max(5, int(self.settings.audio_cleanup_keep_recent_files))
+        max_age = timedelta(hours=max(1.0, float(self.settings.audio_cleanup_max_age_hours)))
+        cutoff = now - max_age
+
+        pinned: set[Path] = set()
+        for path in self._template_audio_cache.values():
+            try:
+                pinned.add(Path(path).resolve())
+            except Exception:
+                continue
+        for state in self._reminder_state.values():
+            path = state.get("audio_path")
+            if isinstance(path, str) and path.strip():
+                try:
+                    pinned.add(Path(path).resolve())
+                except Exception:
+                    continue
+
+        for idx, file_path in enumerate(files):
+            try:
+                resolved = file_path.resolve()
+                if resolved in pinned:
+                    continue
+                if idx < keep_recent:
+                    continue
+                modified = datetime.fromtimestamp(file_path.stat().st_mtime, tz=timezone.utc)
+                if modified > cutoff:
+                    continue
+                file_path.unlink(missing_ok=True)
+            except Exception:
+                continue
 
     def _can_emit_template(self, call_id: str, template_id: str, transcript: str) -> bool:
         now = datetime.now(timezone.utc)
@@ -1260,6 +1687,163 @@ class SecretaryService:
             "last_transcript": transcript,
         }
 
+    def _apply_live_tts_pause(self, call_id: str, call_audio_status: str | None) -> None:
+        if str(call_audio_status or "").lower() != "streaming_out":
+            return
+        session = self.live_sessions.get(call_id)
+        if session is None:
+            return
+        cooldown = max(0.2, float(self.settings.telegram_live_tts_cooldown_seconds))
+        session["pause_until"] = datetime.now(timezone.utc) + timedelta(seconds=cooldown)
+        session["last_call_audio_status"] = "streaming_out"
+
+    def _should_suppress_latency_reply(self, call_id: str) -> bool:
+        session = self.live_sessions.get(call_id)
+        if session is None:
+            return False
+        now = datetime.now(timezone.utc)
+        previous = session.get("last_latency_reply_at")
+        if isinstance(previous, datetime):
+            if (now - previous).total_seconds() < 8.0:
+                return True
+        session["last_latency_reply_at"] = now
+        return False
+
+    @staticmethod
+    def _extract_time_phrase(transcript: str) -> str | None:
+        text = " ".join((transcript or "").split()).strip().lower()
+        if not text:
+            return None
+        match = re.search(r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b", text)
+        if not match:
+            return None
+        hour = int(match.group(1))
+        minute = match.group(2)
+        ampm = str(match.group(3) or "").upper()
+        if hour < 1 or hour > 12:
+            return None
+        if minute is not None:
+            return f"{hour}:{minute} {ampm}"
+        return f"{hour} {ampm}"
+
+    async def _maybe_handle_reminder_time_followup(
+        self,
+        call_id: str,
+        transcript: str,
+        speak_response: bool,
+    ) -> AgentLiveRespondResponse | None:
+        time_phrase = self._extract_time_phrase(transcript)
+        if not time_phrase:
+            return None
+
+        state = self._reminder_flow_state.get(call_id) or {}
+        if not state:
+            return None
+
+        completed_at = self._parse_iso(str(state.get("completed_at") or ""))
+        if completed_at is None:
+            return None
+        if (datetime.now(timezone.utc) - completed_at).total_seconds() > 15 * 60:
+            return None
+
+        lower = " ".join((transcript or "").split()).strip().lower()
+        if "tomorrow" in lower:
+            day_hint = "tomorrow"
+        else:
+            day_hint = "today"
+
+        synthetic_transcript = f"set a reminder {day_hint} at {time_phrase}"
+        queued = await self.calendar.quick_reply_or_enqueue(
+            call_id=call_id,
+            transcript=synthetic_transcript,
+            context={"source": "reminder_followup_time"},
+        )
+        if not bool(queued.get("queued")):
+            return None
+
+        queued_id = str(queued.get("task_id") or "").strip()
+        reply = (
+            f"Done. Reminder set for {day_hint} at {time_phrase}. "
+            "I will call you one hour before."
+        )
+        response = await self._fast_fallback_response(
+            call_id=call_id,
+            snippet=transcript,
+            reply=reply,
+            action_item="reminder_followup_time_confirmed",
+            speak_response=speak_response,
+        )
+        response.action_items = list(response.action_items) + [f"calendar_queue:{queued_id}"]
+        response.action_items = response.action_items[:8]
+
+        self._reminder_flow_state[call_id] = {
+            **state,
+            "last_time_followup_at": self._now_iso(),
+            "last_time_followup_phrase": time_phrase,
+            "last_followup_task_id": queued_id,
+        }
+        return response
+
+    async def _process_queued_calendar_task(self, call_id: str, task_id: str) -> dict[str, Any] | None:
+        if not task_id:
+            return None
+        try:
+            result = await self.calendar.process_queue(max_items=1)
+        except Exception as exc:
+            self.debug.log(call_id, "calendar_process_failed", {"error": exc.__class__.__name__, "detail": str(exc)})
+            return None
+
+        entries = result.get("results") if isinstance(result, dict) else None
+        if not isinstance(entries, list):
+            return None
+        selected = None
+        for row in entries:
+            if str((row or {}).get("task_id") or "") == task_id:
+                selected = row
+                break
+        if selected is None:
+            return None
+        reply = self._calendar_process_reply(selected)
+        return {"reply": reply, "status": str(selected.get("status") or "")}
+
+    def _calendar_process_reply(self, row: dict[str, Any]) -> str:
+        result = row.get("result") if isinstance(row.get("result"), dict) else {}
+        detail = str((result or {}).get("detail") or "").strip()
+        event = (result or {}).get("event") if isinstance((result or {}).get("event"), dict) else {}
+        start_raw = str((event or {}).get("start") or "").strip()
+        title = str((event or {}).get("summary") or "").strip()
+        when = self._humanize_iso_datetime(start_raw)
+        if str((result or {}).get("status") or "") in {"ok", "cache_only"}:
+            if when and title:
+                return f"Done. Scheduled '{title}' for {when}."
+            if when:
+                return f"Done. Scheduled it for {when}."
+            if detail:
+                return f"Done. {detail}"
+            return "Done. I scheduled that."
+        if detail:
+            return f"I could not schedule it yet: {detail}"
+        return "I could not schedule it yet. Please repeat with exact date and time."
+
+    @staticmethod
+    def _humanize_iso_datetime(value: str) -> str:
+        if not value:
+            return ""
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            local = parsed.astimezone()
+            day = local.strftime("%A")
+            now = datetime.now(local.tzinfo).date()
+            if local.date() == now:
+                day = "today"
+            elif local.date() == (now + timedelta(days=1)):
+                day = "tomorrow"
+            return f"{day} at {local.strftime('%I:%M %p').lstrip('0')}"
+        except Exception:
+            return ""
+
     @staticmethod
     def _looks_like_background_announcement(transcript: str) -> bool:
         text = " ".join((transcript or "").split()).strip().lower()
@@ -1275,6 +1859,54 @@ class SecretaryService:
             "alarm",
         ]
         return any(marker in text for marker in markers)
+
+    @staticmethod
+    def _should_ignore_live_snippet(transcript: str) -> bool:
+        text = " ".join((transcript or "").split()).strip().lower()
+        if not text:
+            return True
+
+        if SecretaryService._extract_time_phrase(text):
+            return False
+
+        if len(text) <= 3:
+            return True
+
+        generic_noise = {
+            "hello",
+            "hi",
+            "okay",
+            "ok",
+            "hmm",
+            "uh",
+            "um",
+            "yes",
+            "no",
+            "thanks",
+            "thank you",
+        }
+        if text in generic_noise:
+            return True
+
+        ivr_markers = [
+            "please hold",
+            "hold the line",
+            "your call is important",
+            "press 1",
+            "press one",
+            "for english",
+            "leave a message",
+            "after the tone",
+            "beep",
+            "voicemail",
+            "number you have dialed",
+            "cannot be completed",
+            "please try again later",
+        ]
+        if any(marker in text for marker in ivr_markers):
+            return True
+
+        return SecretaryService._is_low_quality_snippet(text)
 
     async def _handle_reminder_flow(
         self,
@@ -1316,6 +1948,7 @@ class SecretaryService:
             "fingerprint": fingerprint,
             "requested_at": self._now_iso(),
             "last_ack_fingerprint": fingerprint,
+            "original_transcript": transcript,
         }
 
         # Step 2: fast availability decision using cached schedule + optional planner queue
@@ -1374,6 +2007,7 @@ class SecretaryService:
             "last_result": result_reply,
             "completed_at": self._now_iso(),
             "busy_count": busy_count,
+            "original_transcript": transcript,
         }
 
         self.memory.append_long_term(
@@ -1458,6 +2092,7 @@ class SecretaryService:
             if tts_audio_path:
                 stream_result = await self.telegram.stream_audio_out(call_id, tts_audio_path)
                 call_audio_status = str(stream_result.get("status"))
+                self._apply_live_tts_pause(call_id, call_audio_status)
                 self.debug.log(
                     call_id,
                     "fallback_audio_out",
@@ -1569,6 +2204,33 @@ class SecretaryService:
                 overlap = size
                 break
         return cur[overlap:].strip()
+
+    @staticmethod
+    def _infer_route_points(transcript: str) -> tuple[str, str]:
+        text = " ".join((transcript or "").split()).strip()
+        if not text:
+            return "", ""
+
+        from_to = re.search(
+            r"\bfrom\s+(?P<origin>.+?)\s+to\s+(?P<destination>.+?)(?:[?.!,]|$)",
+            text,
+            flags=re.IGNORECASE,
+        )
+        if from_to:
+            return (
+                str(from_to.group("origin") or "").strip(" ,"),
+                str(from_to.group("destination") or "").strip(" ,"),
+            )
+
+        to_only = re.search(
+            r"\bto\s+(?P<destination>.+?)(?:[?.!,]|$)",
+            text,
+            flags=re.IGNORECASE,
+        )
+        if to_only:
+            return "", str(to_only.group("destination") or "").strip(" ,")
+
+        return "", ""
 
     @staticmethod
     def _now_iso() -> str:

@@ -2,6 +2,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
+import re
 from typing import Any
 
 import httpx
@@ -38,6 +39,7 @@ class CalendarService:
             "events": [],
         }
         self.queue: list[dict[str, Any]] = []
+        self._last_mutation_by_call: dict[str, dict[str, Any]] = {}
 
         self._load_state()
 
@@ -143,10 +145,33 @@ class CalendarService:
             }
 
         if self._is_mutation_query(lower):
-            task = self._enqueue_task(call_id=call_id, transcript=text, context=context)
+            start = self._parse_iso_datetime(str(context.get("start_iso") or ""))
+            end = self._parse_iso_datetime(str(context.get("end_iso") or ""))
+            if start is None:
+                start = self._extract_datetime_from_text(text)
+            if start is not None and end is None:
+                end = start + timedelta(minutes=30)
+
+            normalized_signature = self._mutation_signature(text=text, start=start)
+            if self._is_duplicate_mutation(call_id=call_id, signature=normalized_signature):
+                return {
+                    "status": "already_queued",
+                    "reply": self._build_mutation_reply(text=text, start=start, duplicate=True),
+                    "queued": False,
+                    "duplicate": True,
+                }
+
+            mutation_context = dict(context)
+            if start is not None:
+                mutation_context["start_iso"] = start.isoformat()
+            if end is not None:
+                mutation_context["end_iso"] = end.isoformat()
+
+            task = self._enqueue_task(call_id=call_id, transcript=text, context=mutation_context)
+            self._record_mutation(call_id=call_id, signature=normalized_signature)
             return {
                 "status": "queued",
-                "reply": "Got it. I queued this calendar request and will apply it shortly.",
+                "reply": self._build_mutation_reply(text=text, start=start, duplicate=False),
                 "queued": True,
                 "task_id": task["task_id"],
             }
@@ -178,6 +203,7 @@ class CalendarService:
                 processed += 1
                 results.append({
                     "task_id": item.get("task_id"),
+                    "call_id": item.get("call_id"),
                     "status": item.get("status"),
                     "plan": plan,
                     "result": apply_result,
@@ -278,6 +304,7 @@ class CalendarService:
     def _plan_action_heuristic(self, task: dict[str, Any]) -> dict[str, Any]:
         text = str(task.get("transcript") or "").strip()
         lower = text.lower()
+        context = task.get("context") if isinstance(task.get("context"), dict) else {}
 
         if any(token in lower for token in ("delete", "remove", "cancel event")):
             event_id = self._extract_event_id(lower)
@@ -291,10 +318,30 @@ class CalendarService:
                 "planner_model": "heuristic",
             }
 
-        if any(token in lower for token in ("schedule", "book", "add to calendar", "create event")):
-            start = datetime.now(timezone.utc) + timedelta(days=1)
-            start = start.replace(hour=10, minute=0, second=0, microsecond=0)
-            end = start + timedelta(minutes=30)
+        if any(
+            token in lower
+            for token in (
+                "schedule",
+                "book",
+                "add to calendar",
+                "create event",
+                "set a reminder",
+                "set reminder",
+                "remind me",
+                "reminder",
+            )
+        ):
+            context_start = str(context.get("start_iso") or "").strip()
+            context_end = str(context.get("end_iso") or "").strip()
+            if context_start and context_end:
+                start = self._parse_iso_datetime(context_start) or (datetime.now(timezone.utc) + timedelta(days=1))
+                end = self._parse_iso_datetime(context_end) or (start + timedelta(minutes=30))
+            else:
+                parsed_start = self._extract_datetime_from_text(text)
+                start = parsed_start or (datetime.now(timezone.utc) + timedelta(days=1))
+                if parsed_start is None:
+                    start = start.replace(hour=10, minute=0, second=0, microsecond=0)
+                end = start + timedelta(minutes=30)
             title = self._title_from_text(text)
             return {
                 "action": "create",
@@ -411,6 +458,10 @@ class CalendarService:
             "create event",
             "schedule",
             "book",
+            "set a reminder",
+            "set reminder",
+            "remind me",
+            "reminder",
             "reschedule",
             "delete event",
             "cancel event",
@@ -442,6 +493,104 @@ class CalendarService:
         if len(compact) <= 60:
             return compact
         return compact[:57].rstrip() + "..."
+
+    @staticmethod
+    def _extract_datetime_from_text(text: str) -> datetime | None:
+        lower = (text or "").lower()
+        base = datetime.now(timezone.utc)
+        day_offset = 1
+        if "today" in lower:
+            day_offset = 0
+        elif "tomorrow" in lower:
+            day_offset = 1
+
+        lower = lower.replace("a.m.", "am").replace("p.m.", "pm")
+        match_ampm = re.search(r"\b(\d{1,2})(?:(?::|\.)(\d{2}))?\s*(am|pm)\b", lower)
+        hour: int
+        minute: int
+        if match_ampm:
+            hour = int(match_ampm.group(1))
+            minute = int(match_ampm.group(2) or "0")
+            ampm = str(match_ampm.group(3) or "").lower()
+            if hour == 12:
+                hour = 0
+            if ampm == "pm":
+                hour += 12
+        else:
+            match_24h = re.search(r"\b(\d{1,2})[:.](\d{2})\b", lower)
+            if not match_24h:
+                return None
+            hour = int(match_24h.group(1))
+            minute = int(match_24h.group(2))
+
+        if hour >= 24 or minute >= 60:
+            return None
+
+        when = base + timedelta(days=day_offset)
+        return when.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+    def _mutation_signature(self, text: str, start: datetime | None) -> str:
+        normalized = " ".join((text or "").lower().split())
+        normalized = re.sub(r"[^a-z0-9: ]+", "", normalized)
+        if start is not None:
+            rounded = start.replace(second=0, microsecond=0).isoformat()
+            return f"{normalized}|{rounded}"
+        return normalized
+
+    def _is_duplicate_mutation(self, call_id: str, signature: str) -> bool:
+        state = self._last_mutation_by_call.get(call_id) or {}
+        if str(state.get("signature") or "") != signature:
+            return False
+        seen_at = self._parse_iso_datetime(str(state.get("at") or ""))
+        if seen_at is None:
+            return False
+        return (datetime.now(timezone.utc) - seen_at).total_seconds() <= 120
+
+    def _record_mutation(self, call_id: str, signature: str) -> None:
+        self._last_mutation_by_call[call_id] = {
+            "signature": signature,
+            "at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def _build_mutation_reply(self, text: str, start: datetime | None, duplicate: bool) -> str:
+        lower = (text or "").lower()
+        is_reminder = any(token in lower for token in ("remind", "reminder", "set reminder", "set a reminder"))
+        if start is None:
+            if duplicate:
+                return "I already queued that request."
+            return "Got it. I queued this calendar request and will apply it shortly."
+
+        when = self._human_datetime_phrase(start)
+        if is_reminder:
+            if duplicate:
+                return f"I already set that reminder for {when}. I will call you one hour before."
+            return f"Done. Reminder scheduled for {when}. I will call you one hour before."
+        if duplicate:
+            return f"I already queued that event for {when}."
+        return f"Done. I queued this event for {when}."
+
+    @staticmethod
+    def _human_datetime_phrase(value: datetime) -> str:
+        now = datetime.now(timezone.utc)
+        today = now.date()
+        date_value = value.astimezone(timezone.utc).date()
+        day_label = value.strftime("%A")
+        if date_value == today:
+            day_label = "today"
+        elif date_value == (today + timedelta(days=1)):
+            day_label = "tomorrow"
+        time_label = value.astimezone(timezone.utc).strftime("%I:%M %p").lstrip("0")
+        return f"{day_label} at {time_label}"
+
+    @staticmethod
+    def _parse_iso_datetime(value: str) -> datetime | None:
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return parsed.astimezone(timezone.utc)
+        except Exception:
+            return None
 
     def _get_service(self):
         if self._service is not None:
