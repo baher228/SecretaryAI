@@ -160,7 +160,7 @@ class SecretaryAIAgent:
         )
 
         requires_human = bool(parsed.get("requires_human", False)) or raw_intent == IntentType.TRANSFER_HUMAN.value
-        transfer_reason = self._normalized_transfer_reason(parsed.get("transfer_reason"), requires_human)
+        transfer_reason = self._normalized_transfer_reason(parsed.get("transfer_reason"), requires_human, self.settings.language)
         extracted_fields = parsed.get("extracted_fields") if isinstance(parsed.get("extracted_fields"), dict) else {}
 
         return AgentAnalyzeResponse(
@@ -219,12 +219,12 @@ class SecretaryAIAgent:
             return 0.0
 
     @staticmethod
-    def _normalized_transfer_reason(transfer_reason: Any, requires_human: bool) -> str | None:
+    def _normalized_transfer_reason(transfer_reason: Any, requires_human: bool, lang: str = "en") -> str | None:
         reason = str(transfer_reason).strip() if transfer_reason is not None else None
         if reason == "":
             reason = None
         if requires_human and not reason:
-            reason = t(TRANSFER_REASON_DEFAULT, "en")
+            reason = t(TRANSFER_REASON_DEFAULT, lang)
         return reason
 
 

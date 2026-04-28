@@ -194,6 +194,11 @@ REMINDER_FREE: dict[str, str] = {
     "ru": "Вы свободны, могу поставить напоминание прямо сейчас.",
 }
 
+PREDICTIVE_REMINDER_KEYWORDS: dict[str, list[str]] = {
+    "en": ["is that possible", "am i available", "can i do that", "do i have time"],
+    "ru": ["это возможно", "я свободен", "могу ли я", "есть ли время", "получится ли"],
+}
+
 
 # ---------------------------------------------------------------------------
 # Live templates (keyword → reply)

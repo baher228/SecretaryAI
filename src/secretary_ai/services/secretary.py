@@ -59,6 +59,7 @@ from secretary_ai.core.locales import (
     CHAT_RETRY_PROMPT,
     CHAT_SYSTEM_PROMPT,
     MODEL_CHECK_PROMPT,
+    PREDICTIVE_REMINDER_KEYWORDS,
     REMINDER_BUSY,
     REMINDER_FREE,
     REMINDER_PARTIAL,
@@ -2094,7 +2095,7 @@ class SecretaryService:
 
             dynamic_item = {
                 "id": "predictive_reminder_followup",
-                "keywords": ["is that possible", "am i available", "can i do that", "do i have time"],
+                "keywords": PREDICTIVE_REMINDER_KEYWORDS.get(lang, PREDICTIVE_REMINDER_KEYWORDS["en"]),
                 "reply": dynamic_reply,
                 "priority": 13,
                 "calendar_check": True,
