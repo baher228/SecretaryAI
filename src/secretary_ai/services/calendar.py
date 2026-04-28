@@ -535,7 +535,7 @@ class CalendarService:
 
     def _mutation_signature(self, text: str, start: datetime | None) -> str:
         normalized = " ".join((text or "").lower().split())
-        normalized = re.sub(r"[^a-z0-9: ]+", "", normalized)
+        normalized = re.sub(r"[^\w: ]+", "", normalized)
         if start is not None:
             rounded = start.replace(second=0, microsecond=0).isoformat()
             return f"{normalized}|{rounded}"

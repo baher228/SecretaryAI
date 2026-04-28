@@ -209,6 +209,26 @@ REMINDER_FREE: dict[str, str] = {
     "ru": "Вы свободны, могу поставить напоминание прямо сейчас.",
 }
 
+REMINDER_ACK: dict[str, str] = {
+    "en": "Let me check your availability for that reminder.",
+    "ru": "Сейчас проверю вашу доступность для этого напоминания.",
+}
+
+REMINDER_RESULT_BUSY: dict[str, str] = {
+    "en": "You are not available then. You already have events, so I can suggest the next free slot.",
+    "ru": "Вы заняты в это время. У вас уже есть события, могу предложить ближайший свободный слот.",
+}
+
+REMINDER_RESULT_PARTIAL: dict[str, str] = {
+    "en": "You have a few events, but yes, I can fit this reminder in.",
+    "ru": "У вас есть несколько событий, но да, напоминание впишется.",
+}
+
+REMINDER_RESULT_FREE: dict[str, str] = {
+    "en": "Yes, you're available. I can set this reminder now.",
+    "ru": "Да, вы свободны. Могу поставить напоминание прямо сейчас.",
+}
+
 PREDICTIVE_REMINDER_KEYWORDS: dict[str, list[str]] = {
     "en": ["is that possible", "am i available", "can i do that", "do i have time"],
     "ru": ["это возможно", "я свободен", "могу ли я", "есть ли время", "получится ли"],
