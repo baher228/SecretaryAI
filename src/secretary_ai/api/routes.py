@@ -24,6 +24,8 @@ from secretary_ai.domain.models import (
     ChatRequest,
     ChatResponse,
     InboundCallResponse,
+    MapRouteRequest,
+    MapRouteResponse,
     ModelCheckRequest,
     ModelCheckResponse,
     OutboundCallRequest,
@@ -85,6 +87,13 @@ async def chat(
     payload: ChatRequest, secretary: SecretaryService = Depends(get_secretary)
 ) -> ChatResponse:
     return await secretary.chat_direct(payload)
+
+
+@router.post("/maps/route", response_model=MapRouteResponse)
+async def maps_route(
+    payload: MapRouteRequest, secretary: SecretaryService = Depends(get_secretary)
+) -> MapRouteResponse:
+    return await secretary.map_route(payload)
 
 
 @router.get("/telegram/auth/status", response_model=TelegramAuthStatusResponse)

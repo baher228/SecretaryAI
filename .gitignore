@@ -19,3 +19,5 @@ dist/
 # Local Telegram auth/session artifacts
 .telegram/*.session
 .telegram/*.session-journal
+# Local Google service account credential
+.telegram/service_account.json

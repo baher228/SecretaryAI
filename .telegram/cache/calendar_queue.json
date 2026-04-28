@@ -1,0 +1,609 @@
+[
+  {
+    "task_id": "cal-1776593075979-1",
+    "call_id": "tg-5523073095",
+    "transcript": "set a reminder to buy stocks today at some time like in an hour",
+    "context": {
+      "source": "manual_real_api_test",
+      "start_iso": "2026-04-19T11:04:35.967691+00:00",
+      "end_iso": "2026-04-19T11:34:35.967691+00:00"
+    },
+    "status": "done",
+    "created_at": "2026-04-19T10:04:35.979913+00:00",
+    "plan": {
+      "action": "create",
+      "title": "set a reminder to buy stocks today at some time like in a...",
+      "start_iso": "2026-04-19T11:04:35.967691+00:00",
+      "end_iso": "2026-04-19T11:34:35.967691+00:00",
+      "event_id": null,
+      "reason": "heuristic_create",
+      "planner_model": "heuristic"
+    },
+    "result": {
+      "status": "ok",
+      "detail": "Event created in provider.",
+      "event": {
+        "id": "rc8hns3ti6b8hl1ukpaj43t14o",
+        "summary": "set a reminder to buy stocks today at some time like in a...",
+        "start": "2026-04-19T12:04:35+01:00",
+        "end": "2026-04-19T12:34:35+01:00",
+        "description": null,
+        "location": null,
+        "attendees": [],
+        "html_link": "https://www.google.com/calendar/event?eid=cmM4aG5zM3RpNmI4aGwxdWtwYWo0M3QxNG8gZG9tb3NhaTIzNDVAbQ"
+      }
+    },
+    "processed_at": "2026-04-19T10:04:41.466709+00:00"
+  },
+  {
+    "task_id": "cal-1776593600532-2",
+    "call_id": "tg-5523073095",
+    "transcript": "set a reminder to buy stocks today at 12:14 PM.",
+    "context": {
+      "source": "manual_e2e_no_stt",
+      "start_iso": "2026-04-19T11:14:20.461267+00:00",
+      "end_iso": "2026-04-19T11:44:20.461267+00:00"
+    },
+    "status": "done",
+    "created_at": "2026-04-19T10:13:20.532347+00:00",
+    "plan": {
+      "action": "create",
+      "title": "set a reminder to buy stocks today at 12:14 PM.",
+      "start_iso": "2026-04-19T11:14:20.461267+00:00",
+      "end_iso": "2026-04-19T11:44:20.461267+00:00",
+      "event_id": null,
+      "reason": "heuristic_create",
+      "planner_model": "heuristic"
+    },
+    "result": {
+      "status": "ok",
+      "detail": "Event created in provider.",
+      "event": {
+        "id": "6o7omtkv52t6rnngqj1isesme8",
+        "summary": "set a reminder to buy stocks today at 12:14 PM.",
+        "start": "2026-04-19T12:14:20+01:00",
+        "end": "2026-04-19T12:44:20+01:00",
+        "description": null,
+        "location": null,
+        "attendees": [],
+        "html_link": "https://www.google.com/calendar/event?eid=Nm83b210a3Y1MnQ2cm5uZ3FqMWlzZXNtZTggZG9tb3NhaTIzNDVAbQ"
+      }
+    },
+    "processed_at": "2026-04-19T10:13:28.690731+00:00"
+  },
+  {
+    "task_id": "cal-1776593611038-3",
+    "call_id": "tg-5523073095",
+    "transcript": "Can you set a reminder?",
+    "context": {
+      "source": "telegram_live_loop",
+      "stt_provider": "faster_whisper"
+    },
+    "status": "failed",
+    "created_at": "2026-04-19T10:13:31.038288+00:00",
+    "plan": {
+      "action": "none",
+      "title": null,
+      "start_iso": null,
+      "end_iso": null,
+      "event_id": null,
+      "reason": "Missing required details: no title or date/time specified for the reminder.",
+      "planner_model": "glm-5.1"
+    },
+    "result": {
+      "status": "ignored",
+      "detail": "No safe action inferred."
+    },
+    "processed_at": "2026-04-19T10:13:38.855058+00:00"
+  },
+  {
+    "task_id": "cal-1776593629274-4",
+    "call_id": "tg-5523073095",
+    "transcript": "Can you set the reminder?",
+    "context": {
+      "source": "telegram_live_loop",
+      "stt_provider": "faster_whisper"
+    },
+    "status": "failed",
+    "created_at": "2026-04-19T10:13:49.274650+00:00",
+    "plan": {
+      "action": "none",
+      "title": null,
+      "start_iso": null,
+      "end_iso": null,
+      "event_id": null,
+      "reason": "Insufficient information: no reminder title, time, or date specified.",
+      "planner_model": "glm-5.1"
+    },
+    "result": {
+      "status": "ignored",
+      "detail": "No safe action inferred."
+    },
+    "processed_at": "2026-04-19T10:13:56.479994+00:00"
+  },
+  {
+    "task_id": "cal-1776593633816-5",
+    "call_id": "tg-5523073095",
+    "transcript": "a reminder for today.",
+    "context": {
+      "source": "telegram_live_loop",
+      "stt_provider": "faster_whisper"
+    },
+    "status": "failed",
+    "created_at": "2026-04-19T10:13:53.816675+00:00",
+    "plan": {
+      "action": "none",
+      "title": null,
+      "start_iso": null,
+      "end_iso": null,
+      "event_id": null,
+      "reason": "Transcript mentions a reminder for today but lacks a specific title/topic and time. Cannot safely create an event without these details.",
+      "planner_model": "glm-5.1"
+    },
+    "result": {
+      "status": "ignored",
+      "detail": "No safe action inferred."
+    },
+    "processed_at": "2026-04-19T10:14:02.469742+00:00"
+  },
+  {
+    "task_id": "cal-1776593643156-6",
+    "call_id": "tg-5523073095",
+    "transcript": "Can you set a reminder for tomorrow? Like, yeah. Can you set a reminder for today? 12.",
+    "context": {
+      "source": "telegram_live_loop",
+      "stt_provider": "faster_whisper"
+    },
+    "status": "done",
+    "created_at": "2026-04-19T10:14:03.156220+00:00",
+    "plan": {
+      "action": "create",
+      "title": "Can you set a reminder for tomorrow? Like, yeah. Can you...",
+      "start_iso": "2026-04-20T10:00:00+00:00",
+      "end_iso": "2026-04-20T10:30:00+00:00",
+      "event_id": null,
+      "reason": "heuristic_create",
+      "planner_model": "heuristic"
+    },
+    "result": {
+      "status": "ok",
+      "detail": "Event created in provider.",
+      "event": {
+        "id": "hqnsktfjb1sqecovuslnctq63g",
+        "summary": "Can you set a reminder for tomorrow? Like, yeah. Can you...",
+        "start": "2026-04-20T11:00:00+01:00",
+        "end": "2026-04-20T11:30:00+01:00",
+        "description": null,
+        "location": null,
+        "attendees": [],
+        "html_link": "https://www.google.com/calendar/event?eid=aHFuc2t0ZmpiMXNxZWNvdnVzbG5jdHE2M2cgZG9tb3NhaTIzNDVAbQ"
+      }
+    },
+    "processed_at": "2026-04-19T10:14:12.743883+00:00"
+  },
+  {
+    "task_id": "cal-1776593737492-7",
+    "call_id": "tg-5523073095",
+    "transcript": "set a reminder to buy stocks today at 12:16 PM",
+    "context": {
+      "source": "e2e_worker_test",
+      "start_iso": "2026-04-19T11:16:57.483943+00:00",
+      "end_iso": "2026-04-19T11:46:57.483943+00:00"
+    },
+    "status": "done",
+    "created_at": "2026-04-19T10:15:37.492926+00:00",
+    "plan": {
+      "action": "create",
+      "title": "set a reminder to buy stocks today at 12:16 PM",
+      "start_iso": "2026-04-19T11:16:57.483943+00:00",
+      "end_iso": "2026-04-19T11:46:57.483943+00:00",
+      "event_id": null,
+      "reason": "heuristic_create",
+      "planner_model": "heuristic"
+    },
+    "result": {
+      "status": "ok",
+      "detail": "Event created in provider.",
+      "event": {
+        "id": "8r71kmr84jp120et3sr3m5tiac",
+        "summary": "set a reminder to buy stocks today at 12:16 PM",
+        "start": "2026-04-19T12:16:57+01:00",
+        "end": "2026-04-19T12:46:57+01:00",
+        "description": null,
+        "location": null,
+        "attendees": [],
+        "html_link": "https://www.google.com/calendar/event?eid=OHI3MWttcjg0anAxMjBldDNzcjNtNXRpYWMgZG9tb3NhaTIzNDVAbQ"
+      }
+    },
+    "processed_at": "2026-04-19T10:15:44.957047+00:00"
+  },
+  {
+    "task_id": "cal-1776594191668-8",
+    "call_id": "tg-5523073095",
+    "transcript": "Set a reminder for today at 5pm. Bye!",
+    "context": {
+      "source": "telegram_live_loop",
+      "stt_provider": "faster_whisper"
+    },
+    "status": "done",
+    "created_at": "2026-04-19T10:23:11.668760+00:00",
+    "plan": {
+      "action": "create",
+      "title": "Set a reminder for today at 5pm. Bye!",
+      "start_iso": "2026-04-19T17:00:00+00:00",
+      "end_iso": "2026-04-19T17:30:00+00:00",
+      "event_id": null,
+      "reason": "heuristic_create",
+      "planner_model": "heuristic"
+    },
+    "result": {
+      "status": "ok",
+      "detail": "Event created in provider.",
+      "event": {
+        "id": "7ee3303ikuqvvunh4h6dien3vg",
+        "summary": "Set a reminder for today at 5pm. Bye!",
+        "start": "2026-04-19T18:00:00+01:00",
+        "end": "2026-04-19T18:30:00+01:00",
+        "description": null,
+        "location": null,
+        "attendees": [],
+        "html_link": "https://www.google.com/calendar/event?eid=N2VlMzMwM2lrdXF2dnVuaDRoNmRpZW4zdmcgZG9tb3NhaTIzNDVAbQ"
+      }
+    },
+    "processed_at": "2026-04-19T10:23:21.041014+00:00"
+  },
+  {
+    "task_id": "cal-1776594197926-9",
+    "call_id": "tg-5523073095",
+    "transcript": "I said a reminder for today at 5 p.m. Goodbye.",
+    "context": {
+      "source": "telegram_live_loop",
+      "stt_provider": "faster_whisper"
+    },
+    "status": "done",
+    "created_at": "2026-04-19T10:23:17.926277+00:00",
+    "plan": {
+      "action": "create",
+      "title": "I said a reminder for today at 5 p.m. Goodbye.",
+      "start_iso": "2026-04-20T10:00:00+00:00",
+      "end_iso": "2026-04-20T10:30:00+00:00",
+      "event_id": null,
+      "reason": "heuristic_create",
+      "planner_model": "heuristic"
+    },
+    "result": {
+      "status": "ok",
+      "detail": "Event created in provider.",
+      "event": {
+        "id": "9k530g7iui7btinch49f2ii02c",
+        "summary": "I said a reminder for today at 5 p.m. Goodbye.",
+        "start": "2026-04-20T11:00:00+01:00",
+        "end": "2026-04-20T11:30:00+01:00",
+        "description": null,
+        "location": null,
+        "attendees": [],
+        "html_link": "https://www.google.com/calendar/event?eid=OWs1MzBnN2l1aTdidGluY2g0OWYyaWkwMmMgZG9tb3NhaTIzNDVAbQ"
+      }
+    },
+    "processed_at": "2026-04-19T10:23:27.594953+00:00"
+  },
+  {
+    "task_id": "cal-1776594206736-10",
+    "call_id": "tg-5523073095",
+    "transcript": "Set a reminder for today at 5pm.",
+    "context": {
+      "source": "telegram_live_loop",
+      "stt_provider": "faster_whisper"
+    },
+    "status": "done",
+    "created_at": "2026-04-19T10:23:26.736887+00:00",
+    "plan": {
+      "action": "create",
+      "title": "Set a reminder for today at 5pm.",
+      "start_iso": "2026-04-19T17:00:00+00:00",
+      "end_iso": "2026-04-19T17:30:00+00:00",
+      "event_id": null,
+      "reason": "heuristic_create",
+      "planner_model": "heuristic"
+    },
+    "result": {
+      "status": "ok",
+      "detail": "Event created in provider.",
+      "event": {
+        "id": "heh8n9hmq6km7jrg3gm62a9c3c",
+        "summary": "Set a reminder for today at 5pm.",
+        "start": "2026-04-19T18:00:00+01:00",
+        "end": "2026-04-19T18:30:00+01:00",
+        "description": null,
+        "location": null,
+        "attendees": [],
+        "html_link": "https://www.google.com/calendar/event?eid=aGVoOG45aG1xNmttN2pyZzNnbTYyYTljM2MgZG9tb3NhaTIzNDVAbQ"
+      }
+    },
+    "processed_at": "2026-04-19T10:23:34.697390+00:00"
+  },
+  {
+    "task_id": "cal-1776594217812-11",
+    "call_id": "tg-5523073095",
+    "transcript": "Set a reminder for today at 5pm. Goodbye.",
+    "context": {
+      "source": "telegram_live_loop",
+      "stt_provider": "faster_whisper"
+    },
+    "status": "done",
+    "created_at": "2026-04-19T10:23:37.812686+00:00",
+    "plan": {
+      "action": "create",
+      "title": "Set a reminder for today at 5pm. Goodbye.",
+      "start_iso": "2026-04-19T17:00:00+00:00",
+      "end_iso": "2026-04-19T17:30:00+00:00",
+      "event_id": null,
+      "reason": "heuristic_create",
+      "planner_model": "heuristic"
+    },
+    "result": {
+      "status": "ok",
+      "detail": "Event created in provider.",
+      "event": {
+        "id": "8gn50iiacjfplvof3i4p611378",
+        "summary": "Set a reminder for today at 5pm. Goodbye.",
+        "start": "2026-04-19T18:00:00+01:00",
+        "end": "2026-04-19T18:30:00+01:00",
+        "description": null,
+        "location": null,
+        "attendees": [],
+        "html_link": "https://www.google.com/calendar/event?eid=OGduNTBpaWFjamZwbHZvZjNpNHA2MTEzNzggZG9tb3NhaTIzNDVAbQ"
+      }
+    },
+    "processed_at": "2026-04-19T10:23:46.716380+00:00"
+  },
+  {
+    "task_id": "cal-1776594468389-12",
+    "call_id": "tg-5523073095",
+    "transcript": "Set a reminder for today at 5pm. Goodbye.",
+    "context": {
+      "source": "telegram_live_loop",
+      "stt_provider": "faster_whisper",
+      "start_iso": "2026-04-19T17:00:00+00:00",
+      "end_iso": "2026-04-19T17:30:00+00:00"
+    },
+    "status": "done",
+    "created_at": "2026-04-19T10:27:48.389453+00:00",
+    "plan": {
+      "action": "create",
+      "title": "Set a reminder for today at 5pm. Goodbye.",
+      "start_iso": "2026-04-19T17:00:00+00:00",
+      "end_iso": "2026-04-19T17:30:00+00:00",
+      "event_id": null,
+      "reason": "heuristic_create",
+      "planner_model": "heuristic"
+    },
+    "result": {
+      "status": "ok",
+      "detail": "Event created in provider.",
+      "event": {
+        "id": "6drnr1r1ejrpo9bad7bpljig6c",
+        "summary": "Set a reminder for today at 5pm. Goodbye.",
+        "start": "2026-04-19T18:00:00+01:00",
+        "end": "2026-04-19T18:30:00+01:00",
+        "description": null,
+        "location": null,
+        "attendees": [],
+        "html_link": "https://www.google.com/calendar/event?eid=NmRybnIxcjFlanJwbzliYWQ3YnBsamlnNmMgZG9tb3NhaTIzNDVAbQ"
+      }
+    },
+    "processed_at": "2026-04-19T10:27:59.327428+00:00"
+  },
+  {
+    "task_id": "cal-1776594481445-13",
+    "call_id": "tg-debug",
+    "transcript": "Set a reminder for today at 5pm.",
+    "context": {
+      "source": "telegram_live_loop",
+      "start_iso": "2026-04-19T17:00:00+00:00",
+      "end_iso": "2026-04-19T17:30:00+00:00"
+    },
+    "status": "done",
+    "created_at": "2026-04-19T10:28:01.445074+00:00",
+    "plan": {
+      "action": "create",
+      "title": "Set a reminder for today at 5pm.",
+      "start_iso": "2026-04-19T17:00:00+00:00",
+      "end_iso": "2026-04-19T17:30:00+00:00",
+      "event_id": null,
+      "reason": "heuristic_create",
+      "planner_model": "heuristic"
+    },
+    "result": {
+      "status": "ok",
+      "detail": "Event created in provider.",
+      "event": {
+        "id": "3pv9h67hjt4536risdl7l6asb4",
+        "summary": "Set a reminder for today at 5pm.",
+        "start": "2026-04-19T18:00:00+01:00",
+        "end": "2026-04-19T18:30:00+01:00",
+        "description": null,
+        "location": null,
+        "attendees": [],
+        "html_link": "https://www.google.com/calendar/event?eid=M3B2OWg2N2hqdDQ1MzZyaXNkbDdsNmFzYjQgZG9tb3NhaTIzNDVAbQ"
+      }
+    },
+    "processed_at": "2026-04-19T10:28:10.449368+00:00"
+  },
+  {
+    "task_id": "cal-1776594868540-14",
+    "call_id": "tg-5523073095",
+    "transcript": "reminder for 1135 today take place talks.",
+    "context": {
+      "source": "telegram_live_loop",
+      "stt_provider": "faster_whisper"
+    },
+    "status": "done",
+    "created_at": "2026-04-19T10:34:28.540760+00:00",
+    "plan": {
+      "action": "create",
+      "title": "reminder for 1135 today take place talks.",
+      "start_iso": "2026-04-20T10:00:00+00:00",
+      "end_iso": "2026-04-20T10:30:00+00:00",
+      "event_id": null,
+      "reason": "heuristic_create",
+      "planner_model": "heuristic"
+    },
+    "result": {
+      "status": "ok",
+      "detail": "Event created in provider.",
+      "event": {
+        "id": "iq44c40ujnd88auvbpeerpr3cg",
+        "summary": "reminder for 1135 today take place talks.",
+        "start": "2026-04-20T11:00:00+01:00",
+        "end": "2026-04-20T11:30:00+01:00",
+        "description": null,
+        "location": null,
+        "attendees": [],
+        "html_link": "https://www.google.com/calendar/event?eid=aXE0NGM0MHVqbmQ4OGF1dmJwZWVycHIzY2cgZG9tb3NhaTIzNDVAbQ"
+      }
+    },
+    "processed_at": "2026-04-19T10:34:38.436280+00:00"
+  },
+  {
+    "task_id": "cal-1776594898814-15",
+    "call_id": "tg-5523073095",
+    "transcript": "Set a reminder to buy stocks today at 11.35.",
+    "context": {
+      "source": "telegram_live_loop",
+      "stt_provider": "faster_whisper"
+    },
+    "status": "done",
+    "created_at": "2026-04-19T10:34:58.814527+00:00",
+    "plan": {
+      "action": "create",
+      "title": "Set a reminder to buy stocks today at 11.35.",
+      "start_iso": "2026-04-20T10:00:00+00:00",
+      "end_iso": "2026-04-20T10:30:00+00:00",
+      "event_id": null,
+      "reason": "heuristic_create",
+      "planner_model": "heuristic"
+    },
+    "result": {
+      "status": "ok",
+      "detail": "Event created in provider.",
+      "event": {
+        "id": "gcc07a98n1024dethdgeke0io4",
+        "summary": "Set a reminder to buy stocks today at 11.35.",
+        "start": "2026-04-20T11:00:00+01:00",
+        "end": "2026-04-20T11:30:00+01:00",
+        "description": null,
+        "location": null,
+        "attendees": [],
+        "html_link": "https://www.google.com/calendar/event?eid=Z2NjMDdhOThuMTAyNGRldGhkZ2VrZTBpbzQgZG9tb3NhaTIzNDVAbQ"
+      }
+    },
+    "processed_at": "2026-04-19T10:35:05.813467+00:00"
+  },
+  {
+    "task_id": "cal-1776595123219-16",
+    "call_id": "tg-immediate-demo",
+    "transcript": "set a reminder to buy stocks today at 11.35",
+    "context": {
+      "source": "telegram_live_loop",
+      "start_iso": "2026-04-19T11:35:00+00:00",
+      "end_iso": "2026-04-19T12:05:00+00:00"
+    },
+    "status": "done",
+    "created_at": "2026-04-19T10:38:43.219777+00:00",
+    "plan": {
+      "action": "create",
+      "title": "set a reminder to buy stocks today at 11.35",
+      "start_iso": "2026-04-19T11:35:00+00:00",
+      "end_iso": "2026-04-19T12:05:00+00:00",
+      "event_id": null,
+      "reason": "heuristic_create",
+      "planner_model": "heuristic"
+    },
+    "result": {
+      "status": "ok",
+      "detail": "Event created in provider.",
+      "event": {
+        "id": "6gane8kksgrhgk4k7jevdjabqs",
+        "summary": "set a reminder to buy stocks today at 11.35",
+        "start": "2026-04-19T12:35:00+01:00",
+        "end": "2026-04-19T13:05:00+01:00",
+        "description": null,
+        "location": null,
+        "attendees": [],
+        "html_link": "https://www.google.com/calendar/event?eid=NmdhbmU4a2tzZ3JoZ2s0azdqZXZkamFicXMgZG9tb3NhaTIzNDVAbQ"
+      }
+    },
+    "processed_at": "2026-04-19T10:38:50.871861+00:00"
+  },
+  {
+    "task_id": "cal-1776596341522-17",
+    "call_id": "tg-5523073095",
+    "transcript": "Can you set a reminder at 12?",
+    "context": {
+      "source": "telegram_live_loop",
+      "stt_provider": "faster_whisper"
+    },
+    "status": "done",
+    "created_at": "2026-04-19T10:59:01.522041+00:00",
+    "plan": {
+      "action": "create",
+      "title": "Can you set a reminder at 12?",
+      "start_iso": "2026-04-20T10:00:00+00:00",
+      "end_iso": "2026-04-20T10:30:00+00:00",
+      "event_id": null,
+      "reason": "heuristic_create",
+      "planner_model": "heuristic"
+    },
+    "result": {
+      "status": "ok",
+      "detail": "Event created in provider.",
+      "event": {
+        "id": "agv1tn5m3qv3u84jll1phahis4",
+        "summary": "Can you set a reminder at 12?",
+        "start": "2026-04-20T11:00:00+01:00",
+        "end": "2026-04-20T11:30:00+01:00",
+        "description": null,
+        "location": null,
+        "attendees": [],
+        "html_link": "https://www.google.com/calendar/event?eid=YWd2MXRuNW0zcXYzdTg0amxsMXBoYWhpczQgZG9tb3NhaTIzNDVAbQ"
+      }
+    },
+    "processed_at": "2026-04-19T10:59:08.276255+00:00"
+  },
+  {
+    "task_id": "cal-1776596393544-18",
+    "call_id": "tg-5523073095",
+    "transcript": "Can you set a reminder at 12 o'clock today to buy shoes? repeat Can you repeat?",
+    "context": {
+      "source": "telegram_live_loop",
+      "stt_provider": "faster_whisper"
+    },
+    "status": "done",
+    "created_at": "2026-04-19T10:59:53.544709+00:00",
+    "plan": {
+      "action": "create",
+      "title": "Can you set a reminder at 12 o'clock today to buy shoes?...",
+      "start_iso": "2026-04-20T10:00:00+00:00",
+      "end_iso": "2026-04-20T10:30:00+00:00",
+      "event_id": null,
+      "reason": "heuristic_create",
+      "planner_model": "heuristic"
+    },
+    "result": {
+      "status": "ok",
+      "detail": "Event created in provider.",
+      "event": {
+        "id": "me98qasap4nhb3a5jiua867vrk",
+        "summary": "Can you set a reminder at 12 o'clock today to buy shoes?...",
+        "start": "2026-04-20T11:00:00+01:00",
+        "end": "2026-04-20T11:30:00+01:00",
+        "description": null,
+        "location": null,
+        "attendees": [],
+        "html_link": "https://www.google.com/calendar/event?eid=bWU5OHFhc2FwNG5oYjNhNWppdWE4Njd2cmsgZG9tb3NhaTIzNDVAbQ"
+      }
+    },
+    "processed_at": "2026-04-19T11:00:00.719434+00:00"
+  }
+]

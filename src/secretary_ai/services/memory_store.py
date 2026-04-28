@@ -71,6 +71,12 @@ class MemoryStore:
         self.short_term["calls"] = keep
         self._save_json(self.short_path, self.short_term)
 
+    def clear_short_term_call(self, call_id: str) -> None:
+        calls = self.short_term.setdefault("calls", {})
+        if call_id in calls:
+            calls.pop(call_id, None)
+            self._save_json(self.short_path, self.short_term)
+
     def set_mid_term_upcoming(self, events: list[dict[str, Any]]) -> None:
         self.mid_term = {
             "upcoming": events[:50],

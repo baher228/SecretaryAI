@@ -275,6 +275,14 @@ class MapRouteRequest(BaseModel):
 class MapRouteResponse(BaseModel):
     call_id: str
     status: str
+    detail: str | None = None
+    origin: str | None = None
+    destination: str | None = None
+    mode: str | None = None
+    eta_text: str | None = None
+    eta_minutes: int | None = None
+    distance_text: str | None = None
+    map_url: str | None = None
     route_details: str | None = None
 
 

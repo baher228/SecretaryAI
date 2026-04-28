@@ -55,15 +55,6 @@ class STTEngine:
             )
             text = " ".join(text.split())
 
-            # Fallback: tail-only clip can miss speech at segment boundaries.
-            # Retry on full recording before declaring no_speech.
-            if not text and source_path != path:
-                full_text = await asyncio.wait_for(
-                    asyncio.to_thread(self._transcribe_with_model, model, path),
-                    timeout=timeout,
-                )
-                text = " ".join(full_text.split())
-
             if not text:
                 return "", "no_speech"
             return text, "ok"

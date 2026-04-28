@@ -1,0 +1,18 @@
+{
+  "cached-1776592670": {
+    "event_id": "cached-1776592670",
+    "summary": "set a reminder to buy stocks today at some time like in a...",
+    "start_iso": "2026-04-19T10:57:50.582049+00:00",
+    "remind_at": "2026-04-19T09:57:49.585378+00:00",
+    "target_user": "@gringobochka",
+    "source_call_id": "tg-5523073095",
+    "audio_path": "C:\\Users\\1\\Documents\\SecretaryAI\\.telegram\\audio\\generated\\reminder-cached-1776592670-sim.mp3",
+    "status": "called",
+    "created_at": "2026-04-19T09:57:50.584800+00:00",
+    "attempt_count": 1,
+    "last_attempt_at": "2026-04-19T09:57:50.585467+00:00",
+    "last_call_id": "tg-sim-reminder",
+    "last_call_status": "active",
+    "triggered_at": "2026-04-19T09:57:50.585473+00:00"
+  }
+}

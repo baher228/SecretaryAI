@@ -61,6 +61,43 @@ def test_quick_reply_enqueues_mutation(tmp_path) -> None:
     assert result["status"] == "queued"
     assert result["queued"] is True
     assert len(service.queue) == 1
+    assert "queued" in result["reply"].lower()
+
+
+def test_quick_reply_reminder_returns_final_confirmation_and_dedupes(tmp_path) -> None:
+    cache = tmp_path / "calendar_cache.json"
+    queue = tmp_path / "calendar_queue.json"
+    service = CalendarService(
+        Settings(
+            calendar_enabled=True,
+            calendar_cache_path=str(cache),
+            calendar_queue_path=str(queue),
+        )
+    )
+
+    transcript = "Set a reminder for today at 5pm."
+    first = asyncio.run(
+        service.quick_reply_or_enqueue(
+            call_id="tg-5",
+            transcript=transcript,
+            context={},
+        )
+    )
+    second = asyncio.run(
+        service.quick_reply_or_enqueue(
+            call_id="tg-5",
+            transcript=transcript,
+            context={},
+        )
+    )
+
+    assert first["status"] == "queued"
+    assert first["queued"] is True
+    assert "reminder scheduled" in str(first["reply"]).lower()
+    assert second["status"] == "already_queued"
+    assert second["queued"] is False
+    assert "already set" in str(second["reply"]).lower()
+    assert len(service.queue) == 1
 
 
 def test_process_queue_applies_cache_only_create_when_provider_unavailable(tmp_path) -> None:

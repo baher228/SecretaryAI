@@ -28,3 +28,527 @@
 {"ts": "2026-04-19T07:37:21.830019+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
 {"ts": "2026-04-19T07:37:23.641136+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
 {"ts": "2026-04-19T07:37:24.862578+00:00", "call_id": "tg-5523073095", "stage": "loop_stopped", "data": {"reason": "call_ended", "status": "ended"}}
+{"ts": "2026-04-19T09:26:29.277773+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T09:26:39.993169+00:00", "call_id": "tg-5523073095", "stage": "live_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "speak_response": true, "context": {"source": "outbound_auto_start"}}}
+{"ts": "2026-04-19T09:26:40.029152+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 545384, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T09:26:45.611322+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 5.577, "chars": 17}}
+{"ts": "2026-04-19T09:26:45.622159+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 17, "sample": "Attention please.", "count": 1}}
+{"ts": "2026-04-19T09:26:52.205077+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T09:27:02.358333+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T09:27:07.814705+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T09:27:46.063641+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T09:28:11.455239+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T09:28:26.770240+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T09:28:34.636849+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T09:32:50.971791+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T09:32:57.670538+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T09:41:18.236522+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T09:44:40.548510+00:00", "call_id": "tg-5523073095", "stage": "live_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "speak_response": true, "context": {"source": "outbound_auto_start"}}}
+{"ts": "2026-04-19T09:44:40.687083+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 120296, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T09:44:46.643729+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 5.755, "chars": 3}}
+{"ts": "2026-04-19T09:44:46.655616+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 3, "sample": "Oh.", "count": 1}}
+{"ts": "2026-04-19T09:44:46.673533+00:00", "call_id": "tg-5523073095", "stage": "snippet_too_short", "data": {"chars": 3, "snippet": "Oh."}}
+{"ts": "2026-04-19T09:44:47.897631+00:00", "call_id": "tg-5523073095", "stage": "recording_file_shrunk", "data": {"file_size": 116072, "previous_size": 120296}}
+{"ts": "2026-04-19T09:44:47.904246+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 116072, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T09:44:51.251114+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 3.344, "chars": 23}}
+{"ts": "2026-04-19T09:44:51.252981+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 23, "sample": "Thank you for watching.", "count": 2}}
+{"ts": "2026-04-19T09:44:51.267554+00:00", "call_id": "tg-5523073095", "stage": "template_or_forced_reply", "data": {"forced_reply": false, "template_hit": {"id": "thanks", "reply": "You’re welcome.", "score": 3, "priority": 0, "calendar_check": false, "calendar_enqueue": false}, "transcript": "Thank you for watching."}}
+{"ts": "2026-04-19T09:44:52.299171+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 1.044, "reply_chars": 15, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T09:44:53.567827+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 206312, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T09:44:54.423635+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 0.852, "chars": 25}}
+{"ts": "2026-04-19T09:44:54.571722+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 25, "sample": "Can you set the reminder?", "count": 3}}
+{"ts": "2026-04-19T09:44:54.624876+00:00", "call_id": "tg-5523073095", "stage": "template_or_forced_reply", "data": {"forced_reply": false, "template_hit": {"id": "reminder_set", "reply": "Absolutely. Let me check your availability and queue this reminder.", "score": 2, "priority": 11, "calendar_check": true, "calendar_enqueue": true}, "transcript": "Can you set the reminder?"}}
+{"ts": "2026-04-19T09:44:55.090754+00:00", "call_id": "tg-5523073095", "stage": "fallback_tts", "data": {"tts_status": "generated", "has_audio": true, "reply": "Let me check your availability for that reminder."}}
+{"ts": "2026-04-19T09:44:55.582096+00:00", "call_id": "tg-5523073095", "stage": "fallback_audio_out", "data": {"audio_path": "/app/.telegram/audio/generated/tg-5523073095-20260419T094454642294Z.mp3", "status": "streaming_out", "detail": "Audio file is being streamed into the call."}}
+{"ts": "2026-04-19T09:44:56.757341+00:00", "call_id": "tg-5523073095", "stage": "fallback_tts", "data": {"tts_status": "generated", "has_audio": true, "reply": "You have a few events, but yes, I can fit this reminder in."}}
+{"ts": "2026-04-19T09:44:57.364966+00:00", "call_id": "tg-5523073095", "stage": "fallback_audio_out", "data": {"audio_path": "/app/.telegram/audio/generated/tg-5523073095-20260419T094456364124Z.mp3", "status": "streaming_out", "detail": "Audio file is being streamed into the call."}}
+{"ts": "2026-04-19T09:44:57.412569+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 2.824, "reply_chars": 59, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T09:44:58.616331+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 288104, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T09:45:01.457126+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 2.834, "chars": 5}}
+{"ts": "2026-04-19T09:45:01.463508+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 5, "sample": "5 PM.", "count": 4}}
+{"ts": "2026-04-19T09:45:01.533601+00:00", "call_id": "tg-5523073095", "stage": "system_noise_ignored", "data": {"sample": "5 PM."}}
+{"ts": "2026-04-19T09:45:01.538840+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 0.005, "reply_chars": 0, "call_audio_status": null}}
+{"ts": "2026-04-19T09:45:02.746483+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 353768, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T09:45:08.647040+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 5.893, "chars": 85}}
+{"ts": "2026-04-19T09:45:08.649611+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 85, "sample": "I love that. I love how it's changed. I'm so sorry. No more people. I don't know how.", "count": 5}}
+{"ts": "2026-04-19T09:45:08.659497+00:00", "call_id": "tg-5523073095", "stage": "template_or_forced_reply", "data": {"forced_reply": false, "template_hit": {"id": "reject", "reply": "Okay. I won’t do that. Tell me the correct option.", "score": 2, "priority": 0, "calendar_check": false, "calendar_enqueue": false}, "transcript": "I love that. I love how it's changed. I'm so sorry. No more people. I don't know how."}}
+{"ts": "2026-04-19T09:45:10.543974+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 1.894, "reply_chars": 50, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T09:45:11.765361+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 497768, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T09:45:16.174406+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 4.384, "chars": 77}}
+{"ts": "2026-04-19T09:45:16.186757+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 77, "sample": "I'm not going to do that. I'm not going to do that. I'm not going to do that.", "count": 6}}
+{"ts": "2026-04-19T09:45:16.249395+00:00", "call_id": "tg-5523073095", "stage": "template_or_forced_reply", "data": {"forced_reply": false, "template_hit": {"id": "reject", "reply": "Okay. I won’t do that. Tell me the correct option.", "score": 2, "priority": 0, "calendar_check": false, "calendar_enqueue": false}, "transcript": "I'm not going to do that. I'm not going to do that. I'm not going to do that."}}
+{"ts": "2026-04-19T09:45:17.876058+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 1.665, "reply_chars": 50, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T09:45:19.179470+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 614888, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T09:45:22.203295+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 2.94, "chars": 117}}
+{"ts": "2026-04-19T09:45:22.206847+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 117, "sample": "You know, I think it's a fun-looking thing. You know, you're shooting. You're shooting. Follow us. We have some more.", "count": 7}}
+{"ts": "2026-04-19T09:45:22.227997+00:00", "call_id": "tg-5523073095", "stage": "template_or_forced_reply", "data": {"forced_reply": false, "template_hit": {"id": "short_ack", "reply": "Perfect. What’s the next detail?", "score": 2, "priority": 1, "calendar_check": false, "calendar_enqueue": false}, "transcript": "You know, I think it's a fun-looking thing. You know, you're shooting. You're shooting. Follow us. We have some more."}}
+{"ts": "2026-04-19T09:45:45.303815+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T09:46:50.241276+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T09:47:06.408081+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T09:47:11.850345+00:00", "call_id": "tg-5523073095", "stage": "live_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "speak_response": true, "context": {"source": "outbound_auto_start"}}}
+{"ts": "2026-04-19T09:47:11.868285+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 673640, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T09:47:14.898680+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 3.026, "chars": 56}}
+{"ts": "2026-04-19T09:47:14.909057+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 56, "sample": "You'll see. All of the reactions. We will talk about it.", "count": 1}}
+{"ts": "2026-04-19T09:47:18.027570+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 3.113, "reply_chars": 63, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T09:47:20.647533+00:00", "call_id": "tg-5523073095", "stage": "recording_file_shrunk", "data": {"file_size": 69608, "previous_size": 673640}}
+{"ts": "2026-04-19T09:47:20.661678+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 69608, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T09:47:21.372014+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.703, "chars": 0}}
+{"ts": "2026-04-19T09:47:21.958697+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T09:47:23.164347+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 88808, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T09:47:23.797747+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.624, "chars": 0}}
+{"ts": "2026-04-19T09:47:24.455416+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T09:47:25.663040+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 109544, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T09:47:26.434454+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.752, "chars": 0}}
+{"ts": "2026-04-19T09:47:27.189357+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T09:47:28.398982+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 131048, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T09:47:29.224554+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.814, "chars": 0}}
+{"ts": "2026-04-19T09:47:29.945901+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T09:47:31.154005+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 152936, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T09:47:31.853057+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.686, "chars": 0}}
+{"ts": "2026-04-19T09:47:32.613677+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T09:47:33.820179+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 174824, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T09:47:34.594491+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.766, "chars": 0}}
+{"ts": "2026-04-19T09:47:35.296804+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T09:47:36.507990+00:00", "call_id": "tg-5523073095", "stage": "loop_tick", "data": {"tick": 15, "file_size": 195944, "last_audio_size": 174824, "last_stt_status": "no_speech"}}
+{"ts": "2026-04-19T09:47:36.513946+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 195944, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T09:47:37.239655+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.72, "chars": 0}}
+{"ts": "2026-04-19T09:47:37.974686+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T09:47:39.181981+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 217064, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T09:47:39.994376+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.807, "chars": 0}}
+{"ts": "2026-04-19T09:47:47.692367+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T09:47:50.606299+00:00", "call_id": "tg-5523073095", "stage": "live_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "speak_response": true, "context": {"source": "outbound_auto_start"}}}
+{"ts": "2026-04-19T09:47:50.620379+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 226664, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T09:47:51.409136+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.78, "chars": 0}}
+{"ts": "2026-04-19T09:47:52.009372+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T09:47:53.218640+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 226664, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T09:47:53.865220+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.642, "chars": 0}}
+{"ts": "2026-04-19T09:47:54.480962+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T09:47:55.691369+00:00", "call_id": "tg-5523073095", "stage": "recording_file_shrunk", "data": {"file_size": 79208, "previous_size": 226664}}
+{"ts": "2026-04-19T09:47:55.696902+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 79208, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T09:47:57.273482+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 1.57, "chars": 0}}
+{"ts": "2026-04-19T09:47:58.681595+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T09:47:59.887314+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 146408, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T09:48:00.821542+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 0.93, "chars": 18}}
+{"ts": "2026-04-19T09:48:00.826280+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 18, "sample": "I'll do the video.", "count": 1}}
+{"ts": "2026-04-19T09:48:03.532038+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 2.7, "reply_chars": 63, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T09:48:06.144084+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 247400, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T09:48:07.090132+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 0.936, "chars": 19}}
+{"ts": "2026-04-19T09:48:07.093824+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 19, "sample": "Put the morrow 3pm.", "count": 2}}
+{"ts": "2026-04-19T09:48:09.822537+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 2.725, "reply_chars": 63, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T09:48:12.432008+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 346856, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T09:48:13.343013+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 0.905, "chars": 35}}
+{"ts": "2026-04-19T09:48:13.348871+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 35, "sample": "Can you set a reminder photo model?", "count": 3}}
+{"ts": "2026-04-19T09:48:13.365261+00:00", "call_id": "tg-5523073095", "stage": "template_or_forced_reply", "data": {"forced_reply": false, "template_hit": {"id": "reminder_set", "reply": "Absolutely. Let me check your availability and queue this reminder.", "score": 4, "priority": 11, "calendar_check": true, "calendar_enqueue": true}, "transcript": "Can you set a reminder photo model?"}}
+{"ts": "2026-04-19T09:48:13.571087+00:00", "call_id": "tg-5523073095", "stage": "fallback_tts", "data": {"tts_status": "generated", "has_audio": true, "reply": "Let me check your availability for that reminder."}}
+{"ts": "2026-04-19T09:48:14.308461+00:00", "call_id": "tg-5523073095", "stage": "fallback_audio_out", "data": {"audio_path": "/app/.telegram/audio/generated/tg-5523073095-20260419T094813370610Z.mp3", "status": "streaming_out", "detail": "Audio file is being streamed into the call."}}
+{"ts": "2026-04-19T09:48:15.399999+00:00", "call_id": "tg-5523073095", "stage": "fallback_tts", "data": {"tts_status": "generated", "has_audio": true, "reply": "You have a few events, but yes, I can fit this reminder in."}}
+{"ts": "2026-04-19T09:48:16.085642+00:00", "call_id": "tg-5523073095", "stage": "fallback_audio_out", "data": {"audio_path": "/app/.telegram/audio/generated/tg-5523073095-20260419T094815198342Z.mp3", "status": "streaming_out", "detail": "Audio file is being streamed into the call."}}
+{"ts": "2026-04-19T09:48:16.139004+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 2.785, "reply_chars": 59, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T09:48:17.345274+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 425960, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T09:48:19.515039+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 2.165, "chars": 30}}
+{"ts": "2026-04-19T09:48:19.519571+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 30, "sample": "We'll see you in the next one.", "count": 4}}
+{"ts": "2026-04-19T09:48:22.320294+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 2.796, "reply_chars": 63, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T09:48:24.930298+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 547688, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T09:48:25.978973+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 1.042, "chars": 39}}
+{"ts": "2026-04-19T09:48:25.984703+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 39, "sample": "Sure, with the reminding of sleepy air.", "count": 5}}
+{"ts": "2026-04-19T09:48:28.035448+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 2.046, "reply_chars": 63, "call_audio_status": "call_not_active"}}
+{"ts": "2026-04-19T09:48:29.239948+00:00", "call_id": "tg-5523073095", "stage": "loop_stopped", "data": {"reason": "call_ended", "status": "ended"}}
+{"ts": "2026-04-19T09:50:36.551180+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T09:54:53.013113+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T09:55:44.011733+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T09:56:48.049122+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T10:02:45.015886+00:00", "call_id": "tg-5523073095", "stage": "live_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "speak_response": true, "context": {"source": "outbound_auto_start"}}}
+{"ts": "2026-04-19T10:02:45.032867+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 573416, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:03:23.280799+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T10:04:59.355977+00:00", "call_id": "tg-5523073095", "stage": "live_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "speak_response": true, "context": {"source": "outbound_auto_start"}}}
+{"ts": "2026-04-19T10:04:59.413877+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 573416, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:05:02.235366+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 2.817, "chars": 32}}
+{"ts": "2026-04-19T10:05:02.241622+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 32, "sample": "Sure, with the reminding of 3PM.", "count": 1}}
+{"ts": "2026-04-19T10:05:04.875850+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 2.629, "reply_chars": 63, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T10:05:07.292146+00:00", "call_id": "tg-5523073095", "stage": "recording_file_shrunk", "data": {"file_size": 125672, "previous_size": 573416}}
+{"ts": "2026-04-19T10:05:07.294990+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 125672, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:05:07.729841+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.429, "chars": 0}}
+{"ts": "2026-04-19T10:05:08.374853+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 3, "sample": "So.", "count": 2}}
+{"ts": "2026-04-19T10:05:08.503932+00:00", "call_id": "tg-5523073095", "stage": "snippet_too_short", "data": {"chars": 3, "snippet": "So."}}
+{"ts": "2026-04-19T10:05:09.729298+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 164072, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:05:10.988746+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 1.453, "chars": 10}}
+{"ts": "2026-04-19T10:05:11.006195+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 10, "sample": "That's it.", "count": 3}}
+{"ts": "2026-04-19T10:05:13.229723+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 2.168, "reply_chars": 63, "call_audio_status": "call_not_active"}}
+{"ts": "2026-04-19T10:05:14.437357+00:00", "call_id": "tg-5523073095", "stage": "loop_stopped", "data": {"reason": "call_ended", "status": "ended"}}
+{"ts": "2026-04-19T10:07:30.522196+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T10:07:38.499045+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T10:07:46.194460+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T10:11:56.869333+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T10:12:50.893900+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T10:13:20.456418+00:00", "call_id": "tg-5523073095", "stage": "live_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "speak_response": true, "context": {"source": "outbound_auto_start"}}}
+{"ts": "2026-04-19T10:13:20.472215+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 213992, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:13:20.536631+00:00", "call_id": "tg-5523073095", "stage": "template_or_forced_reply", "data": {"forced_reply": true, "template_hit": null, "transcript": "set a reminder to buy stocks today at 12:14 PM."}}
+{"ts": "2026-04-19T10:13:21.966409+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 1.491, "chars": 0}}
+{"ts": "2026-04-19T10:13:23.231845+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:13:24.436785+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 213992, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:13:25.508715+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 1.069, "chars": 5}}
+{"ts": "2026-04-19T10:13:25.511750+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 5, "sample": "Okay.", "count": 1}}
+{"ts": "2026-04-19T10:13:25.514012+00:00", "call_id": "tg-5523073095", "stage": "system_noise_ignored", "data": {"sample": "Okay."}}
+{"ts": "2026-04-19T10:13:25.516306+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 0.002, "reply_chars": 0, "call_audio_status": null}}
+{"ts": "2026-04-19T10:13:26.720027+00:00", "call_id": "tg-5523073095", "stage": "recording_file_shrunk", "data": {"file_size": 98408, "previous_size": 213992}}
+{"ts": "2026-04-19T10:13:26.723149+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 98408, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:13:27.471904+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.739, "chars": 0}}
+{"ts": "2026-04-19T10:13:28.213889+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 10, "sample": "Thank you.", "count": 2}}
+{"ts": "2026-04-19T10:13:28.219955+00:00", "call_id": "tg-5523073095", "stage": "template_or_forced_reply", "data": {"forced_reply": false, "template_hit": {"id": "thanks", "reply": "You’re welcome.", "score": 3, "priority": 0, "calendar_check": false, "calendar_enqueue": false}, "transcript": "Thank you."}}
+{"ts": "2026-04-19T10:13:28.821010+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 0.605, "reply_chars": 15, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T10:13:30.025093+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 151784, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:13:31.028709+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 1.001, "chars": 23}}
+{"ts": "2026-04-19T10:13:31.030752+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 23, "sample": "Can you set a reminder?", "count": 3}}
+{"ts": "2026-04-19T10:13:31.048730+00:00", "call_id": "tg-5523073095", "stage": "template_or_forced_reply", "data": {"forced_reply": true, "template_hit": null, "transcript": "Can you set a reminder?"}}
+{"ts": "2026-04-19T10:13:31.718498+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 0.685, "reply_chars": 65, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T10:13:34.404749+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 217832, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:13:35.940005+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 1.334, "chars": 24}}
+{"ts": "2026-04-19T10:13:35.942958+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 24, "sample": "for tomorrow. Nice game.", "count": 4}}
+{"ts": "2026-04-19T10:13:38.387641+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 2.441, "reply_chars": 63, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T10:13:41.003063+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 326504, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:13:43.477441+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 2.47, "chars": 22}}
+{"ts": "2026-04-19T10:13:43.481486+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 22, "sample": "I'm going to raise it.", "count": 5}}
+{"ts": "2026-04-19T10:13:46.039145+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 2.555, "reply_chars": 63, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T10:13:48.647933+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 449384, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:13:49.262211+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 0.612, "chars": 25}}
+{"ts": "2026-04-19T10:13:49.265303+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 25, "sample": "Can you set the reminder?", "count": 6}}
+{"ts": "2026-04-19T10:13:49.280937+00:00", "call_id": "tg-5523073095", "stage": "template_or_forced_reply", "data": {"forced_reply": true, "template_hit": null, "transcript": "Can you set the reminder?"}}
+{"ts": "2026-04-19T10:13:50.185987+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 0.917, "reply_chars": 65, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T10:13:52.679620+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 513512, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:13:53.805421+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 1.121, "chars": 21}}
+{"ts": "2026-04-19T10:13:53.807704+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 21, "sample": "a reminder for today.", "count": 7}}
+{"ts": "2026-04-19T10:13:53.822177+00:00", "call_id": "tg-5523073095", "stage": "template_or_forced_reply", "data": {"forced_reply": true, "template_hit": null, "transcript": "a reminder for today."}}
+{"ts": "2026-04-19T10:13:54.719470+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 0.909, "reply_chars": 65, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T10:13:57.140997+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 585704, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:13:58.584465+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 1.441, "chars": 3}}
+{"ts": "2026-04-19T10:13:58.587303+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 3, "sample": "12.", "count": 8}}
+{"ts": "2026-04-19T10:13:58.590027+00:00", "call_id": "tg-5523073095", "stage": "snippet_too_short", "data": {"chars": 3, "snippet": "12."}}
+{"ts": "2026-04-19T10:13:59.794858+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 628328, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:14:00.437911+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 0.638, "chars": 3}}
+{"ts": "2026-04-19T10:14:00.445253+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 3, "sample": "12.", "count": 9}}
+{"ts": "2026-04-19T10:14:00.448751+00:00", "call_id": "tg-5523073095", "stage": "snippet_too_short", "data": {"chars": 3, "snippet": "12."}}
+{"ts": "2026-04-19T10:14:01.653511+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 658280, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:14:03.145456+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 1.489, "chars": 86}}
+{"ts": "2026-04-19T10:14:03.148130+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 86, "sample": "Can you set a reminder for tomorrow? Like, yeah. Can you set a reminder for today? 12.", "count": 10}}
+{"ts": "2026-04-19T10:14:03.162324+00:00", "call_id": "tg-5523073095", "stage": "template_or_forced_reply", "data": {"forced_reply": true, "template_hit": null, "transcript": "Can you set a reminder for tomorrow? Like, yeah. Can you set a reminder for today? 12."}}
+{"ts": "2026-04-19T10:14:03.979880+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 0.829, "reply_chars": 65, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T10:14:06.387079+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 733160, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:14:07.790523+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 1.399, "chars": 49}}
+{"ts": "2026-04-19T10:14:07.793597+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 49, "sample": "I'm not going to tell you what's going to happen.", "count": 11}}
+{"ts": "2026-04-19T10:14:07.804559+00:00", "call_id": "tg-5523073095", "stage": "template_or_forced_reply", "data": {"forced_reply": false, "template_hit": {"id": "reject", "reply": "Okay. I won’t do that. Tell me the correct option.", "score": 2, "priority": 0, "calendar_check": false, "calendar_enqueue": false}, "transcript": "I'm not going to tell you what's going to happen."}}
+{"ts": "2026-04-19T10:14:08.811145+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 1.014, "reply_chars": 50, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T10:14:10.039231+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 789992, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:14:12.099813+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 2.081, "chars": 68}}
+{"ts": "2026-04-19T10:14:12.102072+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 68, "sample": "the top. How about you? The drum roll. The drum roll. The drum roll.", "count": 12}}
+{"ts": "2026-04-19T10:14:15.134533+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 3.03, "reply_chars": 63, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T10:14:17.742827+00:00", "call_id": "tg-5523073095", "stage": "loop_tick", "data": {"tick": 60, "file_size": 914792, "last_audio_size": 789992, "last_stt_status": "ok"}}
+{"ts": "2026-04-19T10:14:17.773801+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 914792, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:14:18.626464+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 0.849, "chars": 5}}
+{"ts": "2026-04-19T10:14:18.629731+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 5, "sample": "Okay.", "count": 13}}
+{"ts": "2026-04-19T10:14:18.634777+00:00", "call_id": "tg-5523073095", "stage": "system_noise_ignored", "data": {"sample": "Okay."}}
+{"ts": "2026-04-19T10:14:18.637860+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 0.003, "reply_chars": 0, "call_audio_status": null}}
+{"ts": "2026-04-19T10:14:19.841225+00:00", "call_id": "tg-5523073095", "stage": "loop_stopped", "data": {"reason": "call_ended", "status": "ended"}}
+{"ts": "2026-04-19T10:19:53.113717+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T10:19:58.052972+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T10:20:40.323638+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T10:20:58.160812+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T10:21:29.772467+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T10:21:34.785112+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T10:21:39.338392+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T10:22:04.406373+00:00", "call_id": "tg-1", "stage": "fallback_tts", "data": {"tts_status": "generated", "has_audio": true, "reply": "queued"}}
+{"ts": "2026-04-19T10:22:04.406761+00:00", "call_id": "tg-1", "stage": "fallback_audio_out", "data": {"audio_path": "fake.mp3", "status": "streaming_out", "detail": "ok"}}
+{"ts": "2026-04-19T10:22:21.301364+00:00", "call_id": "tg-1", "stage": "fallback_tts", "data": {"tts_status": "generated", "has_audio": true, "reply": "queued"}}
+{"ts": "2026-04-19T10:22:21.301685+00:00", "call_id": "tg-1", "stage": "fallback_audio_out", "data": {"audio_path": "fake.mp3", "status": "streaming_out", "detail": "ok"}}
+{"ts": "2026-04-19T10:22:56.905633+00:00", "call_id": "tg-5523073095", "stage": "live_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "speak_response": true, "context": {"source": "outbound_auto_start"}}}
+{"ts": "2026-04-19T10:22:57.139740+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 939368, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:23:01.337246+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 4.088, "chars": 51}}
+{"ts": "2026-04-19T10:23:01.340079+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 51, "sample": "Thank you. It's an acid powder. It's not a problem.", "count": 1}}
+{"ts": "2026-04-19T10:23:01.362181+00:00", "call_id": "tg-5523073095", "stage": "template_or_forced_reply", "data": {"forced_reply": false, "template_hit": {"id": "thanks", "reply": "You’re welcome.", "score": 3, "priority": 0, "calendar_check": false, "calendar_enqueue": false}, "transcript": "Thank you. It's an acid powder. It's not a problem."}}
+{"ts": "2026-04-19T10:23:02.059156+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 0.716, "reply_chars": 15, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T10:23:04.664189+00:00", "call_id": "tg-5523073095", "stage": "recording_file_shrunk", "data": {"file_size": 121832, "previous_size": 939368}}
+{"ts": "2026-04-19T10:23:04.670682+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 121832, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:23:07.504443+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 2.778, "chars": 10}}
+{"ts": "2026-04-19T10:23:07.513188+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 10, "sample": "Thank you.", "count": 2}}
+{"ts": "2026-04-19T10:23:07.531494+00:00", "call_id": "tg-5523073095", "stage": "template_or_forced_reply", "data": {"forced_reply": false, "template_hit": {"id": "thanks", "reply": "You’re welcome.", "score": 3, "priority": 0, "calendar_check": false, "calendar_enqueue": false}, "transcript": "Thank you."}}
+{"ts": "2026-04-19T10:23:07.961831+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 0.444, "reply_chars": 15, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T10:23:10.578405+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 217064, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:23:11.647506+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 1.07, "chars": 37}}
+{"ts": "2026-04-19T10:23:11.654284+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 37, "sample": "Set a reminder for today at 5pm. Bye!", "count": 3}}
+{"ts": "2026-04-19T10:23:11.677192+00:00", "call_id": "tg-5523073095", "stage": "template_or_forced_reply", "data": {"forced_reply": true, "template_hit": null, "transcript": "Set a reminder for today at 5pm. Bye!"}}
+{"ts": "2026-04-19T10:23:12.291324+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 0.63, "reply_chars": 65, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T10:23:14.896927+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 286952, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:23:17.914603+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 3.015, "chars": 46}}
+{"ts": "2026-04-19T10:23:17.917623+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 46, "sample": "I said a reminder for today at 5 p.m. Goodbye.", "count": 4}}
+{"ts": "2026-04-19T10:23:17.931805+00:00", "call_id": "tg-5523073095", "stage": "template_or_forced_reply", "data": {"forced_reply": true, "template_hit": null, "transcript": "I said a reminder for today at 5 p.m. Goodbye."}}
+{"ts": "2026-04-19T10:23:18.654123+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 0.733, "reply_chars": 65, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T10:23:21.066283+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 385256, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:23:26.724249+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 5.656, "chars": 32}}
+{"ts": "2026-04-19T10:23:26.727287+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 32, "sample": "Set a reminder for today at 5pm.", "count": 5}}
+{"ts": "2026-04-19T10:23:26.742293+00:00", "call_id": "tg-5523073095", "stage": "template_or_forced_reply", "data": {"forced_reply": true, "template_hit": null, "transcript": "Set a reminder for today at 5pm."}}
+{"ts": "2026-04-19T10:23:27.531926+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 0.801, "reply_chars": 65, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T10:23:30.140610+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 530024, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:23:31.308211+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 1.165, "chars": 21}}
+{"ts": "2026-04-19T10:23:31.310832+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 21, "sample": "We did just a moment.", "count": 6}}
+{"ts": "2026-04-19T10:23:34.228181+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 2.914, "reply_chars": 64, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T10:23:36.848466+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 637928, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:23:37.711309+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 0.855, "chars": 41}}
+{"ts": "2026-04-19T10:23:37.725962+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 41, "sample": "Set a reminder for today at 5pm. Goodbye.", "count": 7}}
+{"ts": "2026-04-19T10:23:37.844548+00:00", "call_id": "tg-5523073095", "stage": "template_or_forced_reply", "data": {"forced_reply": true, "template_hit": null, "transcript": "Set a reminder for today at 5pm. Goodbye."}}
+{"ts": "2026-04-19T10:23:38.536224+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 0.799, "reply_chars": 65, "call_audio_status": "call_not_active"}}
+{"ts": "2026-04-19T10:23:39.739458+00:00", "call_id": "tg-5523073095", "stage": "loop_stopped", "data": {"reason": "call_ended", "status": "ended"}}
+{"ts": "2026-04-19T10:26:42.615508+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T10:26:59.773308+00:00", "call_id": "tg-1", "stage": "fallback_tts", "data": {"tts_status": "generated", "has_audio": true, "reply": "queued"}}
+{"ts": "2026-04-19T10:26:59.773698+00:00", "call_id": "tg-1", "stage": "fallback_audio_out", "data": {"audio_path": "fake.mp3", "status": "streaming_out", "detail": "ok"}}
+{"ts": "2026-04-19T10:27:19.807720+00:00", "call_id": "tg-1", "stage": "fallback_tts", "data": {"tts_status": "generated", "has_audio": true, "reply": "queued"}}
+{"ts": "2026-04-19T10:27:19.808134+00:00", "call_id": "tg-1", "stage": "fallback_audio_out", "data": {"audio_path": "fake.mp3", "status": "streaming_out", "detail": "ok"}}
+{"ts": "2026-04-19T10:27:45.047916+00:00", "call_id": "tg-5523073095", "stage": "live_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "speak_response": true, "context": {"source": "outbound_auto_start"}}}
+{"ts": "2026-04-19T10:27:45.124485+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 658280, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:27:48.376237+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 3.15, "chars": 41}}
+{"ts": "2026-04-19T10:27:48.378880+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 41, "sample": "Set a reminder for today at 5pm. Goodbye.", "count": 1}}
+{"ts": "2026-04-19T10:27:48.396386+00:00", "call_id": "tg-5523073095", "stage": "template_or_forced_reply", "data": {"forced_reply": true, "template_hit": null, "transcript": "Set a reminder for today at 5pm. Goodbye."}}
+{"ts": "2026-04-19T10:27:49.652195+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 1.27, "reply_chars": 79, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T10:27:52.279862+00:00", "call_id": "tg-5523073095", "stage": "recording_file_shrunk", "data": {"file_size": 114152, "previous_size": 658280}}
+{"ts": "2026-04-19T10:27:52.405147+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 114152, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:27:53.865282+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 1.419, "chars": 0}}
+{"ts": "2026-04-19T10:27:54.340747+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:27:55.544974+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 166760, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:27:56.058686+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.511, "chars": 0}}
+{"ts": "2026-04-19T10:27:56.541312+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:27:57.833784+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095.wav", "file_size": 200552, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:27:58.691387+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.788, "chars": 0}}
+{"ts": "2026-04-19T10:27:59.360744+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:28:01.193333+00:00", "call_id": "tg-5523073095", "stage": "loop_stopped", "data": {"reason": "call_ended", "status": "ended"}}
+{"ts": "2026-04-19T10:28:01.453786+00:00", "call_id": "tg-debug", "stage": "template_or_forced_reply", "data": {"forced_reply": true, "template_hit": null, "transcript": "Set a reminder for today at 5pm."}}
+{"ts": "2026-04-19T10:28:01.594730+00:00", "call_id": "tg-debug", "stage": "template_or_forced_reply", "data": {"forced_reply": true, "template_hit": null, "transcript": "Set a reminder for today at 5pm."}}
+{"ts": "2026-04-19T10:28:20.710089+00:00", "call_id": "tg-1", "stage": "fallback_tts", "data": {"tts_status": "generated", "has_audio": true, "reply": "queued"}}
+{"ts": "2026-04-19T10:28:20.710413+00:00", "call_id": "tg-1", "stage": "fallback_audio_out", "data": {"audio_path": "fake.mp3", "status": "streaming_out", "detail": "ok"}}
+{"ts": "2026-04-19T10:30:34.065603+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T10:30:47.145514+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T10:30:55.305961+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T10:31:24.584543+00:00", "call_id": "tg-1", "stage": "fallback_tts", "data": {"tts_status": "generated", "has_audio": true, "reply": "queued"}}
+{"ts": "2026-04-19T10:31:24.584874+00:00", "call_id": "tg-1", "stage": "fallback_audio_out", "data": {"audio_path": "fake.mp3", "status": "streaming_out", "detail": "ok"}}
+{"ts": "2026-04-19T10:31:24.614078+00:00", "call_id": "tg-1", "stage": "live_start", "data": {"recording_path": "C:\\Users\\1\\AppData\\Local\\Temp\\pytest-of-1\\pytest-25\\test_start_live_agent_resets_p0\\audio\\recordings\\tg-1-20260419T103124613306Z.wav", "speak_response": false, "context": {"source": "test"}}}
+{"ts": "2026-04-19T10:31:43.006810+00:00", "call_id": "tg-1", "stage": "fallback_tts", "data": {"tts_status": "generated", "has_audio": true, "reply": "queued"}}
+{"ts": "2026-04-19T10:31:43.007128+00:00", "call_id": "tg-1", "stage": "fallback_audio_out", "data": {"audio_path": "fake.mp3", "status": "streaming_out", "detail": "ok"}}
+{"ts": "2026-04-19T10:31:43.037978+00:00", "call_id": "tg-1", "stage": "live_start", "data": {"recording_path": "C:\\Users\\1\\AppData\\Local\\Temp\\pytest-of-1\\pytest-26\\test_start_live_agent_resets_p0\\audio\\recordings\\tg-1-20260419T103143037146Z.wav", "speak_response": false, "context": {"source": "test"}}}
+{"ts": "2026-04-19T10:34:15.008733+00:00", "call_id": "tg-5523073095", "stage": "live_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T103414784987Z.wav", "speak_response": true, "context": {"source": "outbound_auto_start"}}}
+{"ts": "2026-04-19T10:34:19.390014+00:00", "call_id": "tg-5523073095", "stage": "loop_tick", "data": {"tick": 15, "file_size": 69608, "last_audio_size": 0, "last_stt_status": "waiting_audio"}}
+{"ts": "2026-04-19T10:34:19.426430+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T103414784987Z.wav", "file_size": 69608, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:34:21.629207+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 2.196, "chars": 16}}
+{"ts": "2026-04-19T10:34:21.631941+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 16, "sample": "what's the help?", "count": 1}}
+{"ts": "2026-04-19T10:34:24.500120+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 2.865, "reply_chars": 64, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T10:34:26.986407+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T103414784987Z.wav", "file_size": 191336, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:34:28.522145+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 1.523, "chars": 41}}
+{"ts": "2026-04-19T10:34:28.527090+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 41, "sample": "reminder for 1135 today take place talks.", "count": 2}}
+{"ts": "2026-04-19T10:34:28.549486+00:00", "call_id": "tg-5523073095", "stage": "template_or_forced_reply", "data": {"forced_reply": true, "template_hit": null, "transcript": "reminder for 1135 today take place talks."}}
+{"ts": "2026-04-19T10:34:29.336374+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 0.806, "reply_chars": 65, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T10:34:31.994590+00:00", "call_id": "tg-5523073095", "stage": "loop_tick", "data": {"tick": 30, "file_size": 273128, "last_audio_size": 191336, "last_stt_status": "ok"}}
+{"ts": "2026-04-19T10:34:31.997906+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T103414784987Z.wav", "file_size": 273128, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:34:33.296424+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 1.285, "chars": 64}}
+{"ts": "2026-04-19T10:34:33.299782+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 64, "sample": "Yes, sir. Thank you. Thank you. I'm sorry. I'm sorry. I'm sorry.", "count": 3}}
+{"ts": "2026-04-19T10:34:33.315228+00:00", "call_id": "tg-5523073095", "stage": "template_or_forced_reply", "data": {"forced_reply": false, "template_hit": {"id": "thanks", "reply": "You’re welcome.", "score": 3, "priority": 0, "calendar_check": false, "calendar_enqueue": false}, "transcript": "Yes, sir. Thank you. Thank you. I'm sorry. I'm sorry. I'm sorry."}}
+{"ts": "2026-04-19T10:34:34.064542+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 0.761, "reply_chars": 15, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T10:34:36.673280+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T103414784987Z.wav", "file_size": 348392, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:34:37.719410+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 0.966, "chars": 12}}
+{"ts": "2026-04-19T10:34:37.722236+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 12, "sample": "Can you say?", "count": 4}}
+{"ts": "2026-04-19T10:34:40.408661+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 2.683, "reply_chars": 64, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T10:34:43.041352+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T103414784987Z.wav", "file_size": 450536, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:34:44.686936+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 1.643, "chars": 36}}
+{"ts": "2026-04-19T10:34:44.690351+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 36, "sample": "Well, there's already a place to go.", "count": 5}}
+{"ts": "2026-04-19T10:34:47.506125+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 2.813, "reply_chars": 44, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T10:34:50.140452+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T103414784987Z.wav", "file_size": 564200, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:34:52.552833+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 2.392, "chars": 20}}
+{"ts": "2026-04-19T10:34:52.555702+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 20, "sample": "We only had an idea.", "count": 6}}
+{"ts": "2026-04-19T10:34:55.296026+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 2.737, "reply_chars": 64, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T10:34:57.910577+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T103414784987Z.wav", "file_size": 688232, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:34:58.800419+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 0.887, "chars": 44}}
+{"ts": "2026-04-19T10:34:58.804561+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 44, "sample": "Set a reminder to buy stocks today at 11.35.", "count": 7}}
+{"ts": "2026-04-19T10:34:58.820643+00:00", "call_id": "tg-5523073095", "stage": "template_or_forced_reply", "data": {"forced_reply": true, "template_hit": null, "transcript": "Set a reminder to buy stocks today at 11.35."}}
+{"ts": "2026-04-19T10:34:59.552882+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 0.744, "reply_chars": 65, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T10:35:02.161306+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T103414784987Z.wav", "file_size": 756584, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:35:03.811440+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 1.641, "chars": 4}}
+{"ts": "2026-04-19T10:35:03.814847+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 4, "sample": "five", "count": 8}}
+{"ts": "2026-04-19T10:35:03.818454+00:00", "call_id": "tg-5523073095", "stage": "snippet_too_short", "data": {"chars": 4, "snippet": "five"}}
+{"ts": "2026-04-19T10:35:05.022352+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T103414784987Z.wav", "file_size": 801512, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:35:07.407987+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 2.383, "chars": 84}}
+{"ts": "2026-04-19T10:35:07.446099+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 84, "sample": "They begin with the hearing. Yeah, this is the hearing. They begin with the hearing.", "count": 9}}
+{"ts": "2026-04-19T10:35:07.476712+00:00", "call_id": "tg-5523073095", "stage": "template_or_forced_reply", "data": {"forced_reply": false, "template_hit": {"id": "greeting", "reply": "Hi. I’m here. Tell me what you need.", "score": 4, "priority": 0, "calendar_check": false, "calendar_enqueue": false}, "transcript": "They begin with the hearing. Yeah, this is the hearing. They begin with the hearing."}}
+{"ts": "2026-04-19T10:35:08.187912+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 0.721, "reply_chars": 36, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T10:35:10.812222+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T103414784987Z.wav", "file_size": 893672, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:35:11.913852+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 1.106, "chars": 87}}
+{"ts": "2026-04-19T10:35:11.917183+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 87, "sample": "But if you can put it later on, let's say you have a good national check, what is that?", "count": 10}}
+{"ts": "2026-04-19T10:35:14.774534+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 2.854, "reply_chars": 64, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T10:35:16.177381+00:00", "call_id": "tg-5523073095", "stage": "loop_stopped", "data": {"reason": "call_ended", "status": "ended"}}
+{"ts": "2026-04-19T10:37:07.026933+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T10:37:24.332524+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T10:37:45.734059+00:00", "call_id": "tg-1", "stage": "fallback_tts", "data": {"tts_status": "generated", "has_audio": true, "reply": "queued"}}
+{"ts": "2026-04-19T10:37:45.734457+00:00", "call_id": "tg-1", "stage": "fallback_audio_out", "data": {"audio_path": "fake.mp3", "status": "streaming_out", "detail": "ok"}}
+{"ts": "2026-04-19T10:37:45.762000+00:00", "call_id": "tg-imm", "stage": "template_or_forced_reply", "data": {"forced_reply": true, "template_hit": null, "transcript": "set reminder today at five"}}
+{"ts": "2026-04-19T10:37:45.815285+00:00", "call_id": "tg-1", "stage": "live_start", "data": {"recording_path": "C:\\Users\\1\\AppData\\Local\\Temp\\pytest-of-1\\pytest-27\\test_start_live_agent_resets_p0\\audio\\recordings\\tg-1-20260419T103745814322Z.wav", "speak_response": false, "context": {"source": "test"}}}
+{"ts": "2026-04-19T10:38:07.053143+00:00", "call_id": "system", "stage": "stt_prewarm_ok", "data": {"model": "tiny.en"}}
+{"ts": "2026-04-19T10:38:07.399608+00:00", "call_id": "tg-1", "stage": "fallback_tts", "data": {"tts_status": "generated", "has_audio": true, "reply": "queued"}}
+{"ts": "2026-04-19T10:38:07.400052+00:00", "call_id": "tg-1", "stage": "fallback_audio_out", "data": {"audio_path": "fake.mp3", "status": "streaming_out", "detail": "ok"}}
+{"ts": "2026-04-19T10:38:07.440371+00:00", "call_id": "tg-imm", "stage": "template_or_forced_reply", "data": {"forced_reply": true, "template_hit": null, "transcript": "set reminder today at five"}}
+{"ts": "2026-04-19T10:38:07.475940+00:00", "call_id": "tg-1", "stage": "live_start", "data": {"recording_path": "C:\\Users\\1\\AppData\\Local\\Temp\\pytest-of-1\\pytest-28\\test_start_live_agent_resets_p0\\audio\\recordings\\tg-1-20260419T103807475130Z.wav", "speak_response": false, "context": {"source": "test"}}}
+{"ts": "2026-04-19T10:38:34.996491+00:00", "call_id": "tg-1", "stage": "fallback_tts", "data": {"tts_status": "generated", "has_audio": true, "reply": "queued"}}
+{"ts": "2026-04-19T10:38:34.996908+00:00", "call_id": "tg-1", "stage": "fallback_audio_out", "data": {"audio_path": "fake.mp3", "status": "streaming_out", "detail": "ok"}}
+{"ts": "2026-04-19T10:38:35.037998+00:00", "call_id": "tg-imm", "stage": "template_or_forced_reply", "data": {"forced_reply": true, "template_hit": null, "transcript": "set reminder today at five"}}
+{"ts": "2026-04-19T10:38:35.057966+00:00", "call_id": "tg-1", "stage": "live_start", "data": {"recording_path": "C:\\Users\\1\\AppData\\Local\\Temp\\pytest-of-1\\pytest-29\\test_start_live_agent_resets_p0\\audio\\recordings\\tg-1-20260419T103835057230Z.wav", "speak_response": false, "context": {"source": "test"}}}
+{"ts": "2026-04-19T10:38:50.876152+00:00", "call_id": "tg-immediate-demo", "stage": "template_or_forced_reply", "data": {"forced_reply": true, "template_hit": null, "transcript": "set a reminder to buy stocks today at 11.35"}}
+{"ts": "2026-04-19T10:40:05.925064+00:00", "call_id": "tg-5523073095", "stage": "live_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T104005754742Z.wav", "speak_response": true, "context": {"source": "outbound_auto_start"}}}
+{"ts": "2026-04-19T10:40:10.643009+00:00", "call_id": "tg-5523073095", "stage": "loop_tick", "data": {"tick": 15, "file_size": 75368, "last_audio_size": 0, "last_stt_status": "waiting_audio"}}
+{"ts": "2026-04-19T10:40:10.647993+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T104005754742Z.wav", "file_size": 75368, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:40:11.307789+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.658, "chars": 0}}
+{"ts": "2026-04-19T10:40:11.310282+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:40:12.546311+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T104005754742Z.wav", "file_size": 101480, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:40:13.003073+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.328, "chars": 0}}
+{"ts": "2026-04-19T10:40:13.006542+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:40:14.211872+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T104005754742Z.wav", "file_size": 116072, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:40:15.039329+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.825, "chars": 0}}
+{"ts": "2026-04-19T10:40:15.164078+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:40:16.379355+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T104005754742Z.wav", "file_size": 134120, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:40:16.715763+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.33, "chars": 0}}
+{"ts": "2026-04-19T10:40:16.720391+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:40:17.925542+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T104005754742Z.wav", "file_size": 146408, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:40:18.268220+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.339, "chars": 0}}
+{"ts": "2026-04-19T10:40:18.277713+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:40:19.486789+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T104005754742Z.wav", "file_size": 158696, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:40:19.783975+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.295, "chars": 0}}
+{"ts": "2026-04-19T10:40:19.795318+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:40:21.005076+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T104005754742Z.wav", "file_size": 170984, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:40:21.298308+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.29, "chars": 0}}
+{"ts": "2026-04-19T10:40:21.301068+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:40:22.505600+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T104005754742Z.wav", "file_size": 181736, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:40:22.865299+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.342, "chars": 0}}
+{"ts": "2026-04-19T10:40:22.867547+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:40:24.070847+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T104005754742Z.wav", "file_size": 195560, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:40:24.379274+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.306, "chars": 0}}
+{"ts": "2026-04-19T10:40:24.382713+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:40:25.597543+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T104005754742Z.wav", "file_size": 207848, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:40:25.865734+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.264, "chars": 0}}
+{"ts": "2026-04-19T10:40:25.869196+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:40:27.072908+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T104005754742Z.wav", "file_size": 218600, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:40:27.369418+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.293, "chars": 0}}
+{"ts": "2026-04-19T10:40:27.371886+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:40:28.576534+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T104005754742Z.wav", "file_size": 230888, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:40:29.096521+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.518, "chars": 0}}
+{"ts": "2026-04-19T10:40:29.119835+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:40:30.332943+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T104005754742Z.wav", "file_size": 244712, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:40:30.596412+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.261, "chars": 0}}
+{"ts": "2026-04-19T10:40:30.598414+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:40:31.814417+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T104005754742Z.wav", "file_size": 257000, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:40:32.743445+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.921, "chars": 0}}
+{"ts": "2026-04-19T10:40:32.754178+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:40:33.961759+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T104005754742Z.wav", "file_size": 274664, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:40:34.245824+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.281, "chars": 0}}
+{"ts": "2026-04-19T10:40:34.247941+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:40:35.452618+00:00", "call_id": "tg-5523073095", "stage": "loop_tick", "data": {"tick": 30, "file_size": 285416, "last_audio_size": 274664, "last_stt_status": "no_speech"}}
+{"ts": "2026-04-19T10:40:35.454828+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T104005754742Z.wav", "file_size": 285416, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:40:35.715531+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.258, "chars": 0}}
+{"ts": "2026-04-19T10:40:35.717346+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:40:36.920121+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T104005754742Z.wav", "file_size": 297704, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:40:37.231202+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.306, "chars": 0}}
+{"ts": "2026-04-19T10:40:37.233138+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:40:38.437349+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T104005754742Z.wav", "file_size": 309992, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:40:38.796060+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.357, "chars": 0}}
+{"ts": "2026-04-19T10:40:38.799205+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:40:40.003351+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T104005754742Z.wav", "file_size": 322280, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:40:40.336741+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.331, "chars": 0}}
+{"ts": "2026-04-19T10:40:40.338469+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:40:41.544555+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T104005754742Z.wav", "file_size": 334568, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:40:41.837005+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.29, "chars": 0}}
+{"ts": "2026-04-19T10:40:41.838780+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:40:43.043069+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T104005754742Z.wav", "file_size": 346856, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:40:43.333268+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.288, "chars": 0}}
+{"ts": "2026-04-19T10:40:43.336964+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:40:44.541031+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T104005754742Z.wav", "file_size": 359144, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:40:44.827305+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.281, "chars": 0}}
+{"ts": "2026-04-19T10:40:44.828978+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:40:46.031237+00:00", "call_id": "tg-5523073095", "stage": "loop_stopped", "data": {"reason": "call_ended", "status": "ended"}}
+{"ts": "2026-04-19T10:58:48.920786+00:00", "call_id": "tg-5523073095", "stage": "live_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T105848692364Z.wav", "speak_response": true, "context": {"source": "auto_attach_watcher"}}}
+{"ts": "2026-04-19T10:58:53.270176+00:00", "call_id": "tg-5523073095", "stage": "loop_tick", "data": {"tick": 15, "file_size": 0, "last_audio_size": 0, "last_stt_status": "waiting_audio"}}
+{"ts": "2026-04-19T10:58:53.678129+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T105848692364Z.wav", "file_size": 75368, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:58:56.009760+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 2.329, "chars": 0}}
+{"ts": "2026-04-19T10:58:56.012796+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:58:57.218298+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T105848692364Z.wav", "file_size": 131048, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:58:59.445795+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 2.224, "chars": 5}}
+{"ts": "2026-04-19T10:58:59.448703+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 5, "sample": "Okay.", "count": 1}}
+{"ts": "2026-04-19T10:58:59.452302+00:00", "call_id": "tg-5523073095", "stage": "system_noise_ignored", "data": {"sample": "Okay."}}
+{"ts": "2026-04-19T10:58:59.456498+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 0.004, "reply_chars": 0, "call_audio_status": null}}
+{"ts": "2026-04-19T10:59:00.663414+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T105848692364Z.wav", "file_size": 185960, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:59:01.507466+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 0.841, "chars": 29}}
+{"ts": "2026-04-19T10:59:01.511293+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 29, "sample": "Can you set a reminder at 12?", "count": 2}}
+{"ts": "2026-04-19T10:59:08.282850+00:00", "call_id": "tg-5523073095", "stage": "template_or_forced_reply", "data": {"forced_reply": true, "template_hit": null, "transcript": "Can you set a reminder at 12?"}}
+{"ts": "2026-04-19T10:59:09.189411+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 7.674, "reply_chars": 73, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T10:59:11.800957+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T105848692364Z.wav", "file_size": 364520, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:59:12.134878+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.329, "chars": 0}}
+{"ts": "2026-04-19T10:59:12.148710+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:59:13.358470+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T105848692364Z.wav", "file_size": 389096, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:59:13.764268+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.375, "chars": 0}}
+{"ts": "2026-04-19T10:59:13.766466+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:59:14.974895+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T105848692364Z.wav", "file_size": 415208, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:59:15.677084+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.699, "chars": 0}}
+{"ts": "2026-04-19T10:59:15.686046+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:59:16.909664+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T105848692364Z.wav", "file_size": 446696, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:59:17.287432+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.375, "chars": 0}}
+{"ts": "2026-04-19T10:59:17.320500+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:59:18.555063+00:00", "call_id": "tg-5523073095", "stage": "loop_tick", "data": {"tick": 30, "file_size": 472424, "last_audio_size": 446696, "last_stt_status": "no_speech"}}
+{"ts": "2026-04-19T10:59:18.557650+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T105848692364Z.wav", "file_size": 472424, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:59:18.830714+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.27, "chars": 0}}
+{"ts": "2026-04-19T10:59:18.832835+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:59:20.036172+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T105848692364Z.wav", "file_size": 495848, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:59:20.478117+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.437, "chars": 0}}
+{"ts": "2026-04-19T10:59:20.479899+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:59:21.679499+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T105848692364Z.wav", "file_size": 523112, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:59:21.975436+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.294, "chars": 0}}
+{"ts": "2026-04-19T10:59:21.978526+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:59:23.181713+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T105848692364Z.wav", "file_size": 546152, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:59:23.486690+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.303, "chars": 0}}
+{"ts": "2026-04-19T10:59:23.490572+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:59:24.702601+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T105848692364Z.wav", "file_size": 570728, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:59:24.994085+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.289, "chars": 0}}
+{"ts": "2026-04-19T10:59:24.996254+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:59:26.203123+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T105848692364Z.wav", "file_size": 595304, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:59:26.494542+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.283, "chars": 0}}
+{"ts": "2026-04-19T10:59:26.497878+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:59:27.702061+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T105848692364Z.wav", "file_size": 618728, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:59:28.332063+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 0.627, "chars": 7}}
+{"ts": "2026-04-19T10:59:28.337198+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 7, "sample": "repeat.", "count": 3}}
+{"ts": "2026-04-19T10:59:28.346426+00:00", "call_id": "tg-5523073095", "stage": "system_noise_ignored", "data": {"sample": "repeat."}}
+{"ts": "2026-04-19T10:59:28.364624+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 0.018, "reply_chars": 0, "call_audio_status": null}}
+{"ts": "2026-04-19T10:59:29.581092+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T105848692364Z.wav", "file_size": 648680, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:59:30.133029+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 0.549, "chars": 7}}
+{"ts": "2026-04-19T10:59:30.135832+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 7, "sample": "repeat.", "count": 4}}
+{"ts": "2026-04-19T10:59:30.139256+00:00", "call_id": "tg-5523073095", "stage": "snippet_deduped", "data": {"similarity": 1.0, "snippet": "repeat."}}
+{"ts": "2026-04-19T10:59:31.344209+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T105848692364Z.wav", "file_size": 677480, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:59:31.951728+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 0.605, "chars": 7}}
+{"ts": "2026-04-19T10:59:31.957737+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 7, "sample": "repeat.", "count": 5}}
+{"ts": "2026-04-19T10:59:31.962418+00:00", "call_id": "tg-5523073095", "stage": "snippet_deduped", "data": {"similarity": 1.0, "snippet": "repeat."}}
+{"ts": "2026-04-19T10:59:33.171657+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T105848692364Z.wav", "file_size": 705896, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:59:33.583481+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.405, "chars": 0}}
+{"ts": "2026-04-19T10:59:33.585826+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:59:34.788979+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T105848692364Z.wav", "file_size": 732008, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:59:35.533498+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.742, "chars": 0}}
+{"ts": "2026-04-19T10:59:35.562962+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:59:36.780559+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T105848692364Z.wav", "file_size": 764264, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:59:37.575982+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 0.792, "chars": 15}}
+{"ts": "2026-04-19T10:59:37.579588+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 15, "sample": "Can you repeat?", "count": 6}}
+{"ts": "2026-04-19T10:59:37.607883+00:00", "call_id": "tg-5523073095", "stage": "template_or_forced_reply", "data": {"forced_reply": false, "template_hit": {"id": "repeat", "reply": "Sure. I can repeat that. What part should I repeat?", "score": 2, "priority": 0, "calendar_check": false, "calendar_enqueue": false}, "transcript": "Can you repeat?"}}
+{"ts": "2026-04-19T10:59:38.334197+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 0.749, "reply_chars": 51, "call_audio_status": "streaming_out"}}
+{"ts": "2026-04-19T10:59:41.018033+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T105848692364Z.wav", "file_size": 831464, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:59:41.634319+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 0.613, "chars": 15}}
+{"ts": "2026-04-19T10:59:41.640446+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 15, "sample": "Can you repeat?", "count": 7}}
+{"ts": "2026-04-19T10:59:41.663494+00:00", "call_id": "tg-5523073095", "stage": "snippet_deduped", "data": {"similarity": 1.0, "snippet": "Can you repeat?"}}
+{"ts": "2026-04-19T10:59:42.900078+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T105848692364Z.wav", "file_size": 861800, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:59:43.186783+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "no_speech", "elapsed_sec": 0.284, "chars": 0}}
+{"ts": "2026-04-19T10:59:43.189139+00:00", "call_id": "tg-5523073095", "stage": "stt_not_ok", "data": {"status": "no_speech", "chars": 0, "sample": ""}}
+{"ts": "2026-04-19T10:59:44.393342+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260419T105848692364Z.wav", "file_size": 886376, "tail_seconds": 5.0, "recent_only": true, "timeout_sec": 8.0}}
+{"ts": "2026-04-19T10:59:53.532610+00:00", "call_id": "tg-5523073095", "stage": "stt_transcribe_done", "data": {"status": "ok", "elapsed_sec": 9.138, "chars": 79}}
+{"ts": "2026-04-19T10:59:53.536157+00:00", "call_id": "tg-5523073095", "stage": "stt_ok", "data": {"chars": 79, "sample": "Can you set a reminder at 12 o'clock today to buy shoes? repeat Can you repeat?", "count": 8}}
+{"ts": "2026-04-19T11:00:00.737570+00:00", "call_id": "tg-5523073095", "stage": "template_or_forced_reply", "data": {"forced_reply": true, "template_hit": null, "transcript": "Can you set a reminder at 12 o'clock today to buy shoes? repeat Can you repeat?"}}
+{"ts": "2026-04-19T11:00:01.362594+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 7.823, "reply_chars": 103, "call_audio_status": "call_not_active"}}
+{"ts": "2026-04-19T11:00:02.565003+00:00", "call_id": "tg-5523073095", "stage": "loop_stopped", "data": {"reason": "call_ended", "status": "ended"}}
+{"ts": "2026-04-28T10:43:20.034210+00:00", "call_id": "tg-1", "stage": "fallback_tts", "data": {"tts_status": "generated", "has_audio": true, "reply": "queued"}}
+{"ts": "2026-04-28T10:43:20.034303+00:00", "call_id": "tg-1", "stage": "fallback_audio_out", "data": {"audio_path": "fake.mp3", "status": "streaming_out", "detail": "ok"}}
+{"ts": "2026-04-28T10:43:20.046823+00:00", "call_id": "tg-imm", "stage": "template_or_forced_reply", "data": {"forced_reply": true, "template_hit": null, "transcript": "set reminder today at five"}}
+{"ts": "2026-04-28T10:43:20.054923+00:00", "call_id": "tg-1", "stage": "live_start", "data": {"recording_path": "/tmp/pytest-of-ubuntu/pytest-1/test_start_live_agent_resets_p0/audio/recordings/tg-1-20260428T104320054688Z.wav", "speak_response": false, "context": {"source": "test"}, "mode": "stt_ai_tts"}}

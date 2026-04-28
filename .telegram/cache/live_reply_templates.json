@@ -49,6 +49,69 @@
     "reply": "Understood. I will keep replies short and clear."
   },
   {
+    "id": "availability_check",
+    "keywords": [
+      "am i free",
+      "availability",
+      "free tomorrow",
+      "free at"
+    ],
+    "reply": "Let me quickly check your availability.",
+    "calendar_check": true,
+    "priority": 10
+  },
+  {
+    "id": "reminder_set",
+    "keywords": [
+      "set a reminder",
+      "remind me",
+      "set reminder",
+      "reminder"
+    ],
+    "reply": "Absolutely. Let me check your availability and queue this reminder.",
+    "calendar_check": true,
+    "calendar_enqueue": true,
+    "priority": 11
+  },
+  {
+    "id": "meeting_schedule",
+    "keywords": [
+      "schedule meeting",
+      "book meeting",
+      "add meeting",
+      "create event"
+    ],
+    "reply": "Absolutely. I’ll check your timetable and queue this for scheduling.",
+    "calendar_check": true,
+    "calendar_enqueue": true,
+    "priority": 11
+  },
+  {
+    "id": "meeting_followup_details",
+    "keywords": [
+      "what time works",
+      "propose a time",
+      "find a slot",
+      "next available slot"
+    ],
+    "reply": "Sure. I’ll check your availability and suggest the best slot.",
+    "calendar_check": true,
+    "calendar_enqueue": true,
+    "priority": 12
+  },
+  {
+    "id": "meeting_duration",
+    "keywords": [
+      "for 30 minutes",
+      "for 1 hour",
+      "for one hour",
+      "duration"
+    ],
+    "reply": "Noted. I’ll include that duration when I schedule it.",
+    "calendar_enqueue": true,
+    "priority": 10
+  },
+  {
     "id": "calendar_today",
     "keywords": [
       "calendar",
@@ -57,16 +120,6 @@
       "upcoming"
     ],
     "reply": "I can check your upcoming schedule now."
-  },
-  {
-    "id": "calendar_add",
-    "keywords": [
-      "add to calendar",
-      "create event",
-      "schedule meeting",
-      "book meeting"
-    ],
-    "reply": "Got it. I can add that to your calendar. Please confirm time."
   },
   {
     "id": "calendar_delete",
@@ -78,6 +131,31 @@
     "reply": "Okay. I can remove that event after you confirm which one."
   },
   {
+    "id": "calendar_move_day",
+    "keywords": [
+      "move to tomorrow",
+      "move to monday",
+      "move it to",
+      "change day"
+    ],
+    "reply": "Understood. I’ll queue that reschedule request.",
+    "calendar_enqueue": true,
+    "priority": 10
+  },
+  {
+    "id": "calendar_conflict",
+    "keywords": [
+      "conflict",
+      "double booked",
+      "overlap",
+      "clash"
+    ],
+    "reply": "Got it. I’ll check conflicts and suggest an alternative.",
+    "calendar_check": true,
+    "calendar_enqueue": true,
+    "priority": 12
+  },
+  {
     "id": "time_query",
     "keywords": [
       "what time",
@@ -87,15 +165,6 @@
     "reply": "I can check that now. Give me one second."
   },
   {
-    "id": "reminder",
-    "keywords": [
-      "remind me",
-      "set reminder",
-      "reminder"
-    ],
-    "reply": "Sure. I can set that reminder for you."
-  },
-  {
     "id": "reschedule",
     "keywords": [
       "reschedule",
@@ -103,6 +172,28 @@
       "another time"
     ],
     "reply": "Understood. I can help reschedule it."
+  },
+  {
+    "id": "reschedule_confirmation",
+    "keywords": [
+      "yes reschedule",
+      "confirm reschedule",
+      "go ahead reschedule"
+    ],
+    "reply": "Great. I’ll proceed with the reschedule request now.",
+    "calendar_enqueue": true,
+    "priority": 11
+  },
+  {
+    "id": "reschedule_reject",
+    "keywords": [
+      "dont reschedule",
+      "don't reschedule",
+      "keep it",
+      "leave it"
+    ],
+    "reply": "Understood. I’ll keep the current schedule unchanged.",
+    "priority": 11
   },
   {
     "id": "confirm",
@@ -134,6 +225,42 @@
     "reply": "You’re welcome."
   },
   {
+    "id": "status_update",
+    "keywords": [
+      "status",
+      "did you do it",
+      "is it done",
+      "update me"
+    ],
+    "reply": "Sure. I’ll check and give you a quick status update.",
+    "calendar_check": true,
+    "priority": 8
+  },
+  {
+    "id": "urgent_priority",
+    "keywords": [
+      "urgent",
+      "asap",
+      "right now",
+      "immediately"
+    ],
+    "reply": "Understood. I’ll mark this as urgent and process it first.",
+    "calendar_enqueue": true,
+    "priority": 12
+  },
+  {
+    "id": "timezone_change",
+    "keywords": [
+      "my timezone",
+      "in london time",
+      "in utc",
+      "time zone"
+    ],
+    "reply": "Got it. I’ll handle this in the correct timezone.",
+    "calendar_enqueue": true,
+    "priority": 9
+  },
+  {
     "id": "hold_on",
     "keywords": [
       "wait",
@@ -151,5 +278,67 @@
       "that is all"
     ],
     "reply": "Got it. I’ll wrap up now."
+  },
+  {
+    "id": "smalltalk_how_are_you",
+    "keywords": [
+      "how are you",
+      "hows it going",
+      "how are things"
+    ],
+    "reply": "I’m good and ready to help. What would you like to schedule?",
+    "priority": 2
+  },
+  {
+    "id": "smalltalk_name",
+    "keywords": [
+      "who are you",
+      "what are you",
+      "your name"
+    ],
+    "reply": "I’m your AI secretary. I can help with reminders and scheduling.",
+    "priority": 2
+  },
+  {
+    "id": "short_ack",
+    "keywords": [
+      "okay",
+      "ok",
+      "alright",
+      "sounds good"
+    ],
+    "reply": "Perfect. What’s the next detail?",
+    "priority": 1
+  },
+  {
+    "id": "calendar_add",
+    "keywords": [
+      "add to calendar",
+      "create event",
+      "schedule meeting",
+      "book meeting"
+    ],
+    "reply": "Got it. I can add that to your calendar. Please confirm time."
+  },
+  {
+    "id": "reminder",
+    "keywords": [
+      "remind me",
+      "set reminder",
+      "reminder"
+    ],
+    "reply": "Sure. I can set that reminder for you."
+  },
+  {
+    "id": "predictive_reminder_followup",
+    "keywords": [
+      "is that possible",
+      "am i available",
+      "can i do that",
+      "do i have time"
+    ],
+    "reply": "You have some events, but I can fit this reminder in.",
+    "priority": 13,
+    "calendar_check": true
   }
 ]
