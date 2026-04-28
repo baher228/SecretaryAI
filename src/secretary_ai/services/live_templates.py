@@ -274,9 +274,22 @@ class LiveTemplateMatcher:
 
     def _load_templates(self) -> list[dict[str, Any]]:
         defaults = self._locale_defaults
+        lang = self.settings.language
+        lang_marker = self.path.with_suffix(".lang")
         self.path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Regenerate if language changed since last write.
+        stored_lang = ""
+        if lang_marker.exists():
+            stored_lang = lang_marker.read_text(encoding="utf-8").strip()
+        if stored_lang != lang:
+            self.path.write_text(json.dumps(defaults, ensure_ascii=False, indent=2), encoding="utf-8")
+            lang_marker.write_text(lang, encoding="utf-8")
+            return list(defaults)
+
         if not self.path.exists():
             self.path.write_text(json.dumps(defaults, ensure_ascii=False, indent=2), encoding="utf-8")
+            lang_marker.write_text(lang, encoding="utf-8")
             return list(defaults)
 
         try:

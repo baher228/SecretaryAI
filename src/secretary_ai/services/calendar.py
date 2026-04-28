@@ -26,9 +26,11 @@ from secretary_ai.core.locales import (
     CALENDAR_REMINDER_DONE,
     CALENDAR_REMINDER_DUPLICATE,
     CALENDAR_REMINDER_KEYWORDS,
+    CALENDAR_TIME_FORMAT,
     CALENDAR_UNKNOWN_TIME,
     CALENDAR_UNTITLED,
     CALENDAR_UPCOMING_PREFIX,
+    WEEKDAY_NAMES,
     t,
 )
 
@@ -568,13 +570,16 @@ class CalendarService:
         lang = self.settings.language
         now = datetime.now(timezone.utc)
         today = now.date()
-        date_value = value.astimezone(timezone.utc).date()
-        day_label = value.strftime("%A")
+        utc_value = value.astimezone(timezone.utc)
+        date_value = utc_value.date()
+        weekday_names = WEEKDAY_NAMES.get(lang, WEEKDAY_NAMES["en"])
+        day_label = weekday_names[utc_value.weekday()]
         if date_value == today:
             day_label = t(CALENDAR_DAY_TODAY, lang)
         elif date_value == (today + timedelta(days=1)):
             day_label = t(CALENDAR_DAY_TOMORROW, lang)
-        time_label = value.astimezone(timezone.utc).strftime("%I:%M %p").lstrip("0")
+        time_fmt = t(CALENDAR_TIME_FORMAT, lang)
+        time_label = utc_value.strftime(time_fmt).lstrip("0") if "%" in time_fmt else utc_value.strftime("%H:%M")
         return t(CALENDAR_DATETIME_FORMAT, lang).format(day=day_label, time=time_label)
 
     @staticmethod

@@ -288,6 +288,16 @@ CALENDAR_DATETIME_FORMAT: dict[str, str] = {
     "ru": "{day} в {time}",
 }
 
+CALENDAR_TIME_FORMAT: dict[str, str] = {
+    "en": "%I:%M %p",
+    "ru": "%H:%M",
+}
+
+WEEKDAY_NAMES: dict[str, tuple[str, ...]] = {
+    "en": ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"),
+    "ru": ("понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"),
+}
+
 
 # ---------------------------------------------------------------------------
 # Predictive reminder follow-up
