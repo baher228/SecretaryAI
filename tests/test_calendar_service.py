@@ -12,6 +12,7 @@ def test_quick_reply_reads_from_cache(tmp_path) -> None:
             calendar_enabled=True,
             calendar_cache_path=str(cache),
             calendar_queue_path=str(queue),
+            language="en",
         )
     )
     service.cache = {

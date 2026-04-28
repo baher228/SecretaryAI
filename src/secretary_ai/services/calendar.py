@@ -8,6 +8,12 @@ from typing import Any
 import httpx
 
 from secretary_ai.core.config import Settings
+from secretary_ai.core.locales import (
+    CALENDAR_NO_EVENTS,
+    CALENDAR_PLANNER_PROMPT,
+    CALENDAR_UPCOMING_PREFIX,
+    t,
+)
 
 try:
     from google.oauth2 import service_account
@@ -132,11 +138,11 @@ class CalendarService:
             if not upcoming:
                 return {
                     "status": "served_from_cache",
-                    "reply": "I don’t see upcoming calendar events in cache right now.",
+                    "reply": t(CALENDAR_NO_EVENTS, self.settings.language),
                     "queued": False,
                 }
             lines = [self._event_voice_line(ev) for ev in upcoming]
-            reply = "Upcoming: " + " ".join(lines)
+            reply = t(CALENDAR_UPCOMING_PREFIX, self.settings.language) + " ".join(lines)
             return {
                 "status": "served_from_cache",
                 "reply": reply,
@@ -245,12 +251,7 @@ class CalendarService:
             "messages": [
                 {
                     "role": "system",
-                    "content": (
-                        "You are a calendar planner. Return ONLY JSON. "
-                        "Schema: {action: create|delete|none, title: string|null, "
-                        "start_iso: string|null, end_iso: string|null, event_id: string|null, reason: string}. "
-                        "If no safe mutation can be inferred, return action=none."
-                    ),
+                    "content": t(CALENDAR_PLANNER_PROMPT, self.settings.language),
                 },
                 {
                     "role": "user",

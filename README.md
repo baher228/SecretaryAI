@@ -1,6 +1,6 @@
 # Secretary AI
 
-AI-powered phone secretary that handles Telegram voice calls autonomously. Uses **Gemini 3.1 Flash Live** for real-time audio-to-audio conversation, with Z.AI GLM for text chat and agent reasoning.
+AI-powered phone secretary that handles Telegram voice calls autonomously. Uses **Gemini 3.1 Flash Live** for real-time audio-to-audio conversation, with Z.AI GLM for text chat and agent reasoning. Supports **Russian** and **English** — configurable via `LANGUAGE` in `.env`.
 
 ## Features
 
@@ -45,6 +45,17 @@ ZAI_API_KEY=your_zai_key
 ```
 
 See `.env.example` for all available settings and their defaults.
+
+#### Language
+
+Set `LANGUAGE` in `.env` to control the assistant's language (default: `ru`).
+
+```env
+LANGUAGE=ru   # Russian (default)
+LANGUAGE=en   # English
+```
+
+This switches system prompts, greeting, TTS voice, STT model, and template replies. You can also override individual settings (e.g. `TTS_VOICE`, `STT_LANGUAGE`) independently.
 
 ### 2. Start the service
 
@@ -139,7 +150,8 @@ The AI can then check availability, schedule meetings, and send reminders.
 ```
 src/secretary_ai/
 ├── core/
-│   └── config.py          # Settings (from .env)
+│   ├── config.py          # Settings (from .env)
+│   └── locales.py         # i18n strings (en/ru)
 ├── services/
 │   ├── secretary.py       # Main orchestrator
 │   ├── gemini_live.py     # Gemini Live audio-to-audio bridge
