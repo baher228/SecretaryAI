@@ -1,227 +1,164 @@
-# Launch Guide (Telegram MTProto + Docker)
+# Detailed Launch Guide
 
-## 1. Configure environment
+Step-by-step instructions for getting Secretary AI running with Docker.
 
-```powershell
-Copy-Item .env.example .env
+## 1. Get API credentials
+
+| Service | Where to get it | Required? |
+|---------|----------------|-----------|
+| Telegram API | [my.telegram.org](https://my.telegram.org) → API development tools | Yes |
+| Gemini API | [Google AI Studio](https://aistudio.google.com/apikey) | Yes (for voice) |
+| Z.AI API | Your Z.AI account dashboard | Yes (for text chat) |
+| Google Calendar | Google Cloud Console → Service Accounts | Optional |
+| Google Maps | Google Cloud Console → APIs & Services | Optional |
+
+## 2. Configure environment
+
+```bash
+cp .env.example .env
 ```
 
-Update `.env`:
+Open `.env` and fill in the required values:
 
 ```env
-ZAI_API_KEY=your_real_zai_key
+# Telegram MTProto (from my.telegram.org)
+TELEGRAM_API_ID=12345678
+TELEGRAM_API_HASH=your_api_hash_here
+
+# Gemini Live voice (from Google AI Studio)
+GEMINI_API_KEY=your_gemini_key_here
+GEMINI_LIVE_MODEL=gemini-3.1-flash-live-preview
+GEMINI_LIVE_VOICE=Zephyr
+GEMINI_LIVE_ENABLED=true
+
+# Z.AI GLM (for text chat and agent reasoning)
+ZAI_API_KEY=your_zai_key_here
 ZAI_BASE_URL=https://api.z.ai/api/coding/paas/v4
 ZAI_MODEL=glm-5.1
-AGENT_MAX_TOKENS=160
-AGENT_HISTORY_TURNS=4
-
-TELEGRAM_API_ID=12345678
-TELEGRAM_API_HASH=your_telegram_api_hash
-TELEGRAM_SESSION_PATH=.telegram/secretary
-TELEGRAM_AUTO_ANSWER_INBOUND=true
-TELEGRAM_AUTO_START_LIVE_AGENT=true
-TELEGRAM_AUTO_START_LIVE_SPEAK_RESPONSE=true
-TELEGRAM_AUTO_START_SCAN_SECONDS=2.0
-TELEGRAM_AUDIO_ROOT=.telegram/audio
-ASSISTANT_AUTO_GREET_ON_CONNECT=true
-ASSISTANT_GREETING_MESSAGE=Hello, this is your AI secretary. How can I help you today?
-TTS_ENABLED=true
-TTS_PROVIDER=edge_tts
-TTS_VOICE=en-US-AriaNeural
-TTS_RATE=+0%
-TTS_VOLUME=+0%
-STT_ENABLED=true
-STT_PROVIDER=faster_whisper
-STT_MODEL=tiny.en
-STT_LANGUAGE=en
-STT_DEVICE=cpu
-STT_COMPUTE_TYPE=int8
-STT_MIN_CHARS=6
-STT_RECENT_ONLY=true
-STT_TAIL_SECONDS=5.0
-STT_MIN_NEW_BYTES=12000
-TELEGRAM_LIVE_POLL_SECONDS=1.2
-TELEGRAM_LIVE_TTS_COOLDOWN_SECONDS=2.5
 ```
 
-`TELEGRAM_API_ID` and `TELEGRAM_API_HASH` come from `my.telegram.org`.
+### Optional: Calendar
 
-## 2. Start container
+```env
+CALENDAR_ENABLED=true
+CALENDAR_ID=your_email@gmail.com
+CALENDAR_SERVICE_ACCOUNT_JSON=.telegram/service_account.json
+```
 
-```powershell
+Place your Google service account JSON file at `.telegram/service_account.json`.
+
+### Optional: Google Maps ETA
+
+```env
+GOOGLE_MAPS_API_KEY=your_maps_key_here
+```
+
+## 3. Start the service
+
+```bash
 docker compose up --build
 ```
 
-App URLs:
+Wait for the logs to show the server is ready. Then open:
 
-- `http://127.0.0.1:8000/dashboard`
-- `http://127.0.0.1:8000/docs`
+- **Dashboard**: http://127.0.0.1:8000/dashboard
+- **API docs (Swagger)**: http://127.0.0.1:8000/docs
 
-## 3. Authenticate Telegram user session
+## 4. Authenticate Telegram
 
-1. Send code:
+Your Telegram user account needs to be linked on first run. This only needs to be done once — the session file persists in `.telegram/`.
 
-```powershell
-$body = @{ phone_number = "+441234567890" } | ConvertTo-Json
-Invoke-RestMethod -Method Post `
-  -Uri "http://127.0.0.1:8000/api/v1/telegram/auth/send-code" `
-  -ContentType "application/json" `
-  -Body $body
+**Send verification code:**
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/telegram/auth/send-code \
+  -H "Content-Type: application/json" \
+  -d '{"phone_number": "+1234567890"}'
 ```
 
-2. Sign in (use returned `phone_code_hash`):
+You'll receive a code in Telegram. Note the `phone_code_hash` from the response.
 
-```powershell
-$body = @{
-  phone_number = "+441234567890"
-  code = "12345"
-  phone_code_hash = "from_send_code"
-  password = $null
-} | ConvertTo-Json
+**Sign in:**
 
-Invoke-RestMethod -Method Post `
-  -Uri "http://127.0.0.1:8000/api/v1/telegram/auth/sign-in" `
-  -ContentType "application/json" `
-  -Body $body
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/telegram/auth/sign-in \
+  -H "Content-Type: application/json" \
+  -d '{
+    "phone_number": "+1234567890",
+    "code": "12345",
+    "phone_code_hash": "hash_from_previous_step"
+  }'
 ```
 
-If your account has 2FA, call sign-in with `password` set.
+If your account has 2FA enabled, add `"password": "your_2fa_password"` to the request body.
 
-3. Confirm status:
+**Verify authentication:**
 
-```powershell
-Invoke-RestMethod -Method Get -Uri "http://127.0.0.1:8000/api/v1/telegram/auth/status"
+```bash
+curl http://127.0.0.1:8000/api/v1/telegram/auth/status
 ```
 
-## 4. Start outbound call
+You should see `"authorized": true`.
 
-```powershell
-$body = @{
-  target_user = "@target_username"
-  purpose = "reminder"
-  initial_audio_path = $null
-  metadata = @{}
-} | ConvertTo-Json
+## 5. Test a call
 
-Invoke-RestMethod -Method Post `
-  -Uri "http://127.0.0.1:8000/api/v1/calls/outbound" `
-  -ContentType "application/json" `
-  -Body $body
+### Inbound calls
+
+With the default config (`TELEGRAM_AUTO_ANSWER_INBOUND=true`), the service automatically answers incoming Telegram calls and starts the AI voice loop.
+
+### Outbound calls
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/calls/outbound \
+  -H "Content-Type: application/json" \
+  -d '{"target_user": "@username"}'
 ```
 
-## 5. Push transcript and get AI response
+The AI live loop starts automatically (`TELEGRAM_AUTO_START_LIVE_AGENT=true`). You can also control it manually:
 
-```powershell
-$body = @{
-  call_id = "tg-123456789"
-  transcript = "Caller asked to reschedule to tomorrow at 3 PM."
-  context = @{}
-} | ConvertTo-Json
+```bash
+# Start live loop on a call
+curl -X POST http://127.0.0.1:8000/api/v1/calls/{call_id}/live/start \
+  -H "Content-Type: application/json" \
+  -d '{"speak_response": true}'
 
-Invoke-RestMethod -Method Post `
-  -Uri "http://127.0.0.1:8000/api/v1/agent/reply" `
-  -ContentType "application/json" `
-  -Body $body
+# Check status
+curl http://127.0.0.1:8000/api/v1/calls/{call_id}/live/status
+
+# Stop live loop
+curl -X POST http://127.0.0.1:8000/api/v1/calls/{call_id}/live/stop \
+  -H "Content-Type: application/json" \
+  -d '{}'
 ```
 
-Structured analysis endpoint (intent + confidence + transfer flag):
+## 6. Text chat
 
-```powershell
-$body = @{
-  call_id = "tg-123456789"
-  transcript = "Please reschedule my appointment to Tuesday at 3 PM."
-  context = @{ customer_name = "Alex" }
-} | ConvertTo-Json
-
-Invoke-RestMethod -Method Post `
-  -Uri "http://127.0.0.1:8000/api/v1/agent/analyze" `
-  -ContentType "application/json" `
-  -Body $body
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "What meetings do I have today?", "history": []}'
 ```
 
-Near realtime talk loop endpoint (transcript -> AI -> TTS -> call):
+## 7. Docker commands
 
-```powershell
-$body = @{
-  call_id = "tg-123456789"
-  transcript = "Could we move this appointment to Thursday morning?"
-  context = @{ source = "dashboard" }
-  speak_response = $true
-} | ConvertTo-Json
+```bash
+# View logs
+docker compose logs -f
 
-Invoke-RestMethod -Method Post `
-  -Uri "http://127.0.0.1:8000/api/v1/agent/live/respond" `
-  -ContentType "application/json" `
-  -Body $body
-```
+# Restart with rebuild
+docker compose down && docker compose up --build
 
-Telegram-native live loop (no dashboard mic required):
-
-By default this starts automatically when a call becomes active.
-
-Manual control is still available:
-
-1. Start outbound call and capture `call_id`.
-2. Start live loop manually:
-
-```powershell
-$callId = "tg-123456789"
-$body = @{
-  context = @{ source = "telegram_live" }
-  speak_response = $true
-} | ConvertTo-Json
-
-Invoke-RestMethod -Method Post `
-  -Uri "http://127.0.0.1:8000/api/v1/calls/$callId/live/start" `
-  -ContentType "application/json" `
-  -Body $body
-```
-
-3. Check status:
-
-```powershell
-Invoke-RestMethod -Method Get `
-  -Uri "http://127.0.0.1:8000/api/v1/calls/$callId/live/status"
-```
-
-4. Stop live loop:
-
-```powershell
-Invoke-RestMethod -Method Post `
-  -Uri "http://127.0.0.1:8000/api/v1/calls/$callId/live/stop" `
-  -ContentType "application/json" `
-  -Body "{}"
-```
-
-Note: first `live/start` can be slower because Whisper model files are downloaded.
-
-WebSocket realtime loop (persistent connection):
-
-- Open `http://127.0.0.1:8000/dashboard`
-- Go to `API Lab & Debug`
-- Use the `WS /api/v1/ws/live/{call_id}` card:
-  - connect using your active `call_id` (example: `tg-123456789`),
-  - send transcript chunks manually or click `Start Live Mic` for continuous browser speech capture,
-  - inspect returned `agent_response` events (includes `reply`, `intent`, `tts_status`, `call_audio_status`).
-- Use the `POST /api/v1/calls/{call_id}/live/start` dashboard card for Telegram-native speech loop.
-
-## 6. Useful Docker commands
-
-Logs:
-
-```powershell
-c
-```
-
-Restart with rebuild:
-
-```powershell
-docker compose down
-docker compose up --build
-```
-
-Stop:
-
-```powershell
+# Stop
 docker compose down
 ```
+
+## Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| `TELEGRAM_API_ID` or `TELEGRAM_API_HASH` errors | Get credentials from [my.telegram.org](https://my.telegram.org) |
+| Gemini voice not working | Check `GEMINI_API_KEY` is set and valid |
+| Slow first STT response | Normal — Whisper model downloads on first use (fallback mode only) |
+| Call connects but no AI response | Check `TELEGRAM_AUTO_START_LIVE_AGENT=true` in `.env` |
+| 2FA sign-in failure | Include `"password"` field in the sign-in request |
+| Calendar not working | Verify service account JSON exists and calendar is shared with the service account email |
