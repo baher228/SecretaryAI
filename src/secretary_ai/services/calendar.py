@@ -27,6 +27,8 @@ from secretary_ai.core.locales import (
     CALENDAR_REMINDER_DUPLICATE,
     CALENDAR_REMINDER_KEYWORDS,
     CALENDAR_TIME_FORMAT,
+    CALENDAR_TODAY_KEYWORDS,
+    CALENDAR_TOMORROW_KEYWORDS,
     CALENDAR_UNKNOWN_TIME,
     CALENDAR_UNTITLED,
     CALENDAR_UPCOMING_PREFIX,
@@ -489,14 +491,16 @@ class CalendarService:
             return compact
         return compact[:57].rstrip() + "..."
 
-    @staticmethod
-    def _extract_datetime_from_text(text: str) -> datetime | None:
+    def _extract_datetime_from_text(self, text: str) -> datetime | None:
+        lang = self.settings.language
         lower = (text or "").lower()
         base = datetime.now(timezone.utc)
         day_offset = 1
-        if "today" in lower:
+        today_kw = CALENDAR_TODAY_KEYWORDS.get(lang, ()) + CALENDAR_TODAY_KEYWORDS.get("en", ())
+        tomorrow_kw = CALENDAR_TOMORROW_KEYWORDS.get(lang, ()) + CALENDAR_TOMORROW_KEYWORDS.get("en", ())
+        if any(kw in lower for kw in today_kw):
             day_offset = 0
-        elif "tomorrow" in lower:
+        elif any(kw in lower for kw in tomorrow_kw):
             day_offset = 1
 
         lower = lower.replace("a.m.", "am").replace("p.m.", "pm")
@@ -579,7 +583,7 @@ class CalendarService:
         elif date_value == (today + timedelta(days=1)):
             day_label = t(CALENDAR_DAY_TOMORROW, lang)
         time_fmt = t(CALENDAR_TIME_FORMAT, lang)
-        time_label = utc_value.strftime(time_fmt).lstrip("0") if "%" in time_fmt else utc_value.strftime("%H:%M")
+        time_label = utc_value.strftime(time_fmt).lstrip("0") if "%I" in time_fmt else utc_value.strftime(time_fmt)
         return t(CALENDAR_DATETIME_FORMAT, lang).format(day=day_label, time=time_label)
 
     @staticmethod

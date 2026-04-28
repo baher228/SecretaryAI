@@ -283,6 +283,16 @@ CALENDAR_DAY_TOMORROW: dict[str, str] = {
     "ru": "завтра",
 }
 
+CALENDAR_TODAY_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "en": ("today",),
+    "ru": ("сегодня",),
+}
+
+CALENDAR_TOMORROW_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "en": ("tomorrow",),
+    "ru": ("завтра",),
+}
+
 CALENDAR_DATETIME_FORMAT: dict[str, str] = {
     "en": "{day} at {time}",
     "ru": "{day} в {time}",
