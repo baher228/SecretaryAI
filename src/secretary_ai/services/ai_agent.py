@@ -1,10 +1,9 @@
 import json
 from typing import Any
 
-import httpx
-
 from secretary_ai.core.config import Settings
 from secretary_ai.domain.models import AgentAnalyzeResponse, IntentType
+from secretary_ai.services.zai_client import extract_message, zai_chat_completion
 
 
 _FALLBACK_REPLIES = {
@@ -101,11 +100,11 @@ class SecretaryAIAgent:
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
-        result = await self._zai_chat_completion(payload)
+        result = await zai_chat_completion(self.settings, payload)
         if result.get("error"):
             return self._heuristic_response(call_id, transcript, context)
 
-        message = self._extract_message(result["data"])
+        message = extract_message(result["data"])
         raw_model_text = str(message.get("content") or message.get("reasoning_content") or "").strip()
         parsed = self._try_parse_json(raw_model_text)
         if not parsed:
@@ -243,30 +242,7 @@ class SecretaryAIAgent:
             reason = "Caller requested a person."
         return reason
 
-    async def _zai_chat_completion(self, payload: dict[str, Any]) -> dict[str, Any]:
-        base_url = self.settings.zai_base_url.rstrip("/")
-        url = f"{base_url}/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {self.settings.zai_api_key}",
-            "Content-Type": "application/json",
-            "Accept-Language": "en-US,en",
-        }
-        try:
-            async with httpx.AsyncClient(timeout=self.settings.zai_timeout_seconds) as client:
-                response = await client.post(url, headers=headers, json=payload)
-            if response.status_code >= 300:
-                return {"error": f"GLM request failed ({response.status_code}).", "raw": response.text[:240]}
-            return {"data": response.json()}
-        except Exception as exc:
-            return {"error": f"Connection error: {exc.__class__.__name__}"}
 
-    @staticmethod
-    def _extract_message(data: dict[str, Any]) -> dict[str, Any]:
-        choices = data.get("choices") or []
-        if not choices:
-            return {}
-        msg = choices[0].get("message") or {}
-        return msg if isinstance(msg, dict) else {}
 
     @staticmethod
     def _try_parse_json(raw: str) -> dict[str, Any]:

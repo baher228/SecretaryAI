@@ -12,11 +12,13 @@ Experimental Python backend for a hackathon AI secretary using a real Telegram u
 - Best-effort audio tools:
   - stream local audio file into a call,
   - record incoming call audio to file.
+- **Gemini Live audio-to-audio voice loop**: call audio streams directly to Gemini 3.1 Flash Live and spoken responses play back into the call (no separate STT/TTS needed).
+- Fallback STT -> Z.AI -> TTS pipeline when Gemini Live is disabled.
 - Local API for your main AI agent:
   - push transcript snippets,
   - request AI reply + action items from Z.AI GLM,
   - request structured AI analysis (intent/confidence/handoff/action plan),
-  - run a near realtime talk loop (transcript -> AI -> TTS -> call audio out).
+  - run a near realtime talk loop (Gemini Live audio-to-audio or STT -> AI -> TTS).
 - Dashboard for manual testing and hackathon demos.
 
 ## Stack
@@ -24,7 +26,8 @@ Experimental Python backend for a hackathon AI secretary using a real Telegram u
 - FastAPI
 - Telethon (MTProto user account)
 - py-tgcalls (Telegram call/media layer)
-- Z.AI GLM (`https://api.z.ai/api/coding/paas/v4`)
+- **Gemini 3.1 Flash Live** (audio-to-audio voice loop via `google-genai`)
+- Z.AI GLM (text chat / agent reasoning)
 
 ## Quick start
 
@@ -77,8 +80,8 @@ Agent reasoning:
 - This is experimental infrastructure, not production telecom.
 - Telegram call behavior may vary by account/region/client constraints.
 - Keep this provider behind an adapter so you can swap back to Twilio/other vendors later.
-- Live conversation currently uses browser speech-to-text + server TTS + Telegram audio streaming.
-- Telegram-native live loop is now available: call audio recording -> STT -> AI -> TTS response in call.
+- **Default voice mode is Gemini Live**: set `GEMINI_API_KEY` and `GEMINI_LIVE_ENABLED=true` for direct audio-to-audio with Gemini 3.1 Flash Live.
+- Falls back to the STT -> Z.AI -> TTS pipeline when Gemini Live is disabled or `GEMINI_API_KEY` is not set.
 - Telegram-native live loop auto-starts by default on active calls (`TELEGRAM_AUTO_START_LIVE_AGENT=true`).
 - First Telegram live loop run downloads the Whisper model (`STT_MODEL`) and may take extra time.
 - For immediate first speech, configure `ASSISTANT_AUTO_GREET_ON_CONNECT` and `ASSISTANT_GREETING_MESSAGE`.

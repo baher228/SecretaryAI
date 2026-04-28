@@ -8,8 +8,6 @@ import re
 from time import monotonic
 from typing import Any
 
-import httpx
-
 from secretary_ai.core.config import Settings
 from secretary_ai.domain.models import (
     AgentLiveRespondResponse,
@@ -55,6 +53,8 @@ from secretary_ai.services.telegram_calls import TelegramCallService
 from secretary_ai.services.tts import TTSEngine
 from secretary_ai.services.maps import MapService
 from secretary_ai.services.booking import BookingService
+from secretary_ai.services.gemini_live import GeminiLiveSession
+from secretary_ai.services.zai_client import extract_message, zai_chat_completion
 
 
 class SecretaryService:
@@ -116,11 +116,12 @@ class SecretaryService:
                 "Telegram MTProto (Telethon user session)",
                 "Telegram Calls Engine (py-tgcalls private calls)",
                 "AI Orchestrator (intent + response + actions)",
-                "STT Adapter (faster-whisper)",
-                "TTS Adapter (assistant voice generation)",
-                "Telegram Live Loop (recording -> STT -> AI -> TTS)",
+                "Gemini Live Bridge (audio-to-audio via Gemini 3.1 Flash Live)",
+                "STT Adapter (faster-whisper, fallback)",
+                "TTS Adapter (assistant voice generation, fallback)",
+                "Telegram Live Loop (Gemini Live or recording -> STT -> AI -> TTS)",
                 "Secretary Orchestrator (this service)",
-                "Z.AI Reasoning Endpoint",
+                "Z.AI Reasoning Endpoint (text chat)",
                 "Storage Layer (in-memory MVP)",
             ],
             notes=(
@@ -145,7 +146,7 @@ class SecretaryService:
             "temperature": 0.1,
             "max_tokens": 100,
         }
-        result = await self._zai_chat_completion(payload)
+        result = await zai_chat_completion(self.settings, payload)
         if result.get("error"):
             return ModelCheckResponse(
                 model=self.settings.zai_model,
@@ -153,7 +154,7 @@ class SecretaryService:
                 detail=result["error"],
                 output=result.get("raw"),
             )
-        message = self._extract_message(result["data"])
+        message = extract_message(result["data"])
         return ModelCheckResponse(
             model=self.settings.zai_model,
             connected=True,
@@ -186,11 +187,11 @@ class SecretaryService:
                 "temperature": self.settings.chat_temperature,
                 "max_tokens": self.settings.chat_max_tokens,
             }
-            result = await self._zai_chat_completion(api_payload)
+            result = await zai_chat_completion(self.settings, api_payload)
             if result.get("error"):
                 reply = f"AI error: {result['error']}"
             else:
-                msg_data = self._extract_message(result["data"])
+                msg_data = extract_message(result["data"])
                 reply = self._extract_text_from_content(msg_data.get("content"))
                 if not reply:
                     retry_messages = [
@@ -209,9 +210,9 @@ class SecretaryService:
                         "temperature": 0.1,
                         "max_tokens": max(18, min(48, int(self.settings.chat_max_tokens))),
                     }
-                    retry_result = await self._zai_chat_completion(retry_payload)
+                    retry_result = await zai_chat_completion(self.settings, retry_payload)
                     if not retry_result.get("error"):
-                        retry_msg = self._extract_message(retry_result["data"])
+                        retry_msg = extract_message(retry_result["data"])
                         reply = self._extract_text_from_content(retry_msg.get("content"))
 
                 reply = self._normalize_chat_reply(reply)
@@ -909,6 +910,12 @@ class SecretaryService:
                 speak_response=payload.speak_response,
             )
 
+        use_gemini = (
+            self.settings.gemini_live_enabled
+            and bool(self.settings.gemini_api_key)
+            and GeminiLiveSession.available()
+        )
+
         session: dict[str, Any] = {
             "call_id": call_id,
             "running": True,
@@ -927,8 +934,14 @@ class SecretaryService:
             "last_processed_snippet": "",
             "loop_ticks": 0,
             "stt_ok_count": 0,
+            "mode": "gemini_live" if use_gemini else "stt_ai_tts",
         }
-        session["task"] = asyncio.create_task(self._telegram_live_loop(call_id))
+        if use_gemini:
+            session["task"] = asyncio.create_task(
+                self._telegram_gemini_live_loop(call_id, recording_path)
+            )
+        else:
+            session["task"] = asyncio.create_task(self._telegram_live_loop(call_id))
         self.live_sessions[call_id] = session
 
         # Reset per-call ephemeral state so a new call starts clean.
@@ -942,6 +955,7 @@ class SecretaryService:
             "recording_path": str(recording_path),
         }
 
+        mode_label = "Gemini Live audio-to-audio" if use_gemini else "STT/AI/TTS"
         self.debug.log(
             call_id,
             "live_start",
@@ -949,13 +963,14 @@ class SecretaryService:
                 "recording_path": str(recording_path),
                 "speak_response": payload.speak_response,
                 "context": payload.context,
+                "mode": session["mode"],
             },
         )
 
         return TelegramLiveAgentResponse(
             call_id=call_id,
             status="running",
-            detail="Telegram live agent loop started.",
+            detail=f"Telegram live agent loop started ({mode_label}).",
             recording_path=str(recording_path),
             stt_status="waiting_audio",
             speak_response=payload.speak_response,
@@ -1049,7 +1064,7 @@ class SecretaryService:
                 continue
 
             file_size = recording_path.stat().st_size
-            if session["loop_ticks"] % 15 == 0:
+            if session["loop_ticks"] % 50 == 0:
                 self.debug.log(
                     call_id,
                     "loop_tick",
@@ -1079,15 +1094,6 @@ class SecretaryService:
                 await asyncio.sleep(min(0.4, poll_seconds))
                 continue
             if (file_size - previous_size) < min_new_bytes and not in_warmup:
-                self.debug.log(
-                    call_id,
-                    "wait_for_more_audio",
-                    {
-                        "delta_bytes": file_size - previous_size,
-                        "min_new_bytes": min_new_bytes,
-                        "in_warmup": in_warmup,
-                    },
-                )
                 await asyncio.sleep(min(0.4, poll_seconds))
                 continue
             session["last_audio_size"] = file_size
@@ -1250,6 +1256,52 @@ class SecretaryService:
 
             await asyncio.sleep(poll_seconds)
 
+    async def _telegram_gemini_live_loop(self, call_id: str, recording_path: Path) -> None:
+        """Gemini Live audio-to-audio loop for a single Telegram call.
+
+        Replaces the STT -> Z.AI -> TTS pipeline with a direct audio bridge
+        to the Gemini 3.1 Flash Live model.
+        """
+        session = self.live_sessions.get(call_id)
+        if session is None:
+            return
+
+        gemini = GeminiLiveSession(self.settings)
+
+        def stop_check() -> bool:
+            s = self.live_sessions.get(call_id)
+            if s is None or not s.get("running"):
+                return True
+            call = self.telegram.get_call(call_id) or {}
+            return str(call.get("status", "")).lower() in {"ended", "discarded", "failed"}
+
+        def debug_log(event: str, payload: dict[str, Any]) -> None:
+            self.debug.log(call_id, event, payload)
+
+        async def audio_out_callback(wav_path: str) -> dict[str, Any]:
+            return await self.telegram.stream_audio_out(call_id, wav_path)
+
+        try:
+            await gemini.run(
+                recording_path=recording_path,
+                audio_out_callback=audio_out_callback,
+                stop_check=stop_check,
+                debug_log=debug_log,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            self.debug.log(
+                call_id,
+                "gemini_live_loop_error",
+                {"error": exc.__class__.__name__, "detail": str(exc)[:300]},
+            )
+        finally:
+            s = self.live_sessions.get(call_id)
+            if s is not None:
+                s["running"] = False
+                s["last_stt_status"] = "gemini_live_ended"
+
     async def _stop_all_live_sessions(self) -> None:
         call_ids = list(self.live_sessions.keys())
         for call_id in call_ids:
@@ -1259,34 +1311,21 @@ class SecretaryService:
                 continue
 
     async def _stop_auto_live_task(self) -> None:
-        task = self._auto_live_task
-        self._auto_live_task = None
-        if not task:
-            return
-        if task.done():
-            return
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
-        except Exception:
-            pass
+        self._auto_live_task = await self._cancel_task(self._auto_live_task)
 
     async def _stop_calendar_worker_task(self) -> None:
-        task = self._calendar_worker_task
-        self._calendar_worker_task = None
-        if not task:
-            return
-        if task.done():
-            return
+        self._calendar_worker_task = await self._cancel_task(self._calendar_worker_task)
+
+    @staticmethod
+    async def _cancel_task(task: asyncio.Task | None) -> None:  # type: ignore[type-arg]
+        if not task or task.done():
+            return None
         task.cancel()
         try:
             await task
-        except asyncio.CancelledError:
+        except (asyncio.CancelledError, Exception):
             pass
-        except Exception:
-            pass
+        return None
 
     async def _auto_attach_live_loop(self) -> None:
         scan_seconds = max(0.5, float(self.settings.telegram_auto_start_scan_seconds))
@@ -1687,6 +1726,16 @@ class SecretaryService:
             "last_transcript": transcript,
         }
 
+    _BACKGROUND_MARKERS = frozenset({
+        "fire has been reported",
+        "please leave the building",
+        "attention, please",
+        "nearest exit",
+        "evacuate",
+        "emergency",
+        "alarm",
+    })
+
     def _apply_live_tts_pause(self, call_id: str, call_audio_status: str | None) -> None:
         if str(call_audio_status or "").lower() != "streaming_out":
             return
@@ -1849,16 +1898,7 @@ class SecretaryService:
         text = " ".join((transcript or "").split()).strip().lower()
         if not text:
             return False
-        markers = [
-            "fire has been reported",
-            "please leave the building",
-            "attention, please",
-            "nearest exit",
-            "evacuate",
-            "emergency",
-            "alarm",
-        ]
-        return any(marker in text for marker in markers)
+        return any(m in text for m in SecretaryService._BACKGROUND_MARKERS)
 
     @staticmethod
     def _should_ignore_live_snippet(transcript: str) -> bool:
@@ -1907,6 +1947,19 @@ class SecretaryService:
             return True
 
         return SecretaryService._is_low_quality_snippet(text)
+
+    @staticmethod
+    def _is_low_quality_snippet(text: str) -> bool:
+        normalized = " ".join((text or "").split()).strip()
+        if len(normalized) < 4:
+            return True
+        words = [w for w in re.split(r"\s+", normalized) if w]
+        if len(words) < 2:
+            return True
+        if len(set(w.lower() for w in words)) <= 1 and len(words) >= 3:
+            return True
+        alpha_chars = sum(ch.isalpha() for ch in normalized)
+        return alpha_chars < max(3, int(len(normalized) * 0.45))
 
     async def _handle_reminder_flow(
         self,
@@ -2117,19 +2170,6 @@ class SecretaryService:
             call_audio_status=call_audio_status,
         )
 
-    @staticmethod
-    def _is_low_quality_snippet(text: str) -> bool:
-        normalized = " ".join((text or "").split()).strip()
-        if len(normalized) < 4:
-            return True
-        words = [w for w in re.split(r"\s+", normalized) if w]
-        if len(words) < 2:
-            return True
-        if len(set(w.lower() for w in words)) <= 1 and len(words) >= 3:
-            return True
-        alpha_chars = sum(ch.isalpha() for ch in normalized)
-        return alpha_chars < max(3, int(len(normalized) * 0.45))
-
     async def _play_greeting_with_retry(self, call_id: str, source: str) -> dict[str, Any]:
         tts_audio_path, tts_status = await self.tts.synthesize(
             self.settings.assistant_greeting_message,
@@ -2195,15 +2235,16 @@ class SecretaryService:
         if not prev:
             return cur
         if cur.startswith(prev):
-            return cur[len(prev) :].strip()
+            return cur[len(prev):].strip()
 
-        overlap = 0
+        # Find the longest suffix of prev that is a prefix of cur in O(n).
+        # Check decreasing suffix lengths using str.find for speed.
         max_check = min(len(prev), len(cur))
-        for size in range(max_check, 0, -1):
-            if prev.endswith(cur[:size]):
-                overlap = size
-                break
-        return cur[overlap:].strip()
+        for start in range(max(0, len(prev) - max_check), len(prev)):
+            suffix = prev[start:]
+            if cur.startswith(suffix):
+                return cur[len(suffix):].strip()
+        return cur
 
     @staticmethod
     def _infer_route_points(transcript: str) -> tuple[str, str]:
@@ -2246,35 +2287,4 @@ class SecretaryService:
             return parsed.replace(tzinfo=timezone.utc)
         return parsed.astimezone(timezone.utc)
 
-    async def _zai_chat_completion(self, payload: dict[str, Any]) -> dict[str, Any]:
-        if not self.settings.zai_api_key:
-            return {"error": "Missing ZAI_API_KEY in environment."}
 
-        base_url = self.settings.zai_base_url.rstrip("/")
-        url = f"{base_url}/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {self.settings.zai_api_key}",
-            "Content-Type": "application/json",
-            "Accept-Language": "en-US,en",
-        }
-        try:
-            async with httpx.AsyncClient(timeout=self.settings.zai_timeout_seconds) as client:
-                response = await client.post(url, headers=headers, json=payload)
-            if response.status_code >= 300:
-                return {
-                    "error": f"GLM request failed ({response.status_code}).",
-                    "raw": response.text[:240],
-                }
-            return {"data": response.json()}
-        except Exception as exc:
-            return {"error": f"Connection error: {exc.__class__.__name__}"}
-
-    @staticmethod
-    def _extract_message(data: dict[str, Any]) -> dict[str, Any]:
-        choices = data.get("choices") or []
-        if not choices:
-            return {}
-        msg = choices[0].get("message") or {}
-        if not isinstance(msg, dict):
-            return {}
-        return msg

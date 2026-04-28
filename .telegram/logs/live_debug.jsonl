@@ -548,3 +548,7 @@
 {"ts": "2026-04-19T11:00:00.737570+00:00", "call_id": "tg-5523073095", "stage": "template_or_forced_reply", "data": {"forced_reply": true, "template_hit": null, "transcript": "Can you set a reminder at 12 o'clock today to buy shoes? repeat Can you repeat?"}}
 {"ts": "2026-04-19T11:00:01.362594+00:00", "call_id": "tg-5523073095", "stage": "live_respond_ok", "data": {"elapsed_sec": 7.823, "reply_chars": 103, "call_audio_status": "call_not_active"}}
 {"ts": "2026-04-19T11:00:02.565003+00:00", "call_id": "tg-5523073095", "stage": "loop_stopped", "data": {"reason": "call_ended", "status": "ended"}}
+{"ts": "2026-04-28T10:43:20.034210+00:00", "call_id": "tg-1", "stage": "fallback_tts", "data": {"tts_status": "generated", "has_audio": true, "reply": "queued"}}
+{"ts": "2026-04-28T10:43:20.034303+00:00", "call_id": "tg-1", "stage": "fallback_audio_out", "data": {"audio_path": "fake.mp3", "status": "streaming_out", "detail": "ok"}}
+{"ts": "2026-04-28T10:43:20.046823+00:00", "call_id": "tg-imm", "stage": "template_or_forced_reply", "data": {"forced_reply": true, "template_hit": null, "transcript": "set reminder today at five"}}
+{"ts": "2026-04-28T10:43:20.054923+00:00", "call_id": "tg-1", "stage": "live_start", "data": {"recording_path": "/tmp/pytest-of-ubuntu/pytest-1/test_start_live_agent_resets_p0/audio/recordings/tg-1-20260428T104320054688Z.wav", "speak_response": false, "context": {"source": "test"}, "mode": "stt_ai_tts"}}
