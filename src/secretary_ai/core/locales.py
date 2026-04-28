@@ -191,6 +191,105 @@ CALENDAR_EVENT_LINE: dict[str, str] = {
 }
 
 # ---------------------------------------------------------------------------
+# Calendar intent detection keywords
+# ---------------------------------------------------------------------------
+
+CALENDAR_READ_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "en": (
+        "what's on my calendar", "whats on my calendar", "what is on my calendar",
+        "calendar today", "calendar tomorrow", "my next meeting",
+        "upcoming events", "show calendar",
+    ),
+    "ru": (
+        "что в календаре", "календарь на сегодня", "календарь на завтра",
+        "следующая встреча", "ближайшие события", "покажи календарь",
+        "расписание на сегодня", "расписание на завтра", "что запланировано",
+    ),
+}
+
+CALENDAR_MUTATION_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "en": (
+        "add to calendar", "create event", "schedule", "book",
+        "set a reminder", "set reminder", "remind me", "reminder",
+        "reschedule", "delete event", "cancel event", "remove event",
+    ),
+    "ru": (
+        "добавь в календарь", "создай событие", "назначь", "забронируй",
+        "поставь напоминание", "напомни", "напоминание",
+        "перенеси", "удали событие", "отмени событие", "убери событие",
+        "запланируй",
+    ),
+}
+
+CALENDAR_DELETE_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "en": ("delete", "remove", "cancel event"),
+    "ru": ("удали", "убери", "отмени событие"),
+}
+
+CALENDAR_CREATE_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "en": (
+        "schedule", "book", "add to calendar", "create event",
+        "set a reminder", "set reminder", "remind me", "reminder",
+    ),
+    "ru": (
+        "назначь", "забронируй", "добавь в календарь", "создай событие",
+        "поставь напоминание", "напомни", "напоминание", "запланируй",
+    ),
+}
+
+CALENDAR_REMINDER_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "en": ("remind", "reminder", "set reminder", "set a reminder"),
+    "ru": ("напомни", "напоминание", "поставь напоминание"),
+}
+
+# Calendar mutation reply strings
+CALENDAR_MUTATION_QUEUED: dict[str, str] = {
+    "en": "Got it. I queued this calendar request and will apply it shortly.",
+    "ru": "Принято. Запрос добавлен в очередь.",
+}
+
+CALENDAR_MUTATION_DUPLICATE: dict[str, str] = {
+    "en": "I already queued that request.",
+    "ru": "Этот запрос уже в очереди.",
+}
+
+CALENDAR_REMINDER_DONE: dict[str, str] = {
+    "en": "Done. Reminder scheduled for {when}. I will call you one hour before.",
+    "ru": "Готово. Напоминание на {when}. Позвоню за час.",
+}
+
+CALENDAR_REMINDER_DUPLICATE: dict[str, str] = {
+    "en": "I already set that reminder for {when}. I will call you one hour before.",
+    "ru": "Напоминание на {when} уже стоит. Позвоню за час.",
+}
+
+CALENDAR_EVENT_DONE: dict[str, str] = {
+    "en": "Done. I queued this event for {when}.",
+    "ru": "Готово. Событие на {when} добавлено в очередь.",
+}
+
+CALENDAR_EVENT_DUPLICATE: dict[str, str] = {
+    "en": "I already queued that event for {when}.",
+    "ru": "Событие на {when} уже в очереди.",
+}
+
+CALENDAR_DAY_TODAY: dict[str, str] = {
+    "en": "today",
+    "ru": "сегодня",
+}
+
+CALENDAR_DAY_TOMORROW: dict[str, str] = {
+    "en": "tomorrow",
+    "ru": "завтра",
+}
+
+CALENDAR_DATETIME_FORMAT: dict[str, str] = {
+    "en": "{day} at {time}",
+    "ru": "{day} в {time}",
+}
+
+
+# ---------------------------------------------------------------------------
 # Predictive reminder follow-up
 # ---------------------------------------------------------------------------
 

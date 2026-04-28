@@ -9,9 +9,23 @@ import httpx
 
 from secretary_ai.core.config import Settings
 from secretary_ai.core.locales import (
+    CALENDAR_CREATE_KEYWORDS,
+    CALENDAR_DATETIME_FORMAT,
+    CALENDAR_DAY_TODAY,
+    CALENDAR_DAY_TOMORROW,
+    CALENDAR_DELETE_KEYWORDS,
+    CALENDAR_EVENT_DONE,
+    CALENDAR_EVENT_DUPLICATE,
     CALENDAR_EVENT_LINE,
+    CALENDAR_MUTATION_DUPLICATE,
+    CALENDAR_MUTATION_KEYWORDS,
+    CALENDAR_MUTATION_QUEUED,
     CALENDAR_NO_EVENTS,
     CALENDAR_PLANNER_PROMPT,
+    CALENDAR_READ_KEYWORDS,
+    CALENDAR_REMINDER_DONE,
+    CALENDAR_REMINDER_DUPLICATE,
+    CALENDAR_REMINDER_KEYWORDS,
     CALENDAR_UNKNOWN_TIME,
     CALENDAR_UNTITLED,
     CALENDAR_UPCOMING_PREFIX,
@@ -310,7 +324,9 @@ class CalendarService:
         lower = text.lower()
         context = task.get("context") if isinstance(task.get("context"), dict) else {}
 
-        if any(token in lower for token in ("delete", "remove", "cancel event")):
+        lang = self.settings.language
+        delete_kw = CALENDAR_DELETE_KEYWORDS.get(lang, ()) + CALENDAR_DELETE_KEYWORDS.get("en", ())
+        if any(token in lower for token in delete_kw):
             event_id = self._extract_event_id(lower)
             return {
                 "action": "delete",
@@ -322,19 +338,8 @@ class CalendarService:
                 "planner_model": "heuristic",
             }
 
-        if any(
-            token in lower
-            for token in (
-                "schedule",
-                "book",
-                "add to calendar",
-                "create event",
-                "set a reminder",
-                "set reminder",
-                "remind me",
-                "reminder",
-            )
-        ):
+        create_kw = CALENDAR_CREATE_KEYWORDS.get(lang, ()) + CALENDAR_CREATE_KEYWORDS.get("en", ())
+        if any(token in lower for token in create_kw):
             context_start = str(context.get("start_iso") or "").strip()
             context_end = str(context.get("end_iso") or "").strip()
             if context_start and context_end:
@@ -441,37 +446,21 @@ class CalendarService:
                 break
         return out
 
-    @staticmethod
-    def _is_read_query(text: str) -> bool:
-        checks = (
-            "what\'s on my calendar",
-            "whats on my calendar",
-            "what is on my calendar",
-            "calendar today",
-            "calendar tomorrow",
-            "my next meeting",
-            "upcoming events",
-            "show calendar",
-        )
-        return any(token in text for token in checks)
+    def _is_read_query(self, text: str) -> bool:
+        lang = self.settings.language
+        for lng in (lang, "en"):
+            checks = CALENDAR_READ_KEYWORDS.get(lng, ())
+            if any(token in text for token in checks):
+                return True
+        return False
 
-    @staticmethod
-    def _is_mutation_query(text: str) -> bool:
-        checks = (
-            "add to calendar",
-            "create event",
-            "schedule",
-            "book",
-            "set a reminder",
-            "set reminder",
-            "remind me",
-            "reminder",
-            "reschedule",
-            "delete event",
-            "cancel event",
-            "remove event",
-        )
-        return any(token in text for token in checks)
+    def _is_mutation_query(self, text: str) -> bool:
+        lang = self.settings.language
+        for lng in (lang, "en"):
+            checks = CALENDAR_MUTATION_KEYWORDS.get(lng, ())
+            if any(token in text for token in checks):
+                return True
+        return False
 
     def _event_voice_line(self, ev: dict[str, Any]) -> str:
         lang = self.settings.language
@@ -557,34 +546,36 @@ class CalendarService:
         }
 
     def _build_mutation_reply(self, text: str, start: datetime | None, duplicate: bool) -> str:
+        lang = self.settings.language
         lower = (text or "").lower()
-        is_reminder = any(token in lower for token in ("remind", "reminder", "set reminder", "set a reminder"))
+        reminder_kw = CALENDAR_REMINDER_KEYWORDS.get(lang, ()) + CALENDAR_REMINDER_KEYWORDS.get("en", ())
+        is_reminder = any(token in lower for token in reminder_kw)
         if start is None:
             if duplicate:
-                return "I already queued that request."
-            return "Got it. I queued this calendar request and will apply it shortly."
+                return t(CALENDAR_MUTATION_DUPLICATE, lang)
+            return t(CALENDAR_MUTATION_QUEUED, lang)
 
         when = self._human_datetime_phrase(start)
         if is_reminder:
             if duplicate:
-                return f"I already set that reminder for {when}. I will call you one hour before."
-            return f"Done. Reminder scheduled for {when}. I will call you one hour before."
+                return t(CALENDAR_REMINDER_DUPLICATE, lang).format(when=when)
+            return t(CALENDAR_REMINDER_DONE, lang).format(when=when)
         if duplicate:
-            return f"I already queued that event for {when}."
-        return f"Done. I queued this event for {when}."
+            return t(CALENDAR_EVENT_DUPLICATE, lang).format(when=when)
+        return t(CALENDAR_EVENT_DONE, lang).format(when=when)
 
-    @staticmethod
-    def _human_datetime_phrase(value: datetime) -> str:
+    def _human_datetime_phrase(self, value: datetime) -> str:
+        lang = self.settings.language
         now = datetime.now(timezone.utc)
         today = now.date()
         date_value = value.astimezone(timezone.utc).date()
         day_label = value.strftime("%A")
         if date_value == today:
-            day_label = "today"
+            day_label = t(CALENDAR_DAY_TODAY, lang)
         elif date_value == (today + timedelta(days=1)):
-            day_label = "tomorrow"
+            day_label = t(CALENDAR_DAY_TOMORROW, lang)
         time_label = value.astimezone(timezone.utc).strftime("%I:%M %p").lstrip("0")
-        return f"{day_label} at {time_label}"
+        return t(CALENDAR_DATETIME_FORMAT, lang).format(day=day_label, time=time_label)
 
     @staticmethod
     def _parse_iso_datetime(value: str) -> datetime | None:
