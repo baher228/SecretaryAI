@@ -9,8 +9,11 @@ import httpx
 
 from secretary_ai.core.config import Settings
 from secretary_ai.core.locales import (
+    CALENDAR_EVENT_LINE,
     CALENDAR_NO_EVENTS,
     CALENDAR_PLANNER_PROMPT,
+    CALENDAR_UNKNOWN_TIME,
+    CALENDAR_UNTITLED,
     CALENDAR_UPCOMING_PREFIX,
     t,
 )
@@ -470,12 +473,12 @@ class CalendarService:
         )
         return any(token in text for token in checks)
 
-    @staticmethod
-    def _event_voice_line(ev: dict[str, Any]) -> str:
-        title = str(ev.get("summary") or "untitled")
+    def _event_voice_line(self, ev: dict[str, Any]) -> str:
+        lang = self.settings.language
+        title = str(ev.get("summary") or t(CALENDAR_UNTITLED, lang))
         start = str(ev.get("start") or "")
-        when = start.replace("T", " ")[:16] if start else "unknown time"
-        return f"{title} at {when}."
+        when = start.replace("T", " ")[:16] if start else t(CALENDAR_UNKNOWN_TIME, lang)
+        return t(CALENDAR_EVENT_LINE, lang).format(title=title, when=when)
 
     @staticmethod
     def _extract_event_id(text: str) -> str | None:

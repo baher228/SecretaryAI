@@ -175,6 +175,21 @@ CALENDAR_UPCOMING_PREFIX: dict[str, str] = {
     "ru": "Ближайшие: ",
 }
 
+CALENDAR_UNTITLED: dict[str, str] = {
+    "en": "untitled",
+    "ru": "без названия",
+}
+
+CALENDAR_UNKNOWN_TIME: dict[str, str] = {
+    "en": "unknown time",
+    "ru": "время неизвестно",
+}
+
+CALENDAR_EVENT_LINE: dict[str, str] = {
+    "en": "{title} at {when}.",
+    "ru": "{title} в {when}.",
+}
+
 # ---------------------------------------------------------------------------
 # Predictive reminder follow-up
 # ---------------------------------------------------------------------------

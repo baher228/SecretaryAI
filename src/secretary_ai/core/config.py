@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -32,7 +33,7 @@ class Settings(BaseSettings):
     agent_live_template_enabled: bool = True
     agent_live_template_path: str = ".telegram/cache/live_reply_templates.json"
     agent_live_timeout_seconds: float = 1.8
-    agent_live_low_quality_reply: str = "Извините, не расслышал. Повторите, пожалуйста, кратко."
+    agent_live_low_quality_reply: str | None = None
     chat_max_tokens: int = 64
     chat_temperature: float = 0.15
 
@@ -45,18 +46,18 @@ class Settings(BaseSettings):
     telegram_auto_start_scan_seconds: float = 2.0
     telegram_audio_root: str = ".telegram/audio"
     assistant_auto_greet_on_connect: bool = True
-    assistant_greeting_message: str = "Здравствуйте, это ваш ИИ-секретарь. Чем могу помочь?"
+    assistant_greeting_message: str | None = None
 
     tts_enabled: bool = True
     tts_provider: str = "edge_tts"
-    tts_voice: str = "ru-RU-DmitryNeural"
+    tts_voice: str | None = None
     tts_rate: str = "+0%"
     tts_volume: str = "+0%"
 
     stt_enabled: bool = True
     stt_provider: str = "faster_whisper"
-    stt_model: str = "small"
-    stt_language: str = "ru"
+    stt_model: str | None = None
+    stt_language: str | None = None
     stt_device: str = "cpu"
     stt_compute_type: str = "int8"
     stt_min_chars: int = 4
@@ -104,6 +105,30 @@ class Settings(BaseSettings):
     gemini_live_model: str = "gemini-3.1-flash-live-preview"
     gemini_live_voice: str = "Zephyr"
     gemini_live_enabled: bool = True
+
+    @model_validator(mode="after")
+    def _apply_language_defaults(self) -> "Settings":
+        """Fill language-dependent fields that were not explicitly set."""
+        from secretary_ai.core.locales import (
+            DEFAULT_STT_MODEL,
+            DEFAULT_TTS_VOICE,
+            GREETING_MESSAGE,
+            LOW_QUALITY_REPLY,
+            t,
+        )
+
+        lang = self.language
+        if self.tts_voice is None:
+            self.tts_voice = t(DEFAULT_TTS_VOICE, lang)
+        if self.stt_model is None:
+            self.stt_model = t(DEFAULT_STT_MODEL, lang)
+        if self.stt_language is None:
+            self.stt_language = lang
+        if self.assistant_greeting_message is None:
+            self.assistant_greeting_message = t(GREETING_MESSAGE, lang)
+        if self.agent_live_low_quality_reply is None:
+            self.agent_live_low_quality_reply = t(LOW_QUALITY_REPLY, lang)
+        return self
 
 
 @lru_cache
