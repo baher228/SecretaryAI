@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import array
 import asyncio
-import shutil
 import wave
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -94,6 +93,7 @@ class GeminiLiveSession:
         self.transcript_in: list[str] = []
         self.transcript_out: list[str] = []
         self._running = False
+        self._first_turn_complete = asyncio.Event()
 
     @staticmethod
     def available() -> bool:
@@ -372,6 +372,8 @@ class GeminiLiveSession:
 
                     if getattr(server_content, "turn_complete", False):
                         turns_received += 1
+                        if turns_received == 1:
+                            self._first_turn_complete.set()
                         debug_log(
                             "gemini_live_turn_complete",
                             {"turns": turns_received},
@@ -421,6 +423,9 @@ class GeminiLiveSession:
         response_idx = 0
         out_dir = TMPFS_DIR if TMPFS_DIR.parent.is_dir() else audio_dir
         out_dir.mkdir(parents=True, exist_ok=True)
+        # Accumulate all first-turn PCM for caching the complete greeting.
+        first_turn_pcm: list[bytes] = []
+        should_cache = not greeting_played
 
         while not stop_check():
             try:
@@ -447,20 +452,13 @@ class GeminiLiveSession:
                 )
                 continue
 
-            # Cache the first Gemini response as the greeting audio so
-            # subsequent calls can play it instantly while Gemini connects.
-            if response_idx == 0 and not greeting_played:
-                try:
-                    cache_dir = GREETING_CACHE_DIR
-                    cache_dir.mkdir(parents=True, exist_ok=True)
-                    cache_path = cache_dir / f"gemini_greeting_{self.settings.language}.wav"
-                    shutil.copy2(str(wav_path), str(cache_path))
-                    debug_log("gemini_greeting_cached", {"path": str(cache_path)})
-                except Exception as exc:
-                    debug_log(
-                        "gemini_greeting_cache_error",
-                        {"error": exc.__class__.__name__},
-                    )
+            # Accumulate first-turn audio for the greeting cache.
+            if should_cache:
+                first_turn_pcm.append(pcm_48k)
+                if self._first_turn_complete.is_set():
+                    self._cache_greeting(b"".join(first_turn_pcm), debug_log)
+                    first_turn_pcm.clear()
+                    should_cache = False
 
             try:
                 result = await audio_out_callback(str(wav_path))
@@ -482,6 +480,16 @@ class GeminiLiveSession:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _cache_greeting(self, pcm_48k: bytes, debug_log: DebugLog) -> None:
+        """Write the complete first-turn PCM as a greeting WAV cache file."""
+        try:
+            GREETING_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            cache_path = GREETING_CACHE_DIR / f"gemini_greeting_{self.settings.language}.wav"
+            _write_wav(cache_path, pcm_48k, PLAYBACK_SAMPLE_RATE)
+            debug_log("gemini_greeting_cached", {"path": str(cache_path), "bytes": len(pcm_48k)})
+        except Exception as exc:
+            debug_log("gemini_greeting_cache_error", {"error": exc.__class__.__name__})
 
     @staticmethod
     def _extract_audio(response: Any, server_content: Any) -> list[bytes]:
