@@ -342,13 +342,15 @@ class SecretaryService:
         metadata_source = str((payload.metadata or {}).get("source") or "").strip().lower()
         metadata_announcement = bool((payload.metadata or {}).get("announcement_only"))
         reminder_announcement = metadata_announcement or metadata_source == "calendar_reminder"
-        use_gemini = (
+        gemini_will_greet = (
             self.settings.gemini_live_enabled
             and bool(self.settings.gemini_api_key)
             and GeminiLiveSession.available()
+            and bool(self.settings.telegram_auto_start_live_agent)
+            and not reminder_announcement
         )
         should_greet = (
-            not use_gemini
+            not gemini_will_greet
             and response.status == "active"
             and bool(response.call_id)
             and not payload.initial_audio_path
@@ -1355,16 +1357,16 @@ class SecretaryService:
                     if self._is_announcement_only_call(call):
                         continue
 
-                    # When Gemini Live is active it sends its own greeting
-                    # via the initial text prompt, so skip the TTS greeting
-                    # to avoid double-greeting or silence when TTS fails.
-                    use_gemini = (
+                    # When Gemini Live will handle the call it sends its
+                    # own greeting via the initial text prompt, so skip the
+                    # TTS greeting to avoid double-greeting.
+                    gemini_will_greet = (
                         self.settings.gemini_live_enabled
                         and bool(self.settings.gemini_api_key)
                         and GeminiLiveSession.available()
                     )
                     should_greet = (
-                        not use_gemini
+                        not gemini_will_greet
                         and bool(self.settings.assistant_auto_greet_on_connect)
                         and not bool(call.get("greeting_sent"))
                     )
