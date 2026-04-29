@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import array
 import asyncio
+import hashlib
 import wave
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -100,9 +101,16 @@ class GeminiLiveSession:
         return _GENAI_AVAILABLE
 
     @staticmethod
-    def cached_greeting_path(language: str) -> Path | None:
+    def _greeting_cache_key(language: str, voice: str, model: str) -> str:
+        """Build a cache filename that includes voice and model."""
+        fingerprint = hashlib.md5(f"{voice}:{model}".encode()).hexdigest()[:8]
+        return f"gemini_greeting_{language}_{fingerprint}.wav"
+
+    @staticmethod
+    def cached_greeting_path(language: str, voice: str, model: str) -> Path | None:
         """Return the cached greeting WAV if it exists, else None."""
-        path = GREETING_CACHE_DIR / f"gemini_greeting_{language}.wav"
+        name = GeminiLiveSession._greeting_cache_key(language, voice, model)
+        path = GREETING_CACHE_DIR / name
         return path if path.is_file() else None
 
     def _build_client(self) -> Any:
@@ -489,7 +497,10 @@ class GeminiLiveSession:
         """Write the complete first-turn PCM as a greeting WAV cache file."""
         try:
             GREETING_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-            cache_path = GREETING_CACHE_DIR / f"gemini_greeting_{self.settings.language}.wav"
+            name = self._greeting_cache_key(
+                self.settings.language, self.settings.gemini_live_voice, self.settings.gemini_live_model,
+            )
+            cache_path = GREETING_CACHE_DIR / name
             _write_wav(cache_path, pcm_48k, PLAYBACK_SAMPLE_RATE)
             debug_log("gemini_greeting_cached", {"path": str(cache_path), "bytes": len(pcm_48k)})
         except Exception as exc:
