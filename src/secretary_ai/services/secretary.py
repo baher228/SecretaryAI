@@ -1105,8 +1105,8 @@ class SecretaryService:
 
                     # Play cached Gemini greeting instantly while the Live
                     # session connects in the background.
-                    greeting_played = False
-                    if not call.get("greeting_sent") and self.settings.assistant_auto_greet_on_connect:
+                    greeting_played = bool(call.get("greeting_sent"))
+                    if not greeting_played and self.settings.assistant_auto_greet_on_connect:
                         cached = GeminiLiveSession.cached_greeting_path(self.settings.language)
                         if cached is not None:
                             stream_result = await self.telegram.stream_audio_out(call_id, str(cached))

@@ -433,6 +433,10 @@ class GeminiLiveSession:
                     self.audio_out_queue.get(), timeout=POLL_PLAY_TIMEOUT
                 )
             except asyncio.TimeoutError:
+                if should_cache and self._first_turn_complete.is_set() and first_turn_pcm:
+                    self._cache_greeting(b"".join(first_turn_pcm), debug_log)
+                    first_turn_pcm.clear()
+                    should_cache = False
                 continue
 
             collected: list[bytes] = [first]
