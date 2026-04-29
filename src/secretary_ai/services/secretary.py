@@ -48,7 +48,6 @@ from secretary_ai.services.calendar import CalendarService
 from secretary_ai.services.live_debug import LiveDebugLogger
 from secretary_ai.services.live_templates import LiveTemplateMatcher
 from secretary_ai.services.memory_store import MemoryStore
-from secretary_ai.services.stt import STTEngine
 from secretary_ai.services.telegram_calls import TelegramCallService
 from secretary_ai.services.tts import TTSEngine
 from secretary_ai.services.maps import MapService
@@ -83,7 +82,6 @@ class SecretaryService:
         self.memory = MemoryStore(settings)
         self.debug = LiveDebugLogger(settings)
         self.tts = TTSEngine(settings)
-        self.stt = STTEngine(settings)
         self.maps = MapService(settings)
         self.booking = BookingService(settings)
         self.live_sessions: dict[str, dict[str, Any]] = {}
@@ -102,13 +100,6 @@ class SecretaryService:
         await self.calendar.refresh_cache()
         self.memory.prune_short_term(max_age_hours=24)
         self.memory.set_mid_term_upcoming(self.calendar.cache_snapshot(limit=50).get("events", []))
-
-        if self.settings.stt_prewarm_on_startup:
-            try:
-                await asyncio.wait_for(asyncio.to_thread(self.stt._ensure_model), timeout=45.0)  # type: ignore[attr-defined]
-                self.debug.log("system", "stt_prewarm_ok", {"model": self.settings.stt_model})
-            except Exception as exc:
-                self.debug.log("system", "stt_prewarm_failed", {"error": exc.__class__.__name__, "detail": str(exc)})
 
         if self.settings.telegram_auto_start_live_agent:
             self._auto_live_task = asyncio.create_task(self._auto_attach_live_loop())
@@ -131,9 +122,7 @@ class SecretaryService:
                 "Telegram Calls Engine (py-tgcalls private calls)",
                 "AI Orchestrator (intent + response + actions)",
                 "Gemini Live Bridge (audio-to-audio via Gemini 3.1 Flash Live)",
-                "STT Adapter (faster-whisper, fallback)",
-                "TTS Adapter (assistant voice generation, fallback)",
-                "Telegram Live Loop (Gemini Live or recording -> STT -> AI -> TTS)",
+                "Greeting Cache (instant playback of cached Gemini greeting)",
                 "Secretary Orchestrator (this service)",
                 "Z.AI Reasoning Endpoint (text chat)",
                 "Storage Layer (in-memory MVP)",
@@ -342,26 +331,24 @@ class SecretaryService:
         metadata_source = str((payload.metadata or {}).get("source") or "").strip().lower()
         metadata_announcement = bool((payload.metadata or {}).get("announcement_only"))
         reminder_announcement = metadata_announcement or metadata_source == "calendar_reminder"
-        should_greet = (
-            response.status == "active"
-            and bool(response.call_id)
-            and not payload.initial_audio_path
-            and bool(self.settings.assistant_auto_greet_on_connect)
-            and not reminder_announcement
-        )
-        if should_greet:
-            greeting = await self._play_greeting_with_retry(response.call_id, source="outbound")
-            response.detail = (
-                f"{response.detail} Greeting: {greeting.get('status')} "
-                f"({greeting.get('detail')})."
-            )
-
         should_auto_live = (
             response.status == "active"
             and bool(response.call_id)
             and bool(self.settings.telegram_auto_start_live_agent)
             and not reminder_announcement
         )
+
+        # Play cached greeting instantly; Gemini handles greeting on first call.
+        greeting_played = False
+        if should_auto_live and not payload.initial_audio_path and self.settings.assistant_auto_greet_on_connect:
+            cached = GeminiLiveSession.cached_greeting_path(
+                self.settings.language, self.settings.gemini_live_voice, self.settings.gemini_live_model,
+            )
+            if cached is not None:
+                stream_result = await self.telegram.stream_audio_out(response.call_id, str(cached))
+                if stream_result.get("status") == "streaming_out":
+                    greeting_played = True
+
         if should_auto_live:
             auto_live = await self.start_telegram_live_agent(
                 response.call_id,
@@ -369,6 +356,7 @@ class SecretaryService:
                     context={"source": "outbound_auto_start"},
                     speak_response=self.settings.telegram_auto_start_live_speak_response,
                 ),
+                greeting_played=greeting_played,
             )
             response.detail = f"{response.detail} Live loop: {auto_live.status}."
         return response
@@ -873,6 +861,7 @@ class SecretaryService:
         self,
         call_id: str,
         payload: TelegramLiveAgentStartRequest,
+        greeting_played: bool = False,
     ) -> TelegramLiveAgentResponse:
         call = self.telegram.get_call(call_id)
         if call is None:
@@ -895,6 +884,15 @@ class SecretaryService:
                 speak_response=bool(existing.get("speak_response", True)),
             )
 
+        if not (self.settings.gemini_live_enabled and self.settings.gemini_api_key and GeminiLiveSession.available()):
+            return TelegramLiveAgentResponse(
+                call_id=call_id,
+                status="gemini_unavailable",
+                detail="Gemini Live is disabled or the API key / SDK is missing.",
+                stt_status="not_started",
+                speak_response=payload.speak_response,
+            )
+
         recordings_root = Path(self.settings.telegram_audio_root) / "recordings"
         recordings_root.mkdir(parents=True, exist_ok=True)
         suffix = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
@@ -914,38 +912,21 @@ class SecretaryService:
                 speak_response=payload.speak_response,
             )
 
-        use_gemini = (
-            self.settings.gemini_live_enabled
-            and bool(self.settings.gemini_api_key)
-            and GeminiLiveSession.available()
-        )
-
         session: dict[str, Any] = {
             "call_id": call_id,
             "running": True,
             "recording_path": str(recording_path),
             "context": payload.context,
             "speak_response": payload.speak_response,
-            "last_stt_status": "waiting_audio",
-            "last_full_transcript": "",
-            "last_transcript_delta": "",
-            "last_audio_size": 0,
-            "pause_until": None,
             "started_at": self._now_iso(),
             "started_monotonic": monotonic(),
-            "responses_sent": 0,
-            "last_response_at": None,
-            "last_processed_snippet": "",
-            "loop_ticks": 0,
-            "stt_ok_count": 0,
-            "mode": "gemini_live" if use_gemini else "stt_ai_tts",
+            "mode": "gemini_live",
         }
-        if use_gemini:
-            session["task"] = asyncio.create_task(
-                self._telegram_gemini_live_loop(call_id, recording_path)
+        session["task"] = asyncio.create_task(
+            self._telegram_gemini_live_loop(
+                call_id, recording_path, greeting_played=greeting_played,
             )
-        else:
-            session["task"] = asyncio.create_task(self._telegram_live_loop(call_id))
+        )
         self.live_sessions[call_id] = session
 
         # Reset per-call ephemeral state so a new call starts clean.
@@ -959,7 +940,6 @@ class SecretaryService:
             "recording_path": str(recording_path),
         }
 
-        mode_label = "Gemini Live audio-to-audio" if use_gemini else "STT/AI/TTS"
         self.debug.log(
             call_id,
             "live_start",
@@ -967,14 +947,15 @@ class SecretaryService:
                 "recording_path": str(recording_path),
                 "speak_response": payload.speak_response,
                 "context": payload.context,
-                "mode": session["mode"],
+                "mode": "gemini_live",
+                "greeting_played": greeting_played,
             },
         )
 
         return TelegramLiveAgentResponse(
             call_id=call_id,
             status="running",
-            detail=f"Telegram live agent loop started ({mode_label}).",
+            detail="Telegram live agent loop started (Gemini Live audio-to-audio).",
             recording_path=str(recording_path),
             stt_status="waiting_audio",
             speak_response=payload.speak_response,
@@ -1038,234 +1019,13 @@ class SecretaryService:
             last_transcript=session.get("last_transcript_delta"),
         )
 
-    async def _telegram_live_loop(self, call_id: str) -> None:
-        session = self.live_sessions.get(call_id)
-        if session is None:
-            return
-
-        poll_seconds = max(0.2, float(self.settings.telegram_live_poll_seconds))
-        while True:
-            session["loop_ticks"] = int(session.get("loop_ticks") or 0) + 1
-            if not session.get("running"):
-                self.debug.log(call_id, "loop_stopped", {"reason": "session_not_running"})
-                return
-
-            call = self.telegram.get_call(call_id) or {}
-            if str(call.get("status", "")).lower() in {"ended", "discarded", "failed"}:
-                session["running"] = False
-                session["last_stt_status"] = "call_ended"
-                self.debug.log(call_id, "loop_stopped", {"reason": "call_ended", "status": call.get("status")})
-                return
-
-            pause_until = session.get("pause_until")
-            if isinstance(pause_until, datetime) and datetime.now(timezone.utc) < pause_until:
-                await asyncio.sleep(0.2)
-                continue
-
-            recording_path = Path(str(session["recording_path"]))
-            if not recording_path.exists():
-                await asyncio.sleep(0.3)
-                continue
-
-            file_size = recording_path.stat().st_size
-            if session["loop_ticks"] % 50 == 0:
-                self.debug.log(
-                    call_id,
-                    "loop_tick",
-                    {
-                        "tick": session["loop_ticks"],
-                        "file_size": file_size,
-                        "last_audio_size": int(session.get("last_audio_size") or 0),
-                        "last_stt_status": session.get("last_stt_status"),
-                    },
-                )
-            previous_size = int(session.get("last_audio_size") or 0)
-            if file_size < previous_size:
-                self.debug.log(
-                    call_id,
-                    "recording_file_shrunk",
-                    {"file_size": file_size, "previous_size": previous_size},
-                )
-                previous_size = 0
-                session["last_audio_size"] = 0
-            min_new_bytes = max(256, int(self.settings.stt_min_new_bytes // 2))
-
-            started_monotonic = float(session.get("started_monotonic") or 0.0)
-            warmup_elapsed = monotonic() - started_monotonic if started_monotonic else 999.0
-            in_warmup = warmup_elapsed < 10.0
-
-            if file_size <= 0:
-                await asyncio.sleep(min(0.4, poll_seconds))
-                continue
-            if (file_size - previous_size) < min_new_bytes and not in_warmup:
-                await asyncio.sleep(min(0.4, poll_seconds))
-                continue
-            session["last_audio_size"] = file_size
-
-            self.debug.log(
-                call_id,
-                "stt_transcribe_start",
-                {
-                    "recording_path": str(recording_path),
-                    "file_size": file_size,
-                    "tail_seconds": self.settings.stt_tail_seconds,
-                    "recent_only": self.settings.stt_recent_only,
-                    "timeout_sec": self.settings.stt_transcribe_timeout_seconds,
-                },
-            )
-            stt_started = monotonic()
-            text, stt_status = await self.stt.transcribe(str(recording_path))
-            self.debug.log(
-                call_id,
-                "stt_transcribe_done",
-                {
-                    "status": stt_status,
-                    "elapsed_sec": round(monotonic() - stt_started, 3),
-                    "chars": len((text or "").strip()),
-                },
-            )
-            session["last_stt_status"] = stt_status
-            preview_chars = max(20, int(self.settings.telegram_live_log_transcript_preview_chars))
-            if stt_status != "ok":
-                self.debug.log(
-                    call_id,
-                    "stt_not_ok",
-                    {
-                        "status": stt_status,
-                        "chars": len((text or "").strip()),
-                        "sample": (text or "")[:preview_chars],
-                    },
-                )
-                await asyncio.sleep(poll_seconds)
-                continue
-
-            session["stt_ok_count"] = int(session.get("stt_ok_count") or 0) + 1
-            self.debug.log(
-                call_id,
-                "stt_ok",
-                {
-                    "chars": len((text or "").strip()),
-                    "sample": (text or "")[:preview_chars],
-                    "count": session["stt_ok_count"],
-                },
-            )
-
-            previous = str(session.get("last_full_transcript") or "")
-            delta = self._extract_new_text(previous, text)
-            snippet = delta.strip() if delta.strip() else text.strip()
-            min_chars = max(3, int(self.settings.stt_min_chars) - 1)
-            if len(snippet) < min_chars:
-                session["last_full_transcript"] = text
-                self.debug.log(call_id, "snippet_too_short", {"chars": len(snippet), "snippet": snippet})
-                await asyncio.sleep(poll_seconds)
-                continue
-
-            normalized_snippet = " ".join(snippet.split()).strip().lower()
-            normalized_last = " ".join(str(session.get("last_processed_snippet") or "").split()).strip().lower()
-            if normalized_snippet and normalized_last:
-                similarity = SequenceMatcher(None, normalized_snippet, normalized_last).ratio()
-                if similarity >= float(self.settings.stt_repeat_similarity_threshold):
-                    session["last_full_transcript"] = text
-                    self.debug.log(
-                        call_id,
-                        "snippet_deduped",
-                        {
-                            "similarity": similarity,
-                            "snippet": snippet[:120],
-                        },
-                    )
-                    await asyncio.sleep(poll_seconds)
-                    continue
-
-            session["last_full_transcript"] = text
-            session["last_transcript_delta"] = snippet
-
-            try:
-                context = dict(session.get("context") or {})
-                context["source"] = "telegram_live_loop"
-                context["stt_provider"] = self.settings.stt_provider
-                status_before = str(call.get("status") or "").lower()
-                if status_before in {"ended", "discarded", "failed"}:
-                    self.debug.log(call_id, "skip_live_respond_call_not_active", {"status": status_before})
-                    await asyncio.sleep(poll_seconds)
-                    continue
-                started = monotonic()
-                response = await self.live_agent_respond(
-                    call_id=call_id,
-                    transcript=snippet,
-                    context=context,
-                    speak_response=bool(session.get("speak_response", True)),
-                )
-                self.debug.log(
-                    call_id,
-                    "live_respond_ok",
-                    {
-                        "elapsed_sec": round(monotonic() - started, 3),
-                        "reply_chars": len((response.reply or "").strip()),
-                        "call_audio_status": response.call_audio_status,
-                    },
-                )
-                if str((response.call_audio_status or "").lower()) == "error":
-                    self.debug.log(
-                        call_id,
-                        "audio_out_error_after_response",
-                        {
-                            "reply": (response.reply or "")[:140],
-                            "tts_status": response.tts_status,
-                            "call_audio_status": response.call_audio_status,
-                            "call_status": call.get("status"),
-                        },
-                    )
-
-                session["last_processed_snippet"] = snippet
-                session["responses_sent"] = int(session.get("responses_sent") or 0) + 1
-                session["last_response_at"] = self._now_iso()
-                self.telegram._append_event(  # type: ignore[attr-defined]
-                    call_id,
-                    "live_turn",
-                    {
-                        "delta_chars": len(snippet),
-                        "reply_chars": len((response.reply or "").strip()),
-                        "tts_status": response.tts_status,
-                        "call_audio_status": response.call_audio_status,
-                        "responses_sent": session["responses_sent"],
-                    },
-                )
-                if str(response.call_audio_status or "") != "streaming_out":
-                    self.telegram._append_event(  # type: ignore[attr-defined]
-                        call_id,
-                        "live_turn_audio_not_streaming",
-                        {
-                            "tts_status": response.tts_status,
-                            "call_audio_status": response.call_audio_status,
-                        },
-                    )
-            except Exception as exc:
-                session["last_stt_status"] = "agent_error"
-                self.debug.log(
-                    call_id,
-                    "live_turn_error",
-                    {
-                        "error": exc.__class__.__name__,
-                        "detail": str(exc),
-                        "call_status": call.get("status"),
-                        "responses_sent": session.get("responses_sent"),
-                    },
-                )
-                self.telegram._append_event(  # type: ignore[attr-defined]
-                    call_id,
-                    "live_turn_error",
-                    {"error": exc.__class__.__name__, "detail": str(exc)},
-                )
-
-            await asyncio.sleep(poll_seconds)
-
-    async def _telegram_gemini_live_loop(self, call_id: str, recording_path: Path) -> None:
-        """Gemini Live audio-to-audio loop for a single Telegram call.
-
-        Replaces the STT -> Z.AI -> TTS pipeline with a direct audio bridge
-        to the Gemini 3.1 Flash Live model.
-        """
+    async def _telegram_gemini_live_loop(
+        self,
+        call_id: str,
+        recording_path: Path,
+        greeting_played: bool = False,
+    ) -> None:
+        """Gemini Live audio-to-audio loop for a single Telegram call."""
         session = self.live_sessions.get(call_id)
         if session is None:
             return
@@ -1291,6 +1051,7 @@ class SecretaryService:
                 audio_out_callback=audio_out_callback,
                 stop_check=stop_check,
                 debug_log=debug_log,
+                greeting_played=greeting_played,
             )
         except asyncio.CancelledError:
             raise
@@ -1349,18 +1110,23 @@ class SecretaryService:
                     if self._is_announcement_only_call(call):
                         continue
 
-                    should_greet = (
-                        bool(self.settings.assistant_auto_greet_on_connect)
-                        and not bool(call.get("greeting_sent"))
-                    )
-                    if should_greet:
-                        greeting = await self._play_greeting_with_retry(call_id, source="auto_attach")
-                        if greeting.get("status") == "streaming_out":
-                            call["greeting_sent"] = True
-
                     existing = self.live_sessions.get(call_id)
                     if existing and existing.get("running"):
                         continue
+
+                    # Play cached Gemini greeting instantly while the Live
+                    # session connects in the background.
+                    greeting_played = bool(call.get("greeting_sent"))
+                    if not greeting_played and self.settings.assistant_auto_greet_on_connect:
+                        cached = GeminiLiveSession.cached_greeting_path(
+                            self.settings.language, self.settings.gemini_live_voice, self.settings.gemini_live_model,
+                        )
+                        if cached is not None:
+                            stream_result = await self.telegram.stream_audio_out(call_id, str(cached))
+                            if stream_result.get("status") == "streaming_out":
+                                greeting_played = True
+                                call["greeting_sent"] = True
+                                self.debug.log(call_id, "cached_greeting_played", {"path": str(cached)})
 
                     live_meta = call.setdefault("live_agent", {})
                     next_retry_at = live_meta.get("next_retry_at")
@@ -1374,6 +1140,7 @@ class SecretaryService:
                             context={"source": "auto_attach_watcher"},
                             speak_response=self.settings.telegram_auto_start_live_speak_response,
                         ),
+                        greeting_played=greeting_played,
                     )
                     live_meta["auto_last_status"] = result.status
                     live_meta["auto_last_detail"] = result.detail
@@ -2175,62 +1942,6 @@ class SecretaryService:
             tts_status=tts_status,
             call_audio_status=call_audio_status,
         )
-
-    async def _play_greeting_with_retry(self, call_id: str, source: str) -> dict[str, Any]:
-        tts_audio_path, tts_status = await self.tts.synthesize(
-            self.settings.assistant_greeting_message,
-            call_id=call_id,
-        )
-        if not tts_audio_path:
-            self.telegram._append_event(  # type: ignore[attr-defined]
-                call_id,
-                "greeting_tts_failed",
-                {"source": source, "tts_status": tts_status},
-            )
-            return {"status": "tts_failed", "detail": str(tts_status or "unknown")}
-
-        attempts = 3
-        delays = [0.0, 0.7, 1.4]
-        last_status = "unknown"
-        last_detail = "no detail"
-        ffmpeg_missing = False
-        for i in range(attempts):
-            if delays[i] > 0:
-                await asyncio.sleep(delays[i])
-            stream_result = await self.telegram.stream_audio_out(call_id, tts_audio_path)
-            last_status = str(stream_result.get("status") or "unknown")
-            last_detail = str(stream_result.get("detail") or "no detail")
-            self.telegram._append_event(  # type: ignore[attr-defined]
-                call_id,
-                "greeting_stream_attempt",
-                {
-                    "source": source,
-                    "attempt": i + 1,
-                    "status": last_status,
-                    "detail": last_detail,
-                    "audio_path": tts_audio_path,
-                },
-            )
-            if last_status == "streaming_out":
-                return {"status": last_status, "detail": last_detail}
-
-            if "ffmpeg" in last_detail.lower() and "not found" in last_detail.lower():
-                ffmpeg_missing = True
-                break
-
-        if ffmpeg_missing:
-            self.telegram._append_event(  # type: ignore[attr-defined]
-                call_id,
-                "greeting_stream_aborted",
-                {
-                    "source": source,
-                    "reason": "ffmpeg_missing",
-                    "detail": last_detail,
-                    "audio_path": tts_audio_path,
-                },
-            )
-
-        return {"status": last_status, "detail": last_detail}
 
     @staticmethod
     def _extract_new_text(previous: str, current: str) -> str:

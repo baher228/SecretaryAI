@@ -134,6 +134,7 @@ def test_start_live_agent_resets_per_call_state_and_uses_fresh_recording(tmp_pat
         Settings(
             telegram_audio_root=str(tmp_path / "audio"),
             calendar_enabled=False,
+            gemini_api_key="test-key",
         )
     )
 
@@ -144,11 +145,11 @@ def test_start_live_agent_resets_per_call_state_and_uses_fresh_recording(tmp_pat
     async def fake_stream_audio_in(call_id, payload):
         return CallAudioResponse(call_id=call_id, status="recording_in", detail="ok")
 
-    async def fake_loop(call_id):
+    async def fake_gemini_loop(call_id, recording_path, greeting_played=False):
         return
 
     service.stream_audio_in = fake_stream_audio_in  # type: ignore[method-assign]
-    service._telegram_live_loop = fake_loop  # type: ignore[method-assign]
+    service._telegram_gemini_live_loop = fake_gemini_loop  # type: ignore[method-assign]
     service.telegram.get_call = lambda call_id: {"status": "active"}  # type: ignore[method-assign]
 
     async def run() -> None:

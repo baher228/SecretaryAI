@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import array
 import asyncio
+import hashlib
 import wave
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -39,6 +40,7 @@ WAV_HEADER_SIZE = 44
 MIN_SEND_BYTES = 1600
 MAX_TRANSCRIPT_ENTRIES = 200
 TMPFS_DIR = Path("/dev/shm/secretary_ai")
+GREETING_CACHE_DIR = Path(".telegram/cache")
 
 # Sleep intervals (seconds)
 POLL_WAIT_FILE = 0.3
@@ -92,10 +94,24 @@ class GeminiLiveSession:
         self.transcript_in: list[str] = []
         self.transcript_out: list[str] = []
         self._running = False
+        self._first_turn_complete = asyncio.Event()
 
     @staticmethod
     def available() -> bool:
         return _GENAI_AVAILABLE
+
+    @staticmethod
+    def _greeting_cache_key(language: str, voice: str, model: str) -> str:
+        """Build a cache filename that includes voice and model."""
+        fingerprint = hashlib.md5(f"{voice}:{model}".encode()).hexdigest()[:8]
+        return f"gemini_greeting_{language}_{fingerprint}.wav"
+
+    @staticmethod
+    def cached_greeting_path(language: str, voice: str, model: str) -> Path | None:
+        """Return the cached greeting WAV if it exists, else None."""
+        name = GeminiLiveSession._greeting_cache_key(language, voice, model)
+        path = GREETING_CACHE_DIR / name
+        return path if path.is_file() else None
 
     def _build_client(self) -> Any:
         return genai.Client(
@@ -131,6 +147,7 @@ class GeminiLiveSession:
         audio_out_callback: AudioOutCallback,
         stop_check: StopCheck,
         debug_log: DebugLog,
+        greeting_played: bool = False,
     ) -> None:
         """Main entry point: bridges call audio <-> Gemini Live.
 
@@ -145,6 +162,9 @@ class GeminiLiveSession:
             ``def() -> bool`` returns True when the loop should stop.
         debug_log:
             ``def(event, payload)`` for structured debug logging.
+        greeting_played:
+            If True, a cached greeting was already played before Gemini
+            connected.  The initial prompt tells Gemini not to greet again.
         """
         if not _GENAI_AVAILABLE:
             debug_log("gemini_live_unavailable", {"reason": "google-genai not installed"})
@@ -162,6 +182,9 @@ class GeminiLiveSession:
                 config=self._live_config(),
             ) as session:
                 debug_log("gemini_live_connected", {"model": self.settings.gemini_live_model})
+
+                await self._send_initial_prompt(session, debug_log, greeting_played=greeting_played)
+
                 tasks = [
                     asyncio.create_task(
                         self._send_audio_loop(session, recording_path, stop_check, debug_log)
@@ -176,6 +199,7 @@ class GeminiLiveSession:
                             audio_out_callback,
                             stop_check,
                             debug_log,
+                            greeting_played=greeting_played,
                         )
                     ),
                 ]
@@ -205,6 +229,42 @@ class GeminiLiveSession:
             )
         finally:
             self._running = False
+
+    # ------------------------------------------------------------------
+    # Initial prompt — triggers the greeting so the call isn't silent
+    # ------------------------------------------------------------------
+
+    async def _send_initial_prompt(
+        self,
+        session: Any,
+        debug_log: DebugLog,
+        *,
+        greeting_played: bool = False,
+    ) -> None:
+        """Send a text turn so Gemini speaks a greeting without waiting for audio.
+
+        When *greeting_played* is True a cached greeting was already streamed
+        into the call, so we tell Gemini not to greet again.
+        """
+        from secretary_ai.core.locales import (
+            GEMINI_LIVE_INITIAL_PROMPT,
+            GEMINI_LIVE_RESUME_PROMPT,
+            t,
+        )
+
+        mapping = GEMINI_LIVE_RESUME_PROMPT if greeting_played else GEMINI_LIVE_INITIAL_PROMPT
+        prompt = t(mapping, self.settings.language)
+        await session.send_client_content(
+            turns=types.Content(
+                role="user",
+                parts=[types.Part(text=prompt)],
+            ),
+            turn_complete=True,
+        )
+        debug_log(
+            "gemini_live_initial_prompt_sent",
+            {"prompt": prompt[:200], "greeting_played": greeting_played},
+        )
 
     # ------------------------------------------------------------------
     # Send loop: recording WAV → Gemini
@@ -320,6 +380,8 @@ class GeminiLiveSession:
 
                     if getattr(server_content, "turn_complete", False):
                         turns_received += 1
+                        if turns_received == 1:
+                            self._first_turn_complete.set()
                         debug_log(
                             "gemini_live_turn_complete",
                             {"turns": turns_received},
@@ -363,11 +425,15 @@ class GeminiLiveSession:
         audio_out_callback: AudioOutCallback,
         stop_check: StopCheck,
         debug_log: DebugLog,
+        greeting_played: bool = False,
     ) -> None:
         """Drain received audio chunks, write WAV, and play into the call."""
         response_idx = 0
         out_dir = TMPFS_DIR if TMPFS_DIR.parent.is_dir() else audio_dir
         out_dir.mkdir(parents=True, exist_ok=True)
+        # Accumulate all first-turn PCM for caching the complete greeting.
+        first_turn_pcm: list[bytes] = []
+        should_cache = not greeting_played
 
         while not stop_check():
             try:
@@ -375,6 +441,10 @@ class GeminiLiveSession:
                     self.audio_out_queue.get(), timeout=POLL_PLAY_TIMEOUT
                 )
             except asyncio.TimeoutError:
+                if should_cache and self._first_turn_complete.is_set() and first_turn_pcm:
+                    await self._cache_greeting(b"".join(first_turn_pcm), debug_log)
+                    first_turn_pcm.clear()
+                    should_cache = False
                 continue
 
             collected: list[bytes] = [first]
@@ -393,6 +463,12 @@ class GeminiLiveSession:
                     {"error": exc.__class__.__name__, "path": str(wav_path)},
                 )
                 continue
+
+            # Accumulate first-turn audio for the greeting cache.
+            # Flush is deferred to the TimeoutError path (queue empty) so
+            # all first-turn chunks are included.
+            if should_cache:
+                first_turn_pcm.append(pcm_48k)
 
             try:
                 result = await audio_out_callback(str(wav_path))
@@ -414,6 +490,19 @@ class GeminiLiveSession:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    async def _cache_greeting(self, pcm_48k: bytes, debug_log: DebugLog) -> None:
+        """Write the complete first-turn PCM as a greeting WAV cache file."""
+        try:
+            GREETING_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            name = self._greeting_cache_key(
+                self.settings.language, self.settings.gemini_live_voice, self.settings.gemini_live_model,
+            )
+            cache_path = GREETING_CACHE_DIR / name
+            await asyncio.to_thread(_write_wav, cache_path, pcm_48k, PLAYBACK_SAMPLE_RATE)
+            debug_log("gemini_greeting_cached", {"path": str(cache_path), "bytes": len(pcm_48k)})
+        except Exception as exc:
+            debug_log("gemini_greeting_cache_error", {"error": exc.__class__.__name__})
 
     @staticmethod
     def _extract_audio(response: Any, server_content: Any) -> list[bytes]:

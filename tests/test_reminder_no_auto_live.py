@@ -17,19 +17,14 @@ def test_reminder_outbound_call_does_not_auto_start_live_loop() -> None:
             "chat_id": 1,
         }
 
-    called = {"live": 0, "greet": 0}
+    called = {"live": 0}
 
-    async def fake_live_start(call_id, payload):
+    async def fake_live_start(call_id, payload, greeting_played=False):
         called["live"] += 1
         raise AssertionError("live loop should not start for reminder announcement calls")
 
-    async def fake_greet(call_id, source):
-        called["greet"] += 1
-        raise AssertionError("greeting should not play for reminder announcement calls")
-
     service.telegram.start_outbound_call = fake_start_outbound_call  # type: ignore[method-assign]
     service.start_telegram_live_agent = fake_live_start  # type: ignore[method-assign]
-    service._play_greeting_with_retry = fake_greet  # type: ignore[method-assign]
 
     payload = OutboundCallRequest(
         target_user="@gringobochka",
@@ -42,7 +37,6 @@ def test_reminder_outbound_call_does_not_auto_start_live_loop() -> None:
     assert isinstance(response, OutboundCallResponse)
     assert response.status == "active"
     assert called["live"] == 0
-    assert called["greet"] == 0
 
 
 def test_regular_reminder_purpose_still_uses_live_loop_when_not_announcement() -> None:
@@ -64,7 +58,7 @@ def test_regular_reminder_purpose_still_uses_live_loop_when_not_announcement() -
 
     called = {"live": 0}
 
-    async def fake_live_start(call_id, payload):
+    async def fake_live_start(call_id, payload, greeting_played=False):
         called["live"] += 1
         return type("R", (), {"status": "running", "detail": "ok"})()
 
