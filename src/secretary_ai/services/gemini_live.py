@@ -442,7 +442,7 @@ class GeminiLiveSession:
                 )
             except asyncio.TimeoutError:
                 if should_cache and self._first_turn_complete.is_set() and first_turn_pcm:
-                    self._cache_greeting(b"".join(first_turn_pcm), debug_log)
+                    await self._cache_greeting(b"".join(first_turn_pcm), debug_log)
                     first_turn_pcm.clear()
                     should_cache = False
                 continue
@@ -468,7 +468,7 @@ class GeminiLiveSession:
             if should_cache:
                 first_turn_pcm.append(pcm_48k)
                 if self._first_turn_complete.is_set():
-                    self._cache_greeting(b"".join(first_turn_pcm), debug_log)
+                    await self._cache_greeting(b"".join(first_turn_pcm), debug_log)
                     first_turn_pcm.clear()
                     should_cache = False
 
@@ -493,7 +493,7 @@ class GeminiLiveSession:
     # Helpers
     # ------------------------------------------------------------------
 
-    def _cache_greeting(self, pcm_48k: bytes, debug_log: DebugLog) -> None:
+    async def _cache_greeting(self, pcm_48k: bytes, debug_log: DebugLog) -> None:
         """Write the complete first-turn PCM as a greeting WAV cache file."""
         try:
             GREETING_CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -501,7 +501,7 @@ class GeminiLiveSession:
                 self.settings.language, self.settings.gemini_live_voice, self.settings.gemini_live_model,
             )
             cache_path = GREETING_CACHE_DIR / name
-            _write_wav(cache_path, pcm_48k, PLAYBACK_SAMPLE_RATE)
+            await asyncio.to_thread(_write_wav, cache_path, pcm_48k, PLAYBACK_SAMPLE_RATE)
             debug_log("gemini_greeting_cached", {"path": str(cache_path), "bytes": len(pcm_48k)})
         except Exception as exc:
             debug_log("gemini_greeting_cache_error", {"error": exc.__class__.__name__})
