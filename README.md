@@ -4,14 +4,13 @@ AI-powered phone secretary that handles Telegram voice calls autonomously. Uses 
 
 ## Features
 
-- **Voice calls** — Gemini Live streams call audio directly to/from the AI model (no separate STT/TTS needed)
-- **Fallback pipeline** — STT (Whisper) → Z.AI GLM → TTS (Edge TTS) when Gemini Live is disabled
+- **Voice calls** — Gemini Live streams call audio directly to/from the AI model (native audio-to-audio, no STT/TTS)
 - **Text chat** — Z.AI GLM-powered conversational assistant via REST API
 - **Google Calendar** — reads events, queues scheduling requests, processes them via AI
 - **Proactive reminders** — calls you before upcoming calendar events
 - **Auto-answer** — picks up inbound Telegram calls and starts the AI loop
-- **Auto-greeting** — plays a configurable greeting when a call connects
-- **Dashboard** — web UI for testing calls, auth, and live WebSocket interactions
+- **Greeting cache** — caches Gemini's first greeting for instant playback on subsequent calls
+- **Control panel** — web UI for monitoring status, call history, and testing API endpoints
 
 ## Prerequisites
 
@@ -55,7 +54,7 @@ LANGUAGE=ru   # Russian (default)
 LANGUAGE=en   # English
 ```
 
-This switches system prompts, greeting, TTS voice, STT model, and template replies. You can also override individual settings (e.g. `TTS_VOICE`, `STT_LANGUAGE`) independently.
+This switches system prompts, greeting text, and template replies.
 
 ### 2. Start the service
 
@@ -64,7 +63,7 @@ docker compose up --build
 ```
 
 The service starts at:
-- **Dashboard**: http://127.0.0.1:8000/dashboard
+- **Control panel**: http://127.0.0.1:8000/dashboard
 - **API docs**: http://127.0.0.1:8000/docs
 
 ### 3. Authenticate Telegram
@@ -102,13 +101,6 @@ curl -X POST http://127.0.0.1:8000/api/v1/calls/outbound \
 
 The AI live loop starts automatically on the call.
 
-## Voice Modes
-
-| Mode | When | How it works |
-|------|------|-------------|
-| **Gemini Live** (default) | `GEMINI_API_KEY` set + `GEMINI_LIVE_ENABLED=true` | Audio streams directly to Gemini 3.1 Flash Live via WebSocket — lowest latency |
-| **STT → Z.AI → TTS** | Gemini disabled or key missing | Whisper transcribes audio → Z.AI generates reply → Edge TTS synthesizes speech |
-
 ## Calendar Integration (Optional)
 
 1. Create a Google Cloud service account with Calendar API access
@@ -139,7 +131,7 @@ The AI can then check availability, schedule meetings, and send reminders.
 | Live | `GET /api/v1/calls/{id}/live/status` | Live loop status |
 | Agent | `POST /api/v1/agent/reply` | Get AI reply for a transcript |
 | Agent | `POST /api/v1/agent/analyze` | Structured intent analysis |
-| Agent | `POST /api/v1/agent/live/respond` | Full live response (AI + TTS + play) |
+| Agent | `POST /api/v1/agent/live/respond` | Full live response (AI + play) |
 | Chat | `POST /api/v1/chat` | Text chat with Z.AI |
 | Calendar | `POST /api/v1/calendar/queue` | Queue a calendar operation |
 | Calendar | `GET /api/v1/calendar/cache` | Get cached calendar events |
@@ -158,8 +150,6 @@ src/secretary_ai/
 │   ├── ai_agent.py        # Z.AI agent reasoning
 │   ├── zai_client.py      # Shared Z.AI HTTP client
 │   ├── telegram_calls.py  # Telegram MTProto call adapter
-│   ├── stt.py             # Speech-to-text (Whisper)
-│   ├── tts.py             # Text-to-speech (Edge TTS)
 │   ├── calendar.py        # Google Calendar service
 │   ├── memory_store.py    # Call context memory
 │   ├── maps.py            # Google Maps ETA
@@ -194,6 +184,4 @@ uvicorn secretary_ai.main:app --host 0.0.0.0 --port 8000 --app-dir src
 - **py-tgcalls** — Telegram call/media layer
 - **google-genai** — Gemini 3.1 Flash Live API
 - **Z.AI GLM** — Text chat and agent reasoning
-- **faster-whisper** — Local STT (fallback)
-- **edge-tts** — TTS synthesis (fallback)
 - **Google Calendar API** — Calendar integration
