@@ -99,8 +99,7 @@ class Settings(BaseSettings):
     audio_cleanup_max_age_hours: float = 24.0
     audio_cleanup_keep_recent_files: int = 60
 
-    # Gemini Live (audio-to-audio voice loop).
-    # Enabled by default; falls back to STT/AI/TTS when the API key is absent.
+    # Gemini Live — sole voice engine (audio-to-audio via WebSocket).
     gemini_api_key: str | None = None
     gemini_live_model: str = "gemini-3.1-flash-live-preview"
     gemini_live_voice: str = "Zephyr"
