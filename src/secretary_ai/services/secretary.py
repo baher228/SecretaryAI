@@ -884,6 +884,15 @@ class SecretaryService:
                 speak_response=bool(existing.get("speak_response", True)),
             )
 
+        if not (self.settings.gemini_live_enabled and self.settings.gemini_api_key and GeminiLiveSession.available()):
+            return TelegramLiveAgentResponse(
+                call_id=call_id,
+                status="gemini_unavailable",
+                detail="Gemini Live is disabled or the API key / SDK is missing.",
+                stt_status="not_started",
+                speak_response=payload.speak_response,
+            )
+
         recordings_root = Path(self.settings.telegram_audio_root) / "recordings"
         recordings_root.mkdir(parents=True, exist_ok=True)
         suffix = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")

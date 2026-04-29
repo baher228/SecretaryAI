@@ -465,12 +465,10 @@ class GeminiLiveSession:
                 continue
 
             # Accumulate first-turn audio for the greeting cache.
+            # Flush is deferred to the TimeoutError path (queue empty) so
+            # all first-turn chunks are included.
             if should_cache:
                 first_turn_pcm.append(pcm_48k)
-                if self._first_turn_complete.is_set():
-                    await self._cache_greeting(b"".join(first_turn_pcm), debug_log)
-                    first_turn_pcm.clear()
-                    should_cache = False
 
             try:
                 result = await audio_out_callback(str(wav_path))
