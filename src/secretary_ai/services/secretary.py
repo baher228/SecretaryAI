@@ -1349,8 +1349,17 @@ class SecretaryService:
                     if self._is_announcement_only_call(call):
                         continue
 
+                    # When Gemini Live is active it sends its own greeting
+                    # via the initial text prompt, so skip the TTS greeting
+                    # to avoid double-greeting or silence when TTS fails.
+                    use_gemini = (
+                        self.settings.gemini_live_enabled
+                        and bool(self.settings.gemini_api_key)
+                        and GeminiLiveSession.available()
+                    )
                     should_greet = (
-                        bool(self.settings.assistant_auto_greet_on_connect)
+                        not use_gemini
+                        and bool(self.settings.assistant_auto_greet_on_connect)
                         and not bool(call.get("greeting_sent"))
                     )
                     if should_greet:

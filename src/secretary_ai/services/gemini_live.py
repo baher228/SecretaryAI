@@ -162,6 +162,12 @@ class GeminiLiveSession:
                 config=self._live_config(),
             ) as session:
                 debug_log("gemini_live_connected", {"model": self.settings.gemini_live_model})
+
+                # Send an initial text prompt so Gemini speaks the greeting
+                # first — without this both sides wait for audio and the call
+                # is silent.
+                await self._send_initial_prompt(session, debug_log)
+
                 tasks = [
                     asyncio.create_task(
                         self._send_audio_loop(session, recording_path, stop_check, debug_log)
@@ -205,6 +211,24 @@ class GeminiLiveSession:
             )
         finally:
             self._running = False
+
+    # ------------------------------------------------------------------
+    # Initial prompt — triggers the greeting so the call isn't silent
+    # ------------------------------------------------------------------
+
+    async def _send_initial_prompt(self, session: Any, debug_log: DebugLog) -> None:
+        """Send a text turn so Gemini speaks a greeting without waiting for audio."""
+        from secretary_ai.core.locales import GEMINI_LIVE_INITIAL_PROMPT, t
+
+        prompt = t(GEMINI_LIVE_INITIAL_PROMPT, self.settings.language)
+        await session.send_client_content(
+            turns=types.Content(
+                role="user",
+                parts=[types.Part(text=prompt)],
+            ),
+            turn_complete=True,
+        )
+        debug_log("gemini_live_initial_prompt_sent", {"prompt": prompt[:200]})
 
     # ------------------------------------------------------------------
     # Send loop: recording WAV → Gemini

@@ -9,6 +9,11 @@ from typing import Any
 # System prompts
 # ---------------------------------------------------------------------------
 
+GEMINI_LIVE_INITIAL_PROMPT: dict[str, str] = {
+    "en": "A phone call has just been connected. Greet the caller warmly and ask how you can help.",
+    "ru": "Телефонный звонок только что подключён. Тепло поприветствуй звонящего и спроси, чем можешь помочь.",
+}
+
 GEMINI_LIVE_SYSTEM_PROMPT: dict[str, str] = {
     "en": (
         "You are a professional AI phone secretary. "
