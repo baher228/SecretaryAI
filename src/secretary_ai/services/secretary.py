@@ -342,8 +342,14 @@ class SecretaryService:
         metadata_source = str((payload.metadata or {}).get("source") or "").strip().lower()
         metadata_announcement = bool((payload.metadata or {}).get("announcement_only"))
         reminder_announcement = metadata_announcement or metadata_source == "calendar_reminder"
+        use_gemini = (
+            self.settings.gemini_live_enabled
+            and bool(self.settings.gemini_api_key)
+            and GeminiLiveSession.available()
+        )
         should_greet = (
-            response.status == "active"
+            not use_gemini
+            and response.status == "active"
             and bool(response.call_id)
             and not payload.initial_audio_path
             and bool(self.settings.assistant_auto_greet_on_connect)
