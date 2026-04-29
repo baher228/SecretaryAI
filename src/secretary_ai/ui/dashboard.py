@@ -276,31 +276,48 @@ DASHBOARD_HTML = """<!doctype html>
               <article class="card">
                 <div class="row"><span class="method post">POST</span><code class="path">/api/v1/telegram/auth/send-code</code></div>
                 <p class="hint">Send login code to your Telegram.</p>
-                <textarea id="payload-send-code">{\\n  "phone_number": "+441234567890"\\n}</textarea>
+                <textarea id="payload-send-code">{
+  "phone_number": "+441234567890"
+}</textarea>
                 <button class="secondary" onclick="callPost('/api/v1/telegram/auth/send-code', 'payload-send-code')">Run</button>
               </article>
               <article class="card">
                 <div class="row"><span class="method post">POST</span><code class="path">/api/v1/telegram/auth/sign-in</code></div>
                 <p class="hint">Complete sign-in with code and password.</p>
-                <textarea id="payload-signin">{\\n  "phone_number": "+441234567890",\\n  "code": "12345",\\n  "phone_code_hash": "from_send_code",\\n  "password": null\\n}</textarea>
+                <textarea id="payload-signin">{
+  "phone_number": "+441234567890",
+  "code": "12345",
+  "phone_code_hash": "from_send_code",
+  "password": null
+}</textarea>
                 <button class="secondary" onclick="callPost('/api/v1/telegram/auth/sign-in', 'payload-signin')">Run</button>
               </article>
               <article class="card">
                 <div class="row"><span class="method post">POST</span><code class="path">/api/v1/calls/outbound</code></div>
                 <p class="hint">Start outbound Telegram call with Gemini Live.</p>
-                <textarea id="payload-outbound">{\\n  "target_user": "@username",\\n  "purpose": "reminder",\\n  "initial_audio_path": null,\\n  "metadata": {}\\n}</textarea>
+                <textarea id="payload-outbound">{
+  "target_user": "@username",
+  "purpose": "reminder",
+  "initial_audio_path": null,
+  "metadata": {}
+}</textarea>
                 <button class="secondary" onclick="callPost('/api/v1/calls/outbound', 'payload-outbound')">Run</button>
               </article>
               <article class="card">
                 <div class="row"><span class="method post">POST</span><code class="path">/api/v1/chat</code></div>
                 <p class="hint">Text chat via Z.AI GLM.</p>
-                <textarea id="payload-chat">{\\n  "message": "Hello, what can you do?"\\n}</textarea>
+                <textarea id="payload-chat">{
+  "message": "Hello, what can you do?"
+}</textarea>
                 <button class="secondary" onclick="callPost('/api/v1/chat', 'payload-chat')">Run</button>
               </article>
               <article class="card">
                 <div class="row"><span class="method post">POST</span><code class="path">/api/v1/calls/{call_id}/live/start</code></div>
                 <p class="hint">Start Gemini Live agent on an active call.</p>
-                <textarea id="payload-live-start">{\\n  "context": {"source": "dashboard"},\\n  "speak_response": true\\n}</textarea>
+                <textarea id="payload-live-start">{
+  "context": {"source": "dashboard"},
+  "speak_response": true
+}</textarea>
                 <input type="text" id="live-call-id" placeholder="Call ID, e.g. tg-123456789" />
                 <div class="row">
                   <button class="secondary" onclick="startTelegramLive()">Start</button>
