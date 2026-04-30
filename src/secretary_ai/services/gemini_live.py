@@ -454,6 +454,8 @@ class GeminiLiveSession:
                         turn_chunks, out_dir, call_prefix, response_idx,
                         audio_out_callback, debug_log, cache_greeting=False,
                     )
+                    if should_cache:
+                        should_cache = False
                     turn_chunks.clear()
                     response_idx += 1
                 continue
