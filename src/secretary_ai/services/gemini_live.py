@@ -49,7 +49,7 @@ POLL_WAIT_DATA = 0.08
 POLL_SEND_INTERVAL = 0.05
 POLL_SEND_ERROR = 0.3
 POLL_RECEIVE_ERROR = 0.3
-POLL_PLAY_TIMEOUT = 0.05
+POLL_PLAY_TIMEOUT = 10.0
 
 # Logging cadence
 LOG_EVERY_N_CHUNKS = 50
@@ -446,14 +446,14 @@ class GeminiLiveSession:
                     self.audio_out_queue.get(), timeout=POLL_PLAY_TIMEOUT
                 )
             except asyncio.TimeoutError:
-                # Flush any accumulated audio on timeout (safety net).
+                # Safety-net flush: only fires if the sentinel is lost.
+                # Never cache the greeting here — the turn may be incomplete.
                 if turn_chunks:
+                    debug_log("gemini_live_timeout_flush", {"chunks": len(turn_chunks)})
                     await self._flush_turn(
                         turn_chunks, out_dir, call_prefix, response_idx,
-                        audio_out_callback, debug_log, should_cache,
+                        audio_out_callback, debug_log, cache_greeting=False,
                     )
-                    if should_cache:
-                        should_cache = False
                     turn_chunks.clear()
                     response_idx += 1
                 continue
