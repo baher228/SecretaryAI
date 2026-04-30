@@ -454,6 +454,8 @@ class GeminiLiveSession:
                         turn_chunks, out_dir, call_prefix, response_idx,
                         audio_out_callback, debug_log, cache_greeting=False,
                     )
+                    if should_cache:
+                        should_cache = False
                     turn_chunks.clear()
                     response_idx += 1
                 continue
@@ -513,7 +515,13 @@ class GeminiLiveSession:
                 {"error": exc.__class__.__name__, "detail": str(exc)[:200]},
             )
         finally:
-            wav_path.unlink(missing_ok=True)
+            # Defer file cleanup — py-tgcalls spawns ffmpeg to read the WAV
+            # in the background; deleting immediately would race with ffmpeg.
+            duration_s = len(pcm_48k) / (2 * PLAYBACK_SAMPLE_RATE)
+            asyncio.get_running_loop().call_later(
+                duration_s + 5.0,
+                lambda p=wav_path: p.unlink(missing_ok=True),
+            )
 
     # ------------------------------------------------------------------
     # Helpers
