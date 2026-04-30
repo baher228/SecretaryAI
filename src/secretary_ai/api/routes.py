@@ -66,8 +66,18 @@ def _ws_event(
 
 
 @router.get("/health")
-async def health() -> dict[str, str]:
-    return {"status": "ok", "mode": "telegram_mtproto_mvp"}
+async def health(
+    secretary: SecretaryService = Depends(get_secretary),
+) -> dict[str, Any]:
+    s = secretary.settings
+    return {
+        "status": "ok",
+        "mode": "telegram_mtproto_mvp",
+        "gemini_live": {
+            "enabled": bool(s.gemini_live_enabled and s.gemini_api_key),
+            "model": s.gemini_live_model,
+        },
+    }
 
 
 @router.get("/architecture", response_model=ArchitectureOverview)
