@@ -514,14 +514,14 @@ class GeminiLiveSession:
                 "gemini_live_play_error",
                 {"error": exc.__class__.__name__, "detail": str(exc)[:200]},
             )
-
-        # Defer file cleanup — py-tgcalls spawns ffmpeg to read the WAV
-        # in the background; deleting immediately would race with ffmpeg.
-        duration_s = len(pcm_48k) / (2 * PLAYBACK_SAMPLE_RATE)
-        asyncio.get_event_loop().call_later(
-            duration_s + 5.0,
-            lambda p=wav_path: p.unlink(missing_ok=True),
-        )
+        finally:
+            # Defer file cleanup — py-tgcalls spawns ffmpeg to read the WAV
+            # in the background; deleting immediately would race with ffmpeg.
+            duration_s = len(pcm_48k) / (2 * PLAYBACK_SAMPLE_RATE)
+            asyncio.get_running_loop().call_later(
+                duration_s + 5.0,
+                lambda p=wav_path: p.unlink(missing_ok=True),
+            )
 
     # ------------------------------------------------------------------
     # Helpers
