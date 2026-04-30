@@ -243,6 +243,10 @@ class GeminiLiveSession:
     ) -> None:
         """Send a text turn so Gemini speaks a greeting without waiting for audio.
 
+        Uses ``send_realtime_input(text=...)`` instead of
+        ``send_client_content`` because the realtime path actually triggers
+        Gemini to generate an audio response.
+
         When *greeting_played* is True a cached greeting was already streamed
         into the call, so we tell Gemini not to greet again.
         """
@@ -254,13 +258,7 @@ class GeminiLiveSession:
 
         mapping = GEMINI_LIVE_RESUME_PROMPT if greeting_played else GEMINI_LIVE_INITIAL_PROMPT
         prompt = t(mapping, self.settings.language)
-        await session.send_client_content(
-            turns=types.Content(
-                role="user",
-                parts=[types.Part(text=prompt)],
-            ),
-            turn_complete=True,
-        )
+        await session.send_realtime_input(text=prompt)
         debug_log(
             "gemini_live_initial_prompt_sent",
             {"prompt": prompt[:200], "greeting_played": greeting_played},
