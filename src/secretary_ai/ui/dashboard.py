@@ -439,6 +439,7 @@ DASHBOARD_HTML = """<!doctype html>
           } else {
             hEl.innerHTML = '<span class="status-indicator status-err"></span>Offline';
           }
+          updateGeminiStatus(health.body);
 
           const aEl = document.getElementById("status-auth");
           const ab = auth.body || {};
@@ -480,20 +481,13 @@ DASHBOARD_HTML = """<!doctype html>
         } catch (e) { console.error("Dashboard refresh failed", e); }
       }
 
-      async function runModelCheck() {
+      function updateGeminiStatus(healthBody) {
         const el = document.getElementById("status-model");
-        try {
-          const r = await fetchJson("/api/v1/model/check", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ prompt: "ping" }),
-          });
-          if (r.ok && r.body?.connected) {
-            el.innerHTML = '<span class="status-indicator status-ok"></span>Connected';
-          } else {
-            el.innerHTML = '<span class="status-indicator status-err"></span>' + (r.body?.detail || "Offline");
-          }
-        } catch (e) {
-          el.innerHTML = '<span class="status-indicator status-err"></span>Error';
+        const gl = healthBody?.gemini_live;
+        if (gl?.enabled) {
+          el.innerHTML = '<span class="status-indicator status-ok"></span>' + (gl.model || "Enabled");
+        } else {
+          el.innerHTML = '<span class="status-indicator status-warn"></span>Disabled';
         }
       }
 
@@ -516,7 +510,6 @@ DASHBOARD_HTML = """<!doctype html>
       }
 
       refreshDashboard();
-      runModelCheck();
       refreshDebugLog();
       setInterval(refreshDashboard, 5000);
     </script>

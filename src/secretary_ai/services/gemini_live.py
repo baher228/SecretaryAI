@@ -377,6 +377,7 @@ class GeminiLiveSession:
                     self._record_transcripts(server_content, debug_log)
 
                     if getattr(server_content, "turn_complete", False):
+                        self.audio_out_queue.put_nowait(b"")  # sentinel
                         turns_received += 1
                         if turns_received == 1:
                             self._first_turn_complete.set()
@@ -425,65 +426,94 @@ class GeminiLiveSession:
         debug_log: DebugLog,
         greeting_played: bool = False,
     ) -> None:
-        """Drain received audio chunks, write WAV, and play into the call."""
+        """Accumulate audio for each Gemini turn, then play once.
+
+        py-tgcalls ``play()`` **replaces** the current stream rather than
+        queueing audio.  Playing many small WAVs in quick succession means
+        each call interrupts the previous one and the user hears nothing.
+        Instead we collect all PCM chunks until the turn-complete sentinel
+        (``b""``) arrives, write one WAV, and call ``play()`` once per turn.
+        """
         response_idx = 0
         out_dir = TMPFS_DIR if TMPFS_DIR.parent.is_dir() else audio_dir
         out_dir.mkdir(parents=True, exist_ok=True)
-        # Accumulate all first-turn PCM for caching the complete greeting.
-        first_turn_pcm: list[bytes] = []
         should_cache = not greeting_played
+        turn_chunks: list[bytes] = []
 
         while not stop_check():
             try:
-                first = await asyncio.wait_for(
+                chunk = await asyncio.wait_for(
                     self.audio_out_queue.get(), timeout=POLL_PLAY_TIMEOUT
                 )
             except asyncio.TimeoutError:
-                if should_cache and self._first_turn_complete.is_set() and first_turn_pcm:
-                    await self._cache_greeting(b"".join(first_turn_pcm), debug_log)
-                    first_turn_pcm.clear()
-                    should_cache = False
+                # Flush any accumulated audio on timeout (safety net).
+                if turn_chunks:
+                    await self._flush_turn(
+                        turn_chunks, out_dir, call_prefix, response_idx,
+                        audio_out_callback, debug_log, should_cache,
+                    )
+                    if should_cache:
+                        should_cache = False
+                    turn_chunks.clear()
+                    response_idx += 1
                 continue
 
-            collected: list[bytes] = [first]
-            while not self.audio_out_queue.empty():
-                collected.append(self.audio_out_queue.get_nowait())
-
-            pcm_data = b"".join(collected)
-            pcm_48k = _resample_pcm16(pcm_data, RECEIVE_SAMPLE_RATE, PLAYBACK_SAMPLE_RATE)
-
-            wav_path = out_dir / f"gemini_{call_prefix}_{response_idx}.wav"
-            try:
-                await asyncio.to_thread(_write_wav, wav_path, pcm_48k, PLAYBACK_SAMPLE_RATE)
-            except Exception as exc:
-                debug_log(
-                    "gemini_live_wav_write_error",
-                    {"error": exc.__class__.__name__, "path": str(wav_path)},
-                )
+            if chunk == b"":
+                # Sentinel: turn complete — play the accumulated audio.
+                if turn_chunks:
+                    await self._flush_turn(
+                        turn_chunks, out_dir, call_prefix, response_idx,
+                        audio_out_callback, debug_log, should_cache,
+                    )
+                    if should_cache:
+                        should_cache = False
+                    turn_chunks.clear()
+                    response_idx += 1
                 continue
 
-            # Accumulate first-turn audio for the greeting cache.
-            # Flush is deferred to the TimeoutError path (queue empty) so
-            # all first-turn chunks are included.
-            if should_cache:
-                first_turn_pcm.append(pcm_48k)
+            turn_chunks.append(chunk)
 
-            try:
-                result = await audio_out_callback(str(wav_path))
-                status = result.get("status") if isinstance(result, dict) else str(result)
-                debug_log(
-                    "gemini_live_audio_played",
-                    {"idx": response_idx, "bytes": len(pcm_data), "status": status},
-                )
-            except Exception as exc:
-                debug_log(
-                    "gemini_live_play_error",
-                    {"error": exc.__class__.__name__, "detail": str(exc)[:200]},
-                )
-            finally:
-                wav_path.unlink(missing_ok=True)
+    async def _flush_turn(
+        self,
+        chunks: list[bytes],
+        out_dir: Path,
+        call_prefix: str,
+        response_idx: int,
+        audio_out_callback: AudioOutCallback,
+        debug_log: DebugLog,
+        cache_greeting: bool,
+    ) -> None:
+        """Write accumulated PCM chunks as a single WAV and play it."""
+        pcm_data = b"".join(chunks)
+        pcm_48k = _resample_pcm16(pcm_data, RECEIVE_SAMPLE_RATE, PLAYBACK_SAMPLE_RATE)
 
-            response_idx += 1
+        wav_path = out_dir / f"gemini_{call_prefix}_{response_idx}.wav"
+        try:
+            await asyncio.to_thread(_write_wav, wav_path, pcm_48k, PLAYBACK_SAMPLE_RATE)
+        except Exception as exc:
+            debug_log(
+                "gemini_live_wav_write_error",
+                {"error": exc.__class__.__name__, "path": str(wav_path)},
+            )
+            return
+
+        if cache_greeting:
+            await self._cache_greeting(pcm_48k, debug_log)
+
+        try:
+            result = await audio_out_callback(str(wav_path))
+            status = result.get("status") if isinstance(result, dict) else str(result)
+            debug_log(
+                "gemini_live_audio_played",
+                {"idx": response_idx, "bytes": len(pcm_data), "status": status},
+            )
+        except Exception as exc:
+            debug_log(
+                "gemini_live_play_error",
+                {"error": exc.__class__.__name__, "detail": str(exc)[:200]},
+            )
+        finally:
+            wav_path.unlink(missing_ok=True)
 
     # ------------------------------------------------------------------
     # Helpers
