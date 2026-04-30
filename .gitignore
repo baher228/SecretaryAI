@@ -29,3 +29,5 @@ dist/
 .telegram/memory/mid_term.json
 .telegram/memory/short_term.json
 .telegram/cache/reminder_state.json
+.telegram/logs/live_debug.jsonl
+.telegram/cache/calendar_events.json
