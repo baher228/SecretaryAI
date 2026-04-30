@@ -58,7 +58,7 @@
     "target_user": "@gringobochka",
     "source_call_id": "",
     "audio_path": "/app/.telegram/audio/generated/reminder-vh4fqeel0rlmkpl5qvibmr41go-20260419T100241113497Z.mp3",
-    "status": "scheduled",
+    "status": "expired",
     "created_at": "2026-04-19T10:02:41.610161+00:00",
     "attempt_count": 0
   },
@@ -70,7 +70,7 @@
     "target_user": "@gringobochka",
     "source_call_id": "",
     "audio_path": "/app/.telegram/audio/generated/reminder-pr79ngks9dcp5phkeb6c2ib44o-20260419T100241619381Z.mp3",
-    "status": "scheduled",
+    "status": "expired",
     "created_at": "2026-04-19T10:02:42.032945+00:00",
     "attempt_count": 0
   },
@@ -82,7 +82,7 @@
     "target_user": "@gringobochka",
     "source_call_id": "",
     "audio_path": "/app/.telegram/audio/generated/reminder-ktm7bh859d89lp4j1be2sogibo-20260419T100242047297Z.mp3",
-    "status": "scheduled",
+    "status": "expired",
     "created_at": "2026-04-19T10:02:43.185750+00:00",
     "attempt_count": 0
   },
@@ -94,7 +94,7 @@
     "target_user": "@gringobochka",
     "source_call_id": "tg-5523073095",
     "audio_path": "/app/.telegram/audio/generated/reminder-hqnsktfjb1sqecovuslnctq63g-20260419T101412758228Z.mp3",
-    "status": "scheduled",
+    "status": "expired",
     "created_at": "2026-04-19T10:14:13.294342+00:00",
     "attempt_count": 0
   },
@@ -123,7 +123,7 @@
     "target_user": "@gringobochka",
     "source_call_id": "tg-5523073095",
     "audio_path": "/app/.telegram/audio/generated/reminder-7ee3303ikuqvvunh4h6dien3vg-20260419T102334725777Z.mp3",
-    "status": "scheduled",
+    "status": "expired",
     "created_at": "2026-04-19T10:23:35.388633+00:00",
     "attempt_count": 0
   },
@@ -135,7 +135,7 @@
     "target_user": "@gringobochka",
     "source_call_id": "tg-5523073095",
     "audio_path": "/app/.telegram/audio/generated/reminder-9k530g7iui7btinch49f2ii02c-20260419T102335394667Z.mp3",
-    "status": "scheduled",
+    "status": "expired",
     "created_at": "2026-04-19T10:23:35.882760+00:00",
     "attempt_count": 0
   },
@@ -147,7 +147,7 @@
     "target_user": "@gringobochka",
     "source_call_id": "tg-5523073095",
     "audio_path": "/app/.telegram/audio/generated/reminder-heh8n9hmq6km7jrg3gm62a9c3c-20260419T102335886643Z.mp3",
-    "status": "scheduled",
+    "status": "expired",
     "created_at": "2026-04-19T10:23:36.306545+00:00",
     "attempt_count": 0
   },
@@ -159,7 +159,7 @@
     "target_user": "@gringobochka",
     "source_call_id": "tg-5523073095",
     "audio_path": "/app/.telegram/audio/generated/reminder-8gn50iiacjfplvof3i4p611378-20260419T102346723057Z.mp3",
-    "status": "scheduled",
+    "status": "expired",
     "created_at": "2026-04-19T10:23:47.230007+00:00",
     "attempt_count": 0
   },
@@ -171,7 +171,7 @@
     "target_user": "@gringobochka",
     "source_call_id": "tg-5523073095",
     "audio_path": "/app/.telegram/audio/generated/reminder-6drnr1r1ejrpo9bad7bpljig6c-20260419T102759352013Z.mp3",
-    "status": "scheduled",
+    "status": "expired",
     "created_at": "2026-04-19T10:28:01.246990+00:00",
     "attempt_count": 0
   },
@@ -183,7 +183,7 @@
     "target_user": "@gringobochka",
     "source_call_id": "tg-5523073095",
     "audio_path": "/app/.telegram/audio/generated/reminder-iq44c40ujnd88auvbpeerpr3cg-20260419T103438450756Z.mp3",
-    "status": "scheduled",
+    "status": "expired",
     "created_at": "2026-04-19T10:34:38.978120+00:00",
     "attempt_count": 0
   },
@@ -195,7 +195,7 @@
     "target_user": "@gringobochka",
     "source_call_id": "tg-5523073095",
     "audio_path": "/app/.telegram/audio/generated/reminder-gcc07a98n1024dethdgeke0io4-20260419T103505830058Z.mp3",
-    "status": "scheduled",
+    "status": "expired",
     "created_at": "2026-04-19T10:35:06.286629+00:00",
     "attempt_count": 0
   }

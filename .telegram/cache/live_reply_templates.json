@@ -2,73 +2,79 @@
   {
     "id": "greeting",
     "keywords": [
-      "hello",
-      "hi",
-      "hey",
-      "good morning",
-      "good evening"
+      "привет",
+      "здравствуйте",
+      "добрый день",
+      "добрый вечер",
+      "алло"
     ],
-    "reply": "Hi. I’m here. Tell me what you need."
+    "reply": "Здравствуйте. Слушаю вас.",
+    "priority": 1
   },
   {
     "id": "repeat",
     "keywords": [
-      "repeat",
-      "say again",
-      "again",
-      "what did you say"
+      "повтори",
+      "повторите",
+      "ещё раз",
+      "что вы сказали"
     ],
-    "reply": "Sure. I can repeat that. What part should I repeat?"
+    "reply": "Конечно. Что именно повторить?",
+    "priority": 2
   },
   {
     "id": "clarify",
     "keywords": [
-      "you there",
-      "can you hear me",
-      "hello are you there"
+      "вы тут",
+      "вы здесь",
+      "вы меня слышите",
+      "алло вы тут"
     ],
-    "reply": "Yes, I can hear you. Please go ahead."
+    "reply": "Да, слышу вас. Продолжайте.",
+    "priority": 3
   },
   {
     "id": "slow_down",
     "keywords": [
-      "slow down",
-      "too fast",
-      "speak slower"
+      "помедленнее",
+      "слишком быстро",
+      "говорите медленнее"
     ],
-    "reply": "Understood. I will speak slower."
+    "reply": "Понял. Буду говорить медленнее.",
+    "priority": 4
   },
   {
     "id": "volume_issue",
     "keywords": [
-      "cant hear",
-      "can't hear",
-      "too quiet",
-      "volume"
+      "не слышу",
+      "плохо слышно",
+      "тихо",
+      "громкость"
     ],
-    "reply": "Understood. I will keep replies short and clear."
+    "reply": "Понял. Буду отвечать коротко и чётко.",
+    "priority": 4
   },
   {
     "id": "availability_check",
     "keywords": [
-      "am i free",
-      "availability",
-      "free tomorrow",
-      "free at"
+      "я свободен",
+      "свободен ли я",
+      "доступность",
+      "свободен завтра"
     ],
-    "reply": "Let me quickly check your availability.",
+    "reply": "Сейчас проверю вашу доступность.",
     "calendar_check": true,
     "priority": 10
   },
   {
     "id": "reminder_set",
     "keywords": [
-      "set a reminder",
-      "remind me",
-      "set reminder",
-      "reminder"
+      "напомни",
+      "поставь напоминание",
+      "напоминание",
+      "напомните"
     ],
-    "reply": "Absolutely. Let me check your availability and queue this reminder.",
+    "reply": "Конечно. Проверю расписание и поставлю напоминание.",
     "calendar_check": true,
     "calendar_enqueue": true,
     "priority": 11
@@ -76,12 +82,12 @@
   {
     "id": "meeting_schedule",
     "keywords": [
-      "schedule meeting",
-      "book meeting",
-      "add meeting",
-      "create event"
+      "назначь встречу",
+      "забронируй встречу",
+      "создай событие",
+      "запланируй"
     ],
-    "reply": "Absolutely. I’ll check your timetable and queue this for scheduling.",
+    "reply": "Конечно. Проверю расписание и добавлю встречу.",
     "calendar_check": true,
     "calendar_enqueue": true,
     "priority": 11
@@ -89,12 +95,12 @@
   {
     "id": "meeting_followup_details",
     "keywords": [
-      "what time works",
-      "propose a time",
-      "find a slot",
-      "next available slot"
+      "когда удобно",
+      "предложи время",
+      "найди слот",
+      "ближайший слот"
     ],
-    "reply": "Sure. I’ll check your availability and suggest the best slot.",
+    "reply": "Проверю расписание и предложу лучшее время.",
     "calendar_check": true,
     "calendar_enqueue": true,
     "priority": 12
@@ -102,55 +108,59 @@
   {
     "id": "meeting_duration",
     "keywords": [
-      "for 30 minutes",
-      "for 1 hour",
-      "for one hour",
-      "duration"
+      "на 30 минут",
+      "на час",
+      "на один час",
+      "длительность"
     ],
-    "reply": "Noted. I’ll include that duration when I schedule it.",
+    "reply": "Учту длительность при планировании.",
     "calendar_enqueue": true,
     "priority": 10
   },
   {
     "id": "calendar_today",
     "keywords": [
-      "calendar",
-      "today",
-      "schedule",
-      "upcoming"
+      "календарь",
+      "сегодня",
+      "расписание",
+      "ближайшие"
     ],
-    "reply": "I can check your upcoming schedule now."
+    "reply": "Сейчас проверю ваше расписание.",
+    "calendar_check": true,
+    "priority": 8
   },
   {
     "id": "calendar_delete",
     "keywords": [
-      "delete event",
-      "remove event",
-      "cancel event"
+      "удали событие",
+      "убери событие",
+      "отмени событие"
     ],
-    "reply": "Okay. I can remove that event after you confirm which one."
+    "reply": "Могу удалить после подтверждения. Какое именно?",
+    "calendar_enqueue": true,
+    "priority": 9
   },
   {
     "id": "calendar_move_day",
     "keywords": [
-      "move to tomorrow",
-      "move to monday",
-      "move it to",
-      "change day"
+      "перенеси на завтра",
+      "перенеси на понедельник",
+      "перенеси на",
+      "смени день"
     ],
-    "reply": "Understood. I’ll queue that reschedule request.",
+    "reply": "Понял. Поставлю в очередь на перенос.",
     "calendar_enqueue": true,
     "priority": 10
   },
   {
     "id": "calendar_conflict",
     "keywords": [
-      "conflict",
-      "double booked",
-      "overlap",
-      "clash"
+      "конфликт",
+      "наложение",
+      "пересечение",
+      "накладка"
     ],
-    "reply": "Got it. I’ll check conflicts and suggest an alternative.",
+    "reply": "Понял. Проверю конфликты и предложу альтернативу.",
     "calendar_check": true,
     "calendar_enqueue": true,
     "priority": 12
@@ -158,187 +168,165 @@
   {
     "id": "time_query",
     "keywords": [
-      "what time",
-      "when is",
-      "next meeting"
+      "во сколько",
+      "когда",
+      "следующая встреча"
     ],
-    "reply": "I can check that now. Give me one second."
+    "reply": "Сейчас проверю. Одну секунду.",
+    "calendar_check": true,
+    "priority": 7
   },
   {
     "id": "reschedule",
     "keywords": [
-      "reschedule",
-      "move meeting",
-      "another time"
+      "перенеси",
+      "перенести встречу",
+      "другое время"
     ],
-    "reply": "Understood. I can help reschedule it."
+    "reply": "Понял. Могу помочь перенести.",
+    "calendar_enqueue": true,
+    "priority": 9
   },
   {
     "id": "reschedule_confirmation",
     "keywords": [
-      "yes reschedule",
-      "confirm reschedule",
-      "go ahead reschedule"
+      "да перенеси",
+      "подтверди перенос",
+      "давай перенеси"
     ],
-    "reply": "Great. I’ll proceed with the reschedule request now.",
+    "reply": "Хорошо. Переношу сейчас.",
     "calendar_enqueue": true,
     "priority": 11
   },
   {
     "id": "reschedule_reject",
     "keywords": [
-      "dont reschedule",
-      "don't reschedule",
-      "keep it",
-      "leave it"
+      "не переноси",
+      "оставь как есть",
+      "не надо"
     ],
-    "reply": "Understood. I’ll keep the current schedule unchanged.",
+    "reply": "Понял. Оставляю расписание без изменений.",
     "priority": 11
   },
   {
     "id": "confirm",
     "keywords": [
-      "yes",
-      "confirm",
-      "correct",
-      "go ahead"
+      "да",
+      "подтверждаю",
+      "верно",
+      "давай"
     ],
-    "reply": "Great. Confirmed."
+    "reply": "Отлично. Подтверждено.",
+    "priority": 1
   },
   {
     "id": "reject",
     "keywords": [
-      "no",
-      "not that",
-      "wrong",
-      "cancel that"
+      "нет",
+      "не то",
+      "неправильно",
+      "отмени"
     ],
-    "reply": "Okay. I won’t do that. Tell me the correct option."
+    "reply": "Хорошо. Не буду. Скажите правильный вариант.",
+    "priority": 1
   },
   {
     "id": "thanks",
     "keywords": [
-      "thanks",
-      "thank you",
-      "appreciate"
+      "спасибо",
+      "благодарю",
+      "спс"
     ],
-    "reply": "You’re welcome."
+    "reply": "Пожалуйста.",
+    "priority": 1
   },
   {
     "id": "status_update",
     "keywords": [
-      "status",
-      "did you do it",
-      "is it done",
-      "update me"
+      "статус",
+      "сделал",
+      "готово ли",
+      "обнови"
     ],
-    "reply": "Sure. I’ll check and give you a quick status update.",
+    "reply": "Сейчас проверю и дам обновление.",
     "calendar_check": true,
     "priority": 8
   },
   {
     "id": "urgent_priority",
     "keywords": [
-      "urgent",
-      "asap",
-      "right now",
-      "immediately"
+      "срочно",
+      "немедленно",
+      "прямо сейчас",
+      "как можно скорее"
     ],
-    "reply": "Understood. I’ll mark this as urgent and process it first.",
+    "reply": "Понял. Отмечаю как срочное и обрабатываю первым.",
     "calendar_enqueue": true,
     "priority": 12
   },
   {
     "id": "timezone_change",
     "keywords": [
-      "my timezone",
-      "in london time",
-      "in utc",
-      "time zone"
+      "часовой пояс",
+      "по лондону",
+      "по utc",
+      "таймзона"
     ],
-    "reply": "Got it. I’ll handle this in the correct timezone.",
+    "reply": "Понял. Учту часовой пояс.",
     "calendar_enqueue": true,
     "priority": 9
   },
   {
     "id": "hold_on",
     "keywords": [
-      "wait",
-      "hold on",
-      "one second"
+      "подожди",
+      "подождите",
+      "секунду",
+      "минуту"
     ],
-    "reply": "Sure, I’ll wait."
+    "reply": "Хорошо, жду.",
+    "priority": 1
   },
   {
     "id": "goodbye",
     "keywords": [
-      "bye",
-      "goodbye",
-      "hang up",
-      "that is all"
+      "пока",
+      "до свидания",
+      "отбой",
+      "это всё"
     ],
-    "reply": "Got it. I’ll wrap up now."
+    "reply": "Понял. Завершаю.",
+    "priority": 2
   },
   {
     "id": "smalltalk_how_are_you",
     "keywords": [
-      "how are you",
-      "hows it going",
-      "how are things"
+      "как дела",
+      "как ты",
+      "как поживаешь"
     ],
-    "reply": "I’m good and ready to help. What would you like to schedule?",
+    "reply": "Всё отлично, готов помочь. Что запланировать?",
     "priority": 2
   },
   {
     "id": "smalltalk_name",
     "keywords": [
-      "who are you",
-      "what are you",
-      "your name"
+      "кто ты",
+      "что ты",
+      "как тебя зовут"
     ],
-    "reply": "I’m your AI secretary. I can help with reminders and scheduling.",
+    "reply": "Я ваш ИИ-секретарь. Помогаю с напоминаниями и расписанием.",
     "priority": 2
   },
   {
     "id": "short_ack",
     "keywords": [
-      "okay",
-      "ok",
-      "alright",
-      "sounds good"
+      "ладно",
+      "хорошо",
+      "ок",
+      "понятно"
     ],
-    "reply": "Perfect. What’s the next detail?",
+    "reply": "Отлично. Что дальше?",
     "priority": 1
-  },
-  {
-    "id": "calendar_add",
-    "keywords": [
-      "add to calendar",
-      "create event",
-      "schedule meeting",
-      "book meeting"
-    ],
-    "reply": "Got it. I can add that to your calendar. Please confirm time."
-  },
-  {
-    "id": "reminder",
-    "keywords": [
-      "remind me",
-      "set reminder",
-      "reminder"
-    ],
-    "reply": "Sure. I can set that reminder for you."
-  },
-  {
-    "id": "predictive_reminder_followup",
-    "keywords": [
-      "is that possible",
-      "am i available",
-      "can i do that",
-      "do i have time"
-    ],
-    "reply": "You have some events, but I can fit this reminder in.",
-    "priority": 13,
-    "calendar_check": true
   }
 ]
