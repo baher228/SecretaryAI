@@ -304,6 +304,14 @@ class GeminiLiveSession:
                 await asyncio.sleep(POLL_WAIT_DATA)
                 continue
 
+            if file_size < last_file_size:
+                debug_log(
+                    "gemini_live_file_shrunk",
+                    {"file_size": file_size, "last_file_size": last_file_size,
+                     "decoded_seconds": decoded_seconds},
+                )
+                decoded_seconds = 0.0
+
             last_file_size = file_size
 
             cmd = ["ffmpeg", "-v", "error"]
