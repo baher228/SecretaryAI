@@ -648,6 +648,9 @@ class CalendarService:
             return None
         try:
             token_data = json.loads(token_path.read_text(encoding="utf-8"))
+            expiry = None
+            if token_data.get("expiry"):
+                expiry = datetime.fromisoformat(token_data["expiry"])
             creds = OAuthCredentials(
                 token=token_data.get("token"),
                 refresh_token=token_data.get("refresh_token"),
@@ -655,6 +658,7 @@ class CalendarService:
                 client_id=token_data.get("client_id") or self.settings.google_client_id,
                 client_secret=token_data.get("client_secret") or self.settings.google_client_secret,
                 scopes=token_data.get("scopes", CALENDAR_SCOPES),
+                expiry=expiry,
             )
             if creds.expired and creds.refresh_token:
                 import google.auth.transport.requests
@@ -674,6 +678,7 @@ class CalendarService:
             "client_id": creds.client_id,
             "client_secret": creds.client_secret,
             "scopes": list(creds.scopes or CALENDAR_SCOPES),
+            "expiry": creds.expiry.isoformat() if creds.expiry else None,
         }
         token_path.write_text(json.dumps(token_data, indent=2), encoding="utf-8")
 
