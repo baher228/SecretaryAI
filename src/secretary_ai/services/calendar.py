@@ -63,6 +63,8 @@ class CalendarService:
         self.settings = settings
         self._lock = asyncio.Lock()
         self._service: Any = None
+        self._oauth_state: str | None = None
+        self._oauth_state_ts: float = 0.0
 
         self.cache_path = Path(self.settings.calendar_cache_path)
         self.queue_path = Path(self.settings.calendar_queue_path)
@@ -700,15 +702,25 @@ class CalendarService:
             scopes=CALENDAR_SCOPES,
             redirect_uri=self.settings.google_oauth_redirect_uri,
         )
-        url, _ = flow.authorization_url(
+        url, state = flow.authorization_url(
             access_type="offline",
             include_granted_scopes="true",
             prompt="consent",
         )
+        self._oauth_state = state
+        self._oauth_state_ts = datetime.now(timezone.utc).timestamp()
         return url
 
-    def handle_oauth_callback(self, code: str) -> dict[str, Any]:
+    def handle_oauth_callback(self, code: str, state: str | None = None) -> dict[str, Any]:
         """Exchange the authorization code for tokens and persist them."""
+        if self._oauth_state is None:
+            return {"status": "error", "detail": "No pending OAuth flow. Start at /authorize."}
+        elapsed = datetime.now(timezone.utc).timestamp() - self._oauth_state_ts
+        if elapsed > 600:
+            self._oauth_state = None
+            return {"status": "error", "detail": "OAuth flow expired. Please start again."}
+        if state != self._oauth_state:
+            return {"status": "error", "detail": "Invalid OAuth state — possible CSRF."}
         if not self.settings.google_client_id or not self.settings.google_client_secret:
             return {"status": "error", "detail": "OAuth client credentials not configured."}
         if OAuthFlow is None:
@@ -733,6 +745,7 @@ class CalendarService:
         self._save_oauth_credentials(creds)
         # Reset cached service so next call uses new credentials.
         self._service = None
+        self._oauth_state = None
         return {"status": "ok", "detail": "Google Calendar connected successfully."}
 
     def _list_events_sync(self, days: int, max_results: int) -> list[dict[str, Any]]:

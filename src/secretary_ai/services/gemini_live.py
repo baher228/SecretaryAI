@@ -279,10 +279,11 @@ class GeminiLiveSession:
 
         py-tgcalls records to a WAV container using MP3 (libmp3lame) or
         FLAC codec — Python's ``wave`` module can only read raw PCM.
-        We use ffmpeg to decode whatever codec py-tgcalls chose and
-        output 16 kHz mono s16le PCM suitable for Gemini.
+        We use ffmpeg with ``-ss`` to seek past already-decoded content
+        so each invocation only decodes the *new* portion — O(n) total
+        instead of the naive O(n²) approach of re-decoding everything.
         """
-        sent_pcm_bytes = 0
+        decoded_seconds = 0.0
         chunks_sent = 0
         last_file_size = 0
 
@@ -305,12 +306,18 @@ class GeminiLiveSession:
 
             last_file_size = file_size
 
+            cmd = ["ffmpeg", "-v", "error"]
+            if decoded_seconds > 0:
+                cmd += ["-ss", f"{decoded_seconds:.3f}"]
+            cmd += [
+                "-i", str(recording_path),
+                "-f", "s16le", "-ar", str(SEND_SAMPLE_RATE), "-ac", "1",
+                "pipe:1",
+            ]
+
             try:
                 proc = await asyncio.create_subprocess_exec(
-                    "ffmpeg", "-v", "error",
-                    "-i", str(recording_path),
-                    "-f", "s16le", "-ar", str(SEND_SAMPLE_RATE), "-ac", "1",
-                    "pipe:1",
+                    *cmd,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
@@ -319,29 +326,24 @@ class GeminiLiveSession:
                 await asyncio.sleep(POLL_SEND_ERROR)
                 continue
 
-            if not stdout or len(stdout) <= sent_pcm_bytes:
+            if not stdout or len(stdout) < MIN_SEND_BYTES:
                 await asyncio.sleep(POLL_WAIT_DATA)
                 continue
 
-            new_pcm = stdout[sent_pcm_bytes:]
-            sent_pcm_bytes = len(stdout)
-
-            if len(new_pcm) < MIN_SEND_BYTES:
-                await asyncio.sleep(POLL_WAIT_DATA)
-                continue
+            decoded_seconds += len(stdout) / (SEND_SAMPLE_RATE * 2)
 
             if chunks_sent == 0:
-                debug_log("gemini_live_send_started", {"pcm_bytes": len(new_pcm)})
+                debug_log("gemini_live_send_started", {"pcm_bytes": len(stdout)})
 
             try:
                 await session.send_realtime_input(
-                    audio=types.Blob(data=new_pcm, mimeType=SEND_AUDIO_MIME),
+                    audio=types.Blob(data=stdout, mimeType=SEND_AUDIO_MIME),
                 )
                 chunks_sent += 1
                 if chunks_sent == 1 or chunks_sent % LOG_EVERY_N_CHUNKS == 0:
                     debug_log(
                         "gemini_live_audio_sent",
-                        {"chunks": chunks_sent, "total_sent": sent_pcm_bytes},
+                        {"chunks": chunks_sent, "decoded_s": f"{decoded_seconds:.1f}"},
                     )
             except Exception as exc:
                 debug_log(
