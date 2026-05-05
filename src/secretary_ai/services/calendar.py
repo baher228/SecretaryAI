@@ -112,7 +112,9 @@ class CalendarService:
         return True, "Google Calendar integration is configured (service account)."
 
     def _has_oauth_token(self) -> bool:
-        return Path(self.settings.google_oauth_token_path).is_file()
+        if not Path(self.settings.google_oauth_token_path).is_file():
+            return False
+        return self._load_oauth_credentials() is not None
 
     async def refresh_cache(self, days: int = 7, max_results: int = 30) -> dict[str, Any]:
         if not self.settings.calendar_enabled:
