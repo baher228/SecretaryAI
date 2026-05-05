@@ -300,7 +300,6 @@ class CalendarService:
         payload = {
             "model": model,
             "temperature": 0.1,
-            "max_tokens": self.settings.calendar_planner_max_tokens,
             "max_completion_tokens": self.settings.calendar_planner_max_tokens,
             "messages": [
                 {
