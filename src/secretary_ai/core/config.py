@@ -79,6 +79,10 @@ class Settings(BaseSettings):
     calendar_timezone: str = "Europe/London"
     calendar_id: str | None = None
     calendar_service_account_json: str | None = None
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    google_oauth_token_path: str = ".telegram/cache/google_oauth_token.json"
+    google_oauth_redirect_uri: str = "http://localhost:8000/api/v1/calendar/oauth/callback"
     calendar_cache_path: str = ".telegram/cache/calendar_events.json"
     calendar_queue_path: str = ".telegram/cache/calendar_queue.json"
     calendar_worker_enabled: bool = True

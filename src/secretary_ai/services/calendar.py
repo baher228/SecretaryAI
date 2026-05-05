@@ -38,12 +38,18 @@ from secretary_ai.core.locales import (
 
 try:
     from google.oauth2 import service_account
+    from google.oauth2.credentials import Credentials as OAuthCredentials
+    from google_auth_oauthlib.flow import Flow as OAuthFlow
     from googleapiclient.discovery import build
     from googleapiclient.errors import HttpError
 except Exception:  # pragma: no cover - optional dependency
     service_account = None  # type: ignore[assignment]
+    OAuthCredentials = None  # type: ignore[assignment]
+    OAuthFlow = None  # type: ignore[assignment]
     build = None  # type: ignore[assignment]
     HttpError = Exception  # type: ignore[assignment]
+
+CALENDAR_SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
 
 class CalendarService:
@@ -74,20 +80,35 @@ class CalendarService:
         if not self.settings.calendar_enabled:
             return False, "Calendar integration is disabled by config."
 
+        if build is None:
+            return False, "Google Calendar dependencies are not installed in this environment."
+
+        # OAuth token takes priority over service account.
+        if self._has_oauth_token():
+            return True, "Google Calendar integration is configured (OAuth)."
+
         if not self.settings.calendar_service_account_json or not self.settings.calendar_id:
+            if self.settings.google_client_id:
+                return (
+                    False,
+                    "OAuth not yet authorized. Visit /api/v1/calendar/oauth/authorize to connect.",
+                )
             return (
                 False,
                 "Calendar provider credentials not configured; running in cache-only mode.",
             )
 
-        if service_account is None or build is None:
+        if service_account is None:
             return False, "Google Calendar dependencies are not installed in this environment."
 
         path = Path(self.settings.calendar_service_account_json)
         if not path.exists():
             return False, f"Service account file not found: {path}"
 
-        return True, "Google Calendar integration is configured."
+        return True, "Google Calendar integration is configured (service account)."
+
+    def _has_oauth_token(self) -> bool:
+        return Path(self.settings.google_oauth_token_path).is_file()
 
     async def refresh_cache(self, days: int = 7, max_results: int = 30) -> dict[str, Any]:
         if not self.settings.calendar_enabled:
@@ -599,13 +620,110 @@ class CalendarService:
     def _get_service(self):
         if self._service is not None:
             return self._service
-        assert service_account is not None and build is not None
-        creds = service_account.Credentials.from_service_account_file(
-            self.settings.calendar_service_account_json,
-            scopes=["https://www.googleapis.com/auth/calendar"],
-        )
+        assert build is not None
+
+        creds = self._load_oauth_credentials()
+        if creds is None and service_account is not None:
+            sa_path = self.settings.calendar_service_account_json
+            if sa_path and Path(sa_path).exists():
+                creds = service_account.Credentials.from_service_account_file(
+                    sa_path, scopes=CALENDAR_SCOPES,
+                )
+
+        if creds is None:
+            raise RuntimeError(
+                "No calendar credentials available. "
+                "Authorize via /api/v1/calendar/oauth/authorize or configure a service account."
+            )
+
         self._service = build("calendar", "v3", credentials=creds, cache_discovery=False)
         return self._service
+
+    def _load_oauth_credentials(self) -> Any:
+        """Load and refresh OAuth credentials from the stored token file."""
+        token_path = Path(self.settings.google_oauth_token_path)
+        if not token_path.is_file() or OAuthCredentials is None:
+            return None
+        try:
+            token_data = json.loads(token_path.read_text(encoding="utf-8"))
+            creds = OAuthCredentials(
+                token=token_data.get("token"),
+                refresh_token=token_data.get("refresh_token"),
+                token_uri=token_data.get("token_uri", "https://oauth2.googleapis.com/token"),
+                client_id=token_data.get("client_id") or self.settings.google_client_id,
+                client_secret=token_data.get("client_secret") or self.settings.google_client_secret,
+                scopes=token_data.get("scopes", CALENDAR_SCOPES),
+            )
+            if creds.expired and creds.refresh_token:
+                import google.auth.transport.requests
+                creds.refresh(google.auth.transport.requests.Request())
+                self._save_oauth_credentials(creds)
+            return creds
+        except Exception:
+            return None
+
+    def _save_oauth_credentials(self, creds: Any) -> None:
+        token_path = Path(self.settings.google_oauth_token_path)
+        token_path.parent.mkdir(parents=True, exist_ok=True)
+        token_data = {
+            "token": creds.token,
+            "refresh_token": creds.refresh_token,
+            "token_uri": creds.token_uri,
+            "client_id": creds.client_id,
+            "client_secret": creds.client_secret,
+            "scopes": list(creds.scopes or CALENDAR_SCOPES),
+        }
+        token_path.write_text(json.dumps(token_data, indent=2), encoding="utf-8")
+
+    def get_oauth_authorize_url(self) -> str | None:
+        """Build the Google OAuth authorization URL for the user to visit."""
+        if not self.settings.google_client_id or not self.settings.google_client_secret:
+            return None
+        if OAuthFlow is None:
+            return None
+        flow = OAuthFlow.from_client_config(
+            {
+                "web": {
+                    "client_id": self.settings.google_client_id,
+                    "client_secret": self.settings.google_client_secret,
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                }
+            },
+            scopes=CALENDAR_SCOPES,
+            redirect_uri=self.settings.google_oauth_redirect_uri,
+        )
+        url, _ = flow.authorization_url(
+            access_type="offline",
+            include_granted_scopes="true",
+            prompt="consent",
+        )
+        return url
+
+    def handle_oauth_callback(self, code: str) -> dict[str, Any]:
+        """Exchange the authorization code for tokens and persist them."""
+        if not self.settings.google_client_id or not self.settings.google_client_secret:
+            return {"status": "error", "detail": "OAuth client credentials not configured."}
+        if OAuthFlow is None:
+            return {"status": "error", "detail": "google-auth-oauthlib not installed."}
+        flow = OAuthFlow.from_client_config(
+            {
+                "web": {
+                    "client_id": self.settings.google_client_id,
+                    "client_secret": self.settings.google_client_secret,
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                }
+            },
+            scopes=CALENDAR_SCOPES,
+            redirect_uri=self.settings.google_oauth_redirect_uri,
+        )
+        flow.fetch_token(code=code)
+        creds = flow.credentials
+        self._save_oauth_credentials(creds)
+        # Reset cached service so next call uses new credentials.
+        self._service = None
+        return {"status": "ok", "detail": "Google Calendar connected successfully."}
 
     def _list_events_sync(self, days: int, max_results: int) -> list[dict[str, Any]]:
         now = datetime.now(timezone.utc)
