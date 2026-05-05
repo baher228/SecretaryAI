@@ -8,7 +8,7 @@ Step-by-step instructions for getting Secretary AI running with Docker.
 |---------|----------------|-----------|
 | Telegram API | [my.telegram.org](https://my.telegram.org) → API development tools | Yes |
 | Gemini API | [Google AI Studio](https://aistudio.google.com/apikey) | Yes (for voice) |
-| Z.AI API | Your Z.AI account dashboard | Yes (for text chat) |
+| OpenAI API | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) | Yes (for text chat) |
 | Google Calendar | Google Cloud Console → Service Accounts | Optional |
 | Google Maps | Google Cloud Console → APIs & Services | Optional |
 
@@ -31,10 +31,9 @@ GEMINI_LIVE_MODEL=gemini-3.1-flash-live-preview
 GEMINI_LIVE_VOICE=Zephyr
 GEMINI_LIVE_ENABLED=true
 
-# Z.AI GLM (for text chat and agent reasoning)
-ZAI_API_KEY=your_zai_key_here
-ZAI_BASE_URL=https://api.z.ai/api/coding/paas/v4
-ZAI_MODEL=glm-5.1
+# OpenAI (for text chat and agent reasoning)
+OPENAI_API_KEY=sk-your-openai-key-here
+OPENAI_MODEL=gpt-5.4-mini
 ```
 
 ### Optional: Calendar

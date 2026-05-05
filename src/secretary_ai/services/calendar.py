@@ -280,15 +280,15 @@ class CalendarService:
         return task
 
     async def _plan_action(self, task: dict[str, Any]) -> dict[str, Any]:
-        if self.settings.zai_api_key:
+        if self.settings.openai_api_key:
             llm_plan = await self._plan_action_llm(task)
             if llm_plan:
                 return llm_plan
         return self._plan_action_heuristic(task)
 
     async def _plan_action_llm(self, task: dict[str, Any]) -> dict[str, Any]:
-        model = self.settings.calendar_smart_model or self.settings.zai_model
-        base_url = self.settings.zai_base_url.rstrip("/")
+        model = self.settings.calendar_smart_model or self.settings.openai_model
+        base_url = self.settings.openai_base_url.rstrip("/")
         url = f"{base_url}/chat/completions"
         payload = {
             "model": model,
@@ -312,13 +312,12 @@ class CalendarService:
             ],
         }
         headers = {
-            "Authorization": f"Bearer {self.settings.zai_api_key}",
+            "Authorization": f"Bearer {self.settings.openai_api_key}",
             "Content-Type": "application/json",
-            "Accept-Language": "en-US,en",
         }
 
         try:
-            async with httpx.AsyncClient(timeout=self.settings.zai_timeout_seconds) as client:
+            async with httpx.AsyncClient(timeout=self.settings.openai_timeout_seconds) as client:
                 response = await client.post(url, headers=headers, json=payload)
             if response.status_code >= 300:
                 return {}

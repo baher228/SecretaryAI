@@ -18,13 +18,13 @@ class Settings(BaseSettings):
     timezone: str = "Europe/London"
     language: str = "ru"
 
-    zai_api_key: str | None = None
+    openai_api_key: str | None = None
     tavily_api_key: str | None = None
     google_maps_api_key: str | None = None
-    zai_base_url: str = "https://api.z.ai/api/coding/paas/v4"
-    zai_model: str = "glm-4.5-air"
-    zai_chat_model: str | None = None
-    zai_timeout_seconds: float = 30.0
+    openai_base_url: str = "https://api.openai.com/v1"
+    openai_model: str = "gpt-5.4-mini"
+    openai_chat_model: str | None = None
+    openai_timeout_seconds: float = 30.0
     agent_max_tokens: int = 160
     agent_history_turns: int = 4
     agent_live_max_tokens: int = 72

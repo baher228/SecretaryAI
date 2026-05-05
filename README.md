@@ -1,11 +1,11 @@
 # Secretary AI
 
-AI-powered phone secretary that handles Telegram voice calls autonomously. Uses **Gemini 3.1 Flash Live** for real-time audio-to-audio conversation, with Z.AI GLM for text chat and agent reasoning. Supports **Russian** and **English** — configurable via `LANGUAGE` in `.env`.
+AI-powered phone secretary that handles Telegram voice calls autonomously. Uses **Gemini 3.1 Flash Live** for real-time audio-to-audio conversation, with **OpenAI GPT** for text chat and agent reasoning. Supports **Russian** and **English** — configurable via `LANGUAGE` in `.env`.
 
 ## Features
 
 - **Voice calls** — Gemini Live streams call audio directly to/from the AI model (native audio-to-audio, no STT/TTS)
-- **Text chat** — Z.AI GLM-powered conversational assistant via REST API
+- **Text chat** — OpenAI GPT-powered conversational assistant via REST API
 - **Google Calendar** — reads events, queues scheduling requests, processes them via AI
 - **Proactive reminders** — calls you before upcoming calendar events
 - **Auto-answer** — picks up inbound Telegram calls and starts the AI loop
@@ -17,7 +17,7 @@ AI-powered phone secretary that handles Telegram voice calls autonomously. Uses 
 - **Docker** and **Docker Compose**
 - **Telegram API credentials** — get `API_ID` and `API_HASH` from [my.telegram.org](https://my.telegram.org)
 - **Gemini API key** — get one from [Google AI Studio](https://aistudio.google.com/apikey)
-- **Z.AI API key** — for text chat and agent reasoning
+- **OpenAI API key** — for text chat and agent reasoning ([get one here](https://platform.openai.com/api-keys))
 - **Google Calendar** (optional) — service account JSON for calendar integration
 - **Google Maps API key** (optional) — for ETA/distance lookups
 
@@ -39,8 +39,8 @@ TELEGRAM_API_HASH=your_api_hash
 # Gemini Live (required for voice)
 GEMINI_API_KEY=your_gemini_key
 
-# Z.AI (required for text chat / agent reasoning)
-ZAI_API_KEY=your_zai_key
+# OpenAI (required for text chat / agent reasoning)
+OPENAI_API_KEY=sk-your-openai-key
 ```
 
 See `.env.example` for all available settings and their defaults.
@@ -132,7 +132,7 @@ The AI can then check availability, schedule meetings, and send reminders.
 | Agent | `POST /api/v1/agent/reply` | Get AI reply for a transcript |
 | Agent | `POST /api/v1/agent/analyze` | Structured intent analysis |
 | Agent | `POST /api/v1/agent/live/respond` | Full live response (AI + play) |
-| Chat | `POST /api/v1/chat` | Text chat with Z.AI |
+| Chat | `POST /api/v1/chat` | Text chat with OpenAI |
 | Calendar | `POST /api/v1/calendar/queue` | Queue a calendar operation |
 | Calendar | `GET /api/v1/calendar/cache` | Get cached calendar events |
 | WebSocket | `WS /api/v1/ws/live/{id}` | Real-time transcript ↔ AI loop |
@@ -147,8 +147,8 @@ src/secretary_ai/
 ├── services/
 │   ├── secretary.py       # Main orchestrator
 │   ├── gemini_live.py     # Gemini Live audio-to-audio bridge
-│   ├── ai_agent.py        # Z.AI agent reasoning
-│   ├── zai_client.py      # Shared Z.AI HTTP client
+│   ├── ai_agent.py        # OpenAI agent reasoning
+│   ├── zai_client.py      # Shared OpenAI-compatible HTTP client
 │   ├── telegram_calls.py  # Telegram MTProto call adapter
 │   ├── calendar.py        # Google Calendar service
 │   ├── memory_store.py    # Call context memory
@@ -183,5 +183,5 @@ uvicorn secretary_ai.main:app --host 0.0.0.0 --port 8000 --app-dir src
 - **Telethon** — Telegram MTProto client (user account)
 - **py-tgcalls** — Telegram call/media layer
 - **google-genai** — Gemini 3.1 Flash Live API
-- **Z.AI GLM** — Text chat and agent reasoning
+- **OpenAI GPT** — Text chat and agent reasoning
 - **Google Calendar API** — Calendar integration

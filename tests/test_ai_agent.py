@@ -4,7 +4,7 @@ from secretary_ai.services.ai_agent import SecretaryAIAgent
 
 
 def build_agent() -> SecretaryAIAgent:
-    settings = Settings(zai_api_key=None)
+    settings = Settings(openai_api_key=None)
     return SecretaryAIAgent(settings)
 
 

@@ -305,7 +305,7 @@ DASHBOARD_HTML = """<!doctype html>
               </article>
               <article class="card">
                 <div class="row"><span class="method post">POST</span><code class="path">/api/v1/chat</code></div>
-                <p class="hint">Text chat via Z.AI GLM.</p>
+                <p class="hint">Text chat via OpenAI.</p>
                 <textarea id="payload-chat">{
   "message": "Hello, what can you do?"
 }</textarea>

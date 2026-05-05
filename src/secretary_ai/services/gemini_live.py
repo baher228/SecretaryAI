@@ -2,7 +2,7 @@
 
 Connects to Google's Gemini 3.1 Flash Live API and streams call audio
 (from the py-tgcalls recording file) directly to Gemini, receiving
-spoken audio responses back.  This replaces the STT -> Z.AI -> TTS
+spoken audio responses back.  This replaces the STT -> LLM -> TTS
 pipeline with a single native audio-to-audio model.
 """
 
