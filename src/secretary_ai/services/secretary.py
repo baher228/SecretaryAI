@@ -71,7 +71,7 @@ from secretary_ai.core.locales import (
 
 
 class SecretaryService:
-    """Main orchestrator: Z.AI reasoning + Telegram MTProto call provider."""
+    """Main orchestrator: OpenAI reasoning + Telegram MTProto call provider."""
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
@@ -124,7 +124,7 @@ class SecretaryService:
                 "Gemini Live Bridge (audio-to-audio via Gemini 3.1 Flash Live)",
                 "Greeting Cache (instant playback of cached Gemini greeting)",
                 "Secretary Orchestrator (this service)",
-                "Z.AI Reasoning Endpoint (text chat)",
+                "OpenAI Reasoning Endpoint (text chat)",
                 "Storage Layer (in-memory MVP)",
             ],
             notes=(
@@ -134,54 +134,54 @@ class SecretaryService:
         )
 
     async def check_model_connection(self, prompt: str) -> ModelCheckResponse:
-        if not self.settings.zai_api_key:
+        if not self.settings.openai_api_key:
             return ModelCheckResponse(
-                model=self.settings.zai_model,
+                model=self.settings.openai_model,
                 connected=False,
-                detail="Missing ZAI_API_KEY in environment.",
+                detail="Missing OPENAI_API_KEY in environment.",
             )
         payload = {
-            "model": self.settings.zai_model,
+            "model": self.settings.openai_model,
             "messages": [
                 {"role": "system", "content": t(MODEL_CHECK_PROMPT, self.settings.language)},
                 {"role": "user", "content": prompt},
             ],
             "temperature": 0.1,
-            "max_tokens": 100,
+            "max_completion_tokens": 100,
         }
         result = await zai_chat_completion(self.settings, payload)
         if result.get("error"):
             return ModelCheckResponse(
-                model=self.settings.zai_model,
+                model=self.settings.openai_model,
                 connected=False,
                 detail=result["error"],
                 output=result.get("raw"),
             )
         message = extract_message(result["data"])
         return ModelCheckResponse(
-            model=self.settings.zai_model,
+            model=self.settings.openai_model,
             connected=True,
-            detail="Connected to Z.AI GLM successfully.",
+            detail="Connected to OpenAI successfully.",
             output=message.get("content"),
         )
 
     async def chat_direct(self, payload: ChatRequest) -> ChatResponse:
-        """Direct conversational chat with Z.AI - no call context, plain text reply."""
-        chat_model = self.settings.zai_chat_model or self.settings.zai_model
+        """Direct conversational chat via OpenAI - no call context, plain text reply."""
+        chat_model = self.settings.openai_chat_model or self.settings.openai_model
         system_prompt = t(CHAT_SYSTEM_PROMPT, self.settings.language)
         messages: list[dict] = [{"role": "system", "content": system_prompt}]
         for msg in payload.history[-20:]:
             messages.append({"role": msg.role, "content": msg.content})
         messages.append({"role": "user", "content": payload.message})
 
-        if not self.settings.zai_api_key:
-            reply = "ZAI_API_KEY is not configured. Please add it to your .env file."
+        if not self.settings.openai_api_key:
+            reply = "OPENAI_API_KEY is not configured. Please add it to your .env file."
         else:
             api_payload = {
                 "model": chat_model,
                 "messages": messages,
                 "temperature": self.settings.chat_temperature,
-                "max_tokens": self.settings.chat_max_tokens,
+                "max_completion_tokens": self.settings.chat_max_tokens,
             }
             result = await zai_chat_completion(self.settings, api_payload)
             if result.get("error"):
@@ -201,7 +201,7 @@ class SecretaryService:
                         "model": chat_model,
                         "messages": retry_messages,
                         "temperature": 0.1,
-                        "max_tokens": max(18, min(48, int(self.settings.chat_max_tokens))),
+                        "max_completion_tokens": max(18, min(48, int(self.settings.chat_max_tokens))),
                     }
                     retry_result = await zai_chat_completion(self.settings, retry_payload)
                     if not retry_result.get("error"):
@@ -503,7 +503,7 @@ class SecretaryService:
             analysis = AgentAnalyzeResponse(
                 call_id=call_id,
                 reply=selected_reply,
-                model=self.settings.zai_model,
+                model=self.settings.openai_model,
             )
             action_items: list[str] = []
 
@@ -586,7 +586,7 @@ class SecretaryService:
                 analysis = AgentAnalyzeResponse(
                     call_id=call_id,
                     reply=timeout_reply,
-                    model=self.settings.zai_model,
+                    model=self.settings.openai_model,
                     action_items=["latency_fallback_suppressed" if not timeout_reply else "latency_fallback"],
                 )
 
@@ -1931,13 +1931,13 @@ class SecretaryService:
             call_id=call_id,
             transcript=snippet,
             reply=reply,
-            intent=AgentAnalyzeResponse(call_id=call_id, reply=reply, model=self.settings.zai_model).intent,
+            intent=AgentAnalyzeResponse(call_id=call_id, reply=reply, model=self.settings.openai_model).intent,
             confidence=0.2,
             requires_human=False,
             transfer_reason=None,
             action_items=[action_item],
             extracted_fields={},
-            model=self.settings.zai_model,
+            model=self.settings.openai_model,
             tts_audio_path=tts_audio_path,
             tts_status=tts_status,
             call_audio_status=call_audio_status,

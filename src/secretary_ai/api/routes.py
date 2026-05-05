@@ -1,7 +1,9 @@
+import asyncio
 from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect, status
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 from secretary_ai.domain.models import (
     AgentLiveRespondRequest,
@@ -298,6 +300,58 @@ async def calendar_refresh(
     secretary: SecretaryService = Depends(get_secretary),
 ) -> dict:
     return await secretary.calendar_refresh(days=days, max_results=max_results)
+
+
+@router.get("/calendar/oauth/authorize")
+async def calendar_oauth_authorize(
+    secretary: SecretaryService = Depends(get_secretary),
+) -> RedirectResponse:
+    """Redirect the user to Google's OAuth consent screen."""
+    url = secretary.calendar.get_oauth_authorize_url()
+    if url is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set in .env",
+        )
+    return RedirectResponse(url)
+
+
+@router.get("/calendar/oauth/callback")
+async def calendar_oauth_callback(
+    code: str | None = Query(default=None),
+    error: str | None = Query(default=None),
+    state: str | None = Query(default=None),
+    secretary: SecretaryService = Depends(get_secretary),
+) -> HTMLResponse:
+    """Handle the OAuth callback from Google and store the token."""
+    if error or not code:
+        detail = error or "No authorization code received."
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Google authorization failed: {detail}",
+        )
+    result = await asyncio.to_thread(secretary.calendar.handle_oauth_callback, code, state)
+    if result.get("status") == "ok":
+        html = (
+            "<html><body style='font-family:sans-serif;text-align:center;padding:60px'>"
+            "<h1>&#10003; Google Calendar Connected</h1>"
+            "<p>You can close this tab and return to Secretary AI.</p>"
+            "</body></html>"
+        )
+        return HTMLResponse(content=html)
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=result.get("detail", "OAuth callback failed."),
+    )
+
+
+@router.get("/calendar/oauth/status")
+async def calendar_oauth_status(
+    secretary: SecretaryService = Depends(get_secretary),
+) -> dict:
+    """Check whether a valid OAuth token is stored."""
+    ready, detail = secretary.calendar.readiness()
+    return {"connected": ready, "detail": detail}
 
 
 @router.get("/calls")
