@@ -40,7 +40,7 @@ TELEGRAM_API_HASH=your_api_hash
 GEMINI_API_KEY=your_gemini_key
 
 # OpenAI (required for text chat / agent reasoning)
-OPENAI_API_KEY=sk-your-openai-key
+OPENAI_API_KEY=your-openai-key
 ```
 
 See `.env.example` for all available settings and their defaults.

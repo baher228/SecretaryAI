@@ -147,7 +147,7 @@ class SecretaryService:
                 {"role": "user", "content": prompt},
             ],
             "temperature": 0.1,
-            "max_tokens": 100,
+            "max_completion_tokens": 100,
         }
         result = await zai_chat_completion(self.settings, payload)
         if result.get("error"):
@@ -181,7 +181,7 @@ class SecretaryService:
                 "model": chat_model,
                 "messages": messages,
                 "temperature": self.settings.chat_temperature,
-                "max_tokens": self.settings.chat_max_tokens,
+                "max_completion_tokens": self.settings.chat_max_tokens,
             }
             result = await zai_chat_completion(self.settings, api_payload)
             if result.get("error"):
@@ -201,7 +201,7 @@ class SecretaryService:
                         "model": chat_model,
                         "messages": retry_messages,
                         "temperature": 0.1,
-                        "max_tokens": max(18, min(48, int(self.settings.chat_max_tokens))),
+                        "max_completion_tokens": max(18, min(48, int(self.settings.chat_max_tokens))),
                     }
                     retry_result = await zai_chat_completion(self.settings, retry_payload)
                     if not retry_result.get("error"):

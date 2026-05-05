@@ -33,7 +33,7 @@ GEMINI_LIVE_ENABLED=true
 
 # OpenAI (for text chat and agent reasoning)
 OPENAI_API_KEY=sk-your-openai-key-here
-OPENAI_MODEL=gpt-5.4-mini
+OPENAI_MODEL=gpt-5.2
 ```
 
 ### Optional: Calendar

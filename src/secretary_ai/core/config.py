@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     tavily_api_key: str | None = None
     google_maps_api_key: str | None = None
     openai_base_url: str = "https://api.openai.com/v1"
-    openai_model: str = "gpt-5.4-mini"
+    openai_model: str = "gpt-5.2"
     openai_chat_model: str | None = None
     openai_timeout_seconds: float = 30.0
     agent_max_tokens: int = 160

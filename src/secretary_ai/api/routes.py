@@ -318,11 +318,18 @@ async def calendar_oauth_authorize(
 
 @router.get("/calendar/oauth/callback")
 async def calendar_oauth_callback(
-    code: str = Query(...),
+    code: str | None = Query(default=None),
+    error: str | None = Query(default=None),
     state: str | None = Query(default=None),
     secretary: SecretaryService = Depends(get_secretary),
 ) -> HTMLResponse:
     """Handle the OAuth callback from Google and store the token."""
+    if error or not code:
+        detail = error or "No authorization code received."
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Google authorization failed: {detail}",
+        )
     result = await asyncio.to_thread(secretary.calendar.handle_oauth_callback, code, state)
     if result.get("status") == "ok":
         html = (
