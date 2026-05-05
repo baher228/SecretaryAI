@@ -63,8 +63,7 @@ class CalendarService:
         self.settings = settings
         self._lock = asyncio.Lock()
         self._service: Any = None
-        self._oauth_state: str | None = None
-        self._oauth_state_ts: float = 0.0
+        self._pending_oauth_states: dict[str, float] = {}
 
         self.cache_path = Path(self.settings.calendar_cache_path)
         self.queue_path = Path(self.settings.calendar_queue_path)
@@ -715,20 +714,22 @@ class CalendarService:
             include_granted_scopes="true",
             prompt="consent",
         )
-        self._oauth_state = state
-        self._oauth_state_ts = datetime.now(timezone.utc).timestamp()
+        now = datetime.now(timezone.utc).timestamp()
+        # Expire stale entries.
+        self._pending_oauth_states = {
+            k: v for k, v in self._pending_oauth_states.items() if now - v < 600
+        }
+        self._pending_oauth_states[state] = now
         return url
 
     def handle_oauth_callback(self, code: str, state: str | None = None) -> dict[str, Any]:
         """Exchange the authorization code for tokens and persist them."""
-        if self._oauth_state is None:
-            return {"status": "error", "detail": "No pending OAuth flow. Start at /authorize."}
-        elapsed = datetime.now(timezone.utc).timestamp() - self._oauth_state_ts
-        if elapsed > 600:
-            self._oauth_state = None
-            return {"status": "error", "detail": "OAuth flow expired. Please start again."}
-        if state != self._oauth_state:
+        if not state or state not in self._pending_oauth_states:
             return {"status": "error", "detail": "Invalid OAuth state — possible CSRF."}
+        elapsed = datetime.now(timezone.utc).timestamp() - self._pending_oauth_states[state]
+        self._pending_oauth_states.pop(state, None)
+        if elapsed > 600:
+            return {"status": "error", "detail": "OAuth flow expired. Please start again."}
         if not self.settings.google_client_id or not self.settings.google_client_secret:
             return {"status": "error", "detail": "OAuth client credentials not configured."}
         if OAuthFlow is None:
@@ -753,7 +754,6 @@ class CalendarService:
         self._save_oauth_credentials(creds)
         # Reset cached service so next call uses new credentials.
         self._service = None
-        self._oauth_state = None
         return {"status": "ok", "detail": "Google Calendar connected successfully."}
 
     def _list_events_sync(self, days: int, max_results: int) -> list[dict[str, Any]]:
