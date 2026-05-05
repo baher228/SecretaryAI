@@ -97,6 +97,7 @@ class SecretaryAIAgent:
                 live_mode=live_mode,
             ),
             "temperature": temperature,
+            "max_tokens": max_tokens,
             "max_completion_tokens": max_tokens,
         }
         result = await zai_chat_completion(self.settings, payload)

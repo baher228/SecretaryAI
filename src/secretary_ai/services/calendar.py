@@ -112,9 +112,15 @@ class CalendarService:
         return True, "Google Calendar integration is configured (service account)."
 
     def _has_oauth_token(self) -> bool:
-        if not Path(self.settings.google_oauth_token_path).is_file():
+        """Cheap check: token file exists and is parseable JSON with a refresh_token."""
+        token_path = Path(self.settings.google_oauth_token_path)
+        if not token_path.is_file():
             return False
-        return self._load_oauth_credentials() is not None
+        try:
+            data = json.loads(token_path.read_text(encoding="utf-8"))
+            return bool(data.get("refresh_token"))
+        except Exception:
+            return False
 
     async def refresh_cache(self, days: int = 7, max_results: int = 30) -> dict[str, Any]:
         if not self.settings.calendar_enabled:
@@ -295,6 +301,7 @@ class CalendarService:
         payload = {
             "model": model,
             "temperature": 0.1,
+            "max_tokens": self.settings.calendar_planner_max_tokens,
             "max_completion_tokens": self.settings.calendar_planner_max_tokens,
             "messages": [
                 {
