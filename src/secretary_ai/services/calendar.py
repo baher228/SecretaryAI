@@ -85,6 +85,8 @@ class CalendarService:
 
         # OAuth token takes priority over service account.
         if self._has_oauth_token():
+            if not self.settings.calendar_id:
+                return False, "OAuth token found but CALENDAR_ID is not set in .env."
             return True, "Google Calendar integration is configured (OAuth)."
 
         if not self.settings.calendar_service_account_json or not self.settings.calendar_id:
@@ -718,7 +720,10 @@ class CalendarService:
             scopes=CALENDAR_SCOPES,
             redirect_uri=self.settings.google_oauth_redirect_uri,
         )
-        flow.fetch_token(code=code)
+        try:
+            flow.fetch_token(code=code)
+        except Exception as exc:
+            return {"status": "error", "detail": f"Token exchange failed: {exc}"}
         creds = flow.credentials
         self._save_oauth_credentials(creds)
         # Reset cached service so next call uses new credentials.
