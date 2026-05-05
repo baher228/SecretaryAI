@@ -775,7 +775,7 @@ class CalendarService:
                 .execute()
             )
             return [self._event_to_dict(e) for e in resp.get("items", [])]
-        except HttpError as exc:
+        except (HttpError, RuntimeError) as exc:
             return [{"error": str(exc)}]
 
     def _create_event_sync(self, title: str, start_iso: str, end_iso: str) -> dict[str, Any]:
@@ -788,7 +788,7 @@ class CalendarService:
             svc = self._get_service()
             ev = svc.events().insert(calendarId=self.settings.calendar_id, body=body).execute()
             return self._event_to_dict(ev)
-        except HttpError as exc:
+        except (HttpError, RuntimeError) as exc:
             return {"error": str(exc)}
 
     def _delete_event_sync(self, event_id: str) -> dict[str, Any]:
@@ -796,7 +796,7 @@ class CalendarService:
             svc = self._get_service()
             svc.events().delete(calendarId=self.settings.calendar_id, eventId=event_id).execute()
             return {"id": event_id, "status": "deleted"}
-        except HttpError as exc:
+        except (HttpError, RuntimeError) as exc:
             return {"error": str(exc)}
 
     def _upsert_cache_event(self, event: dict[str, Any]) -> None:
