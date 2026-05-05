@@ -219,6 +219,10 @@ DASHBOARD_HTML = """<!doctype html>
             <span class="stat-title">Active Calls</span>
             <span class="stat-value" id="status-active-calls">0</span>
           </div>
+          <div class="stat-card">
+            <span class="stat-title">Calendar</span>
+            <span class="stat-value" id="status-calendar"><span class="loader"></span></span>
+          </div>
         </div>
 
         <div class="panel">
@@ -425,12 +429,17 @@ DASHBOARD_HTML = """<!doctype html>
         } catch (e) { alert("Error: " + e); }
       }
 
+      function connectCalendar() {
+        window.open("/api/v1/calendar/oauth/authorize", "_blank");
+      }
+
       async function refreshDashboard() {
         try {
-          const [health, auth, calls] = await Promise.all([
+          const [health, auth, calls, cal] = await Promise.all([
             fetchJson("/api/v1/health", { method: "GET" }, 5000),
             fetchJson("/api/v1/telegram/auth/status", { method: "GET" }, 5000),
             fetchJson("/api/v1/calls", { method: "GET" }, 5000),
+            fetchJson("/api/v1/calendar/oauth/status", { method: "GET" }, 5000),
           ]);
 
           const hEl = document.getElementById("status-health");
@@ -440,6 +449,7 @@ DASHBOARD_HTML = """<!doctype html>
             hEl.innerHTML = '<span class="status-indicator status-err"></span>Offline';
           }
           updateGeminiStatus(health.body);
+          updateCalendarStatus(cal.body);
 
           const aEl = document.getElementById("status-auth");
           const ab = auth.body || {};
@@ -488,6 +498,16 @@ DASHBOARD_HTML = """<!doctype html>
           el.innerHTML = '<span class="status-indicator status-ok"></span>' + (gl.model || "Enabled");
         } else {
           el.innerHTML = '<span class="status-indicator status-warn"></span>Disabled';
+        }
+      }
+
+      function updateCalendarStatus(calBody) {
+        const el = document.getElementById("status-calendar");
+        if (calBody?.connected) {
+          el.innerHTML = '<span class="status-indicator status-ok"></span>Connected';
+        } else {
+          el.innerHTML = '<span class="status-indicator status-warn"></span>Not connected ' +
+            '<button onclick="connectCalendar()" style="font-size:0.72rem;padding:4px 10px;margin-left:6px;">Connect</button>';
         }
       }
 
