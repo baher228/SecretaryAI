@@ -72,14 +72,37 @@ async def health(
     secretary: SecretaryService = Depends(get_secretary),
 ) -> dict[str, Any]:
     s = secretary.settings
+    tg_ready, tg_detail = secretary.telegram.readiness()
+    cal_ready, cal_detail = secretary.calendar.readiness()
     return {
         "status": "ok",
+        "version": "0.1.0",
         "mode": "telegram_mtproto_mvp",
+        "language": s.language,
+        "openai": {
+            "configured": bool(s.openai_api_key),
+            "model": s.openai_model,
+        },
         "gemini_live": {
             "enabled": bool(s.gemini_live_enabled and s.gemini_api_key),
             "model": s.gemini_live_model,
+            "voice": s.gemini_live_voice,
+        },
+        "telegram": {
+            "ready": tg_ready,
+            "detail": tg_detail,
+            "active_calls": len(secretary.live_sessions),
+        },
+        "calendar": {
+            "ready": cal_ready,
+            "detail": cal_detail,
         },
     }
+
+
+@router.get("/version")
+async def version() -> dict[str, str]:
+    return {"version": "0.1.0", "name": "Secretary AI"}
 
 
 @router.get("/architecture", response_model=ArchitectureOverview)
