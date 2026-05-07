@@ -182,6 +182,7 @@ class BookingService:
         return {
             "category": "evening_plan",
             "location": loc,
+            "results": dinner + entertainment,
             "dinner": {"results": dinner, "voice_summary": dinner_summary},
             "entertainment": {"results": entertainment, "voice_summary": ent_summary},
             "voice_summary": f"For dinner: {dinner_summary} For entertainment: {ent_summary}",

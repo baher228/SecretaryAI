@@ -313,8 +313,8 @@ async def booking_search(
     """Search for restaurants, hotels, events, or travel options."""
     result = await secretary.booking.search_by_action(
         action=payload.booking_type,
-        payload=payload.location,
-        extracted=payload.query_params,
+        payload="",
+        extracted={"location": payload.location, **payload.query_params},
     )
     return BookingSearchResponse(
         call_id=payload.call_id,

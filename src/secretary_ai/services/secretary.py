@@ -576,12 +576,15 @@ class SecretaryService:
 
             if template_id:
                 self._mark_template_emitted(call_id, template_id, transcript)
-                if template_id in self._template_audio_cache:
+                is_booking_template = bool(
+                    template_hit and str(template_hit.get("booking_search") or "").strip()
+                )
+                if not is_booking_template and template_id in self._template_audio_cache:
                     tts_audio_path = self._template_audio_cache[template_id]
                     tts_status = "cached"
                 else:
                     tts_audio_path, tts_status = await self.tts.synthesize(analysis.reply, call_id=f"template-{template_id}")
-                    if tts_audio_path:
+                    if tts_audio_path and not is_booking_template:
                         self._template_audio_cache[template_id] = tts_audio_path
 
                 call_audio_status = "not_streamed"
