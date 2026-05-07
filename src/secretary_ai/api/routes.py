@@ -144,13 +144,16 @@ async def debug_ws(
         while True:
             await asyncio.sleep(1.0)
             if not log_path.exists():
+                last_size = 0
                 continue
             current_size = log_path.stat().st_size
-            if current_size <= last_size:
+            if current_size == last_size:
                 continue
-            with log_path.open("r", encoding="utf-8") as f:
+            if current_size < last_size:
+                last_size = 0
+            with log_path.open("rb") as f:
                 f.seek(last_size)
-                new_data = f.read()
+                new_data = f.read().decode("utf-8", errors="replace")
             last_size = current_size
             for line in new_data.strip().splitlines():
                 try:
