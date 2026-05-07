@@ -811,6 +811,20 @@ class SecretaryService:
 
         return None
 
+    @staticmethod
+    def _extract_location_from_payload(text: str) -> tuple[str, str]:
+        """Parse 'in <location>' or 'near <location>' from payload text.
+
+        Returns ``(remaining_payload, location)`` where *location* may be
+        empty if no pattern matched.
+        """
+        m = re.search(r"\b(?:in|near|around)\s+([A-Za-z][A-Za-z\s]{1,40})", text)
+        if not m:
+            return text, ""
+        location = m.group(1).strip()
+        remaining = (text[: m.start()] + text[m.end() :]).strip()
+        return remaining, location
+
     async def _handle_booking_search(
         self,
         call_id: str,
@@ -819,9 +833,14 @@ class SecretaryService:
     ) -> dict[str, Any]:
         """Execute a booking search and log the result."""
         try:
+            remaining, location = self._extract_location_from_payload(search_payload)
+            extracted: dict[str, Any] = {}
+            if location:
+                extracted["location"] = location
             result = await self.booking.search_by_action(
                 action=action,
-                payload=search_payload,
+                payload=remaining,
+                extracted=extracted if extracted else None,
             )
             self.debug.log(
                 call_id,

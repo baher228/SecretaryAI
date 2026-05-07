@@ -31,7 +31,7 @@ def _voice_summary(results: list[dict[str, Any]], category: str) -> str:
     names = [str(r["title"]).strip() for r in valid[:3]]
     if len(names) == 1:
         return f"I found one option: {names[0]}."
-    listing = ", ".join(names[:-1]) + f", and {names[-1]}"
+    listing = ", ".join(names[:-1]) + (" and " if len(names) == 2 else ", and ") + names[-1]
     return f"Here are the top results: {listing}."
 
 
