@@ -620,11 +620,11 @@ DASHBOARD_HTML = """<!doctype html>
           const container = document.getElementById("wake-word-list");
           if (r.ok && Array.isArray(r.body) && r.body.length > 0) {
             container.innerHTML = r.body.map(a => {
-              const phrases = (a.phrases || []).map(p => `<span class="pill pill-completed" style="margin: 2px;">${p}</span>`).join(" ");
+              const phrases = (a.phrases || []).map(p => `<span class="pill pill-completed" style="margin: 2px;">${esc(p)}</span>`).join(" ");
               return `<div style="margin-bottom: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 10px;">
                 <div style="font-weight: 600; margin-bottom: 6px;">
-                  <span class="pill pill-active">${a.action}</span>
-                  <span style="color: var(--muted); font-size: 0.82rem; margin-left: 8px;">${a.description || ""}</span>
+                  <span class="pill pill-active">${esc(a.action)}</span>
+                  <span style="color: var(--muted); font-size: 0.82rem; margin-left: 8px;">${esc(a.description || "")}</span>
                 </div>
                 <div style="display: flex; flex-wrap: wrap; gap: 4px;">${phrases}</div>
               </div>`;

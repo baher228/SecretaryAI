@@ -543,6 +543,7 @@ class SecretaryService:
                     booking_result = await self._handle_booking_search(
                         call_id=call_id,
                         action=booking_action,
+                        search_payload=transcript,
                     )
                     if booking_result:
                         analysis.reply = str(booking_result.get("voice_summary") or analysis.reply)
