@@ -178,6 +178,7 @@ class WakeWordEngine:
             if a.strip()
         ]
         self._actions = self._load_actions()
+        self._compiled_phrases = self._compile_phrases()
         logger.info(
             "WakeWordEngine initialised: prefix=%r, aliases=%d, actions=%d",
             self._wake_prefix,
@@ -209,27 +210,18 @@ class WakeWordEngine:
         best: WakeWordMatch | None = None
         best_len = 0
 
-        for action_def in self._actions:
-            action = action_def["action"]
-            for phrase in action_def["phrases"]:
-                norm_phrase = self._normalize(phrase)
-                if not norm_phrase:
-                    continue
-                pattern = r"\b" + re.escape(norm_phrase) + r"\b"
-                m = re.search(pattern, stripped)
-                if m:
-                    phrase_len = len(norm_phrase)
-                    if phrase_len > best_len:
-                        # Extract payload: everything after the matched phrase
-                        payload = stripped[m.end():].strip().strip(".,!?")
-                        confidence = 0.9 if has_prefix else 0.7
-                        best = WakeWordMatch(
-                            action=action,
-                            payload=payload,
-                            wake_phrase=phrase,
-                            confidence=confidence,
-                        )
-                        best_len = phrase_len
+        for action, phrase, compiled, phrase_len in self._compiled_phrases:
+            m = compiled.search(stripped)
+            if m and phrase_len > best_len:
+                payload = stripped[m.end():].strip().strip(".,!?")
+                confidence = 0.9 if has_prefix else 0.7
+                best = WakeWordMatch(
+                    action=action,
+                    payload=payload,
+                    wake_phrase=phrase,
+                    confidence=confidence,
+                )
+                best_len = phrase_len
 
         return best
 
@@ -257,6 +249,19 @@ class WakeWordEngine:
                     return remainder
         return text
 
+    def _compile_phrases(self) -> list[tuple[str, str, re.Pattern[str], int]]:
+        """Pre-compile regex patterns for all action phrases."""
+        compiled: list[tuple[str, str, re.Pattern[str], int]] = []
+        for action_def in self._actions:
+            action = action_def["action"]
+            for phrase in action_def["phrases"]:
+                norm = self._normalize(phrase)
+                if not norm:
+                    continue
+                pattern = re.compile(r"\b" + re.escape(norm) + r"\b")
+                compiled.append((action, phrase, pattern, len(norm)))
+        return compiled
+
     def _load_actions(self) -> list[dict[str, Any]]:
         """Load built-in actions plus optional user-defined overrides."""
         actions = list(BUILTIN_ACTIONS)
@@ -266,10 +271,12 @@ class WakeWordEngine:
             try:
                 data = json.loads(custom_path.read_text(encoding="utf-8"))
                 if isinstance(data, list):
+                    added = 0
                     for item in data:
                         if isinstance(item, dict) and item.get("action") and item.get("phrases"):
                             actions.append(item)
-                    logger.info("Loaded %d custom wake-word actions from %s", len(data), custom_path)
+                            added += 1
+                    logger.info("Loaded %d custom wake-word actions from %s", added, custom_path)
             except Exception:
                 logger.warning("Failed to load custom wake-word config from %s", custom_path, exc_info=True)
 

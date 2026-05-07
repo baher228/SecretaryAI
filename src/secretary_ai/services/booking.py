@@ -141,7 +141,10 @@ class BookingService:
             domains = _BUS_DOMAINS
         else:
             domains = _FLIGHT_DOMAINS
-        q = f"{mode} from {orig} to {dest} on {date}"
+        if dest:
+            q = f"{mode} from {orig} to {dest} on {date}"
+        else:
+            q = f"{mode} from {orig} on {date}"
         if return_date:
             q += f" return {return_date}"
         results = await tavily_search(
