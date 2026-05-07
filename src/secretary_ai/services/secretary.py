@@ -13,6 +13,7 @@ from secretary_ai.domain.models import (
     AgentLiveRespondResponse,
     AgentAnalyzeResponse,
     AgentReplyResponse,
+    IntentType,
     ArchitectureOverview,
     CalendarCacheResponse,
     CalendarProcessResponse,
@@ -52,6 +53,7 @@ from secretary_ai.services.telegram_calls import TelegramCallService
 from secretary_ai.services.tts import TTSEngine
 from secretary_ai.services.maps import MapService
 from secretary_ai.services.booking import BookingService
+from secretary_ai.services.wake_word import WakeWordEngine, WakeWordMatch
 from secretary_ai.services.gemini_live import GeminiLiveSession
 from secretary_ai.services.zai_client import extract_message, zai_chat_completion
 from secretary_ai.core.locales import (
@@ -84,6 +86,7 @@ class SecretaryService:
         self.tts = TTSEngine(settings)
         self.maps = MapService(settings)
         self.booking = BookingService(settings)
+        self.wake_word = WakeWordEngine(settings)
         self.live_sessions: dict[str, dict[str, Any]] = {}
         self._auto_live_task: asyncio.Task | None = None
         self._calendar_worker_task: asyncio.Task | None = None
@@ -449,6 +452,20 @@ class SecretaryService:
                 speak_response=speak_response,
             )
 
+        # --- Wake-word detection ---
+        wake_match = self.wake_word.detect(transcript)
+        if wake_match is not None:
+            self.debug.log(call_id, "wake_word_detected", wake_match.to_dict())
+            wake_response = await self._handle_wake_word_action(
+                call_id=call_id,
+                transcript=transcript,
+                wake_match=wake_match,
+                context=context,
+                speak_response=speak_response,
+            )
+            if wake_response is not None:
+                return wake_response
+
         calendar_turn = await self.calendar.quick_reply_or_enqueue(
             call_id=call_id,
             transcript=transcript,
@@ -521,6 +538,25 @@ class SecretaryService:
                     if bool(queued.get("queued")):
                         action_items.append(f"calendar_queue:{queued.get('task_id')}")
 
+                booking_action = str(template_hit.get("booking_search") or "").strip()
+                if booking_action:
+                    # Extract tail text after matched action phrase (like wake-word payload)
+                    wake_detect = self.wake_word.detect(transcript)
+                    booking_payload = wake_detect.payload if wake_detect else ""
+                    booking_result = await self._handle_booking_search(
+                        call_id=call_id,
+                        action=booking_action,
+                        search_payload=booking_payload,
+                    )
+                    if booking_result:
+                        analysis.reply = str(booking_result.get("voice_summary") or analysis.reply)
+                        action_items.append(f"booking_search:{booking_action}")
+                        analysis.extracted_fields = {
+                            **dict(analysis.extracted_fields or {}),
+                            "booking_category": str(booking_result.get("category") or ""),
+                            "booking_results_count": len(booking_result.get("results") or []),
+                        }
+
             if bool(calendar_turn.get("queued")):
                 action_items.append(f"calendar_queue:{calendar_turn.get('task_id')}")
             processed_status = str(calendar_turn.get("processed_status") or "").strip()
@@ -543,12 +579,15 @@ class SecretaryService:
 
             if template_id:
                 self._mark_template_emitted(call_id, template_id, transcript)
-                if template_id in self._template_audio_cache:
+                is_booking_template = bool(
+                    template_hit and str(template_hit.get("booking_search") or "").strip()
+                )
+                if not is_booking_template and template_id in self._template_audio_cache:
                     tts_audio_path = self._template_audio_cache[template_id]
                     tts_status = "cached"
                 else:
                     tts_audio_path, tts_status = await self.tts.synthesize(analysis.reply, call_id=f"template-{template_id}")
-                    if tts_audio_path:
+                    if tts_audio_path and not is_booking_template:
                         self._template_audio_cache[template_id] = tts_audio_path
 
                 call_audio_status = "not_streamed"
@@ -678,6 +717,162 @@ class SecretaryService:
                 call["handoff_reason"] = analysis.transfer_reason
 
         return analysis
+
+    async def _handle_wake_word_action(
+        self,
+        call_id: str,
+        transcript: str,
+        wake_match: WakeWordMatch,
+        context: dict[str, Any],
+        speak_response: bool,
+    ) -> AgentLiveRespondResponse | None:
+        """Route a wake-word match to the correct action handler.
+
+        Returns an ``AgentLiveRespondResponse`` if handled, else ``None``
+        (lets the normal template/LLM flow proceed).
+        """
+        action = wake_match.action
+        payload = wake_match.payload
+
+        # Booking search actions
+        if action in ("find_restaurant", "find_hotel", "find_event", "find_travel", "plan_evening"):
+            booking_result = await self._handle_booking_search(
+                call_id=call_id,
+                action=action,
+                search_payload=payload,
+            )
+            voice = str(booking_result.get("voice_summary") or "Searching now, one moment.")
+            return await self._fast_fallback_response(
+                call_id=call_id,
+                snippet=transcript,
+                reply=voice,
+                action_item=f"wake_word_booking:{action}",
+                speak_response=speak_response,
+            )
+
+        # Calendar scheduling
+        if action == "schedule":
+            calendar_turn = await self.calendar.quick_reply_or_enqueue(
+                call_id=call_id,
+                transcript=transcript,
+                context={**context, "source": "wake_word_schedule"},
+            )
+            reply = str(calendar_turn.get("reply") or "I'll schedule that for you.")
+            return await self._fast_fallback_response(
+                call_id=call_id,
+                snippet=transcript,
+                reply=reply,
+                action_item=f"wake_word_schedule:queued={calendar_turn.get('queued')}",
+                speak_response=speak_response,
+            )
+
+        # Reminder
+        if action == "remind":
+            return await self._handle_reminder_flow(
+                call_id=call_id,
+                transcript=transcript,
+                speak_response=speak_response,
+            )
+
+        # Directions
+        if action == "directions":
+            analysis = AgentAnalyzeResponse(
+                call_id=call_id,
+                reply="Calculating route now.",
+                model=self.settings.zai_model,
+                intent=IntentType.PLAN_ROUTE,
+                extracted_fields={"destination": payload} if payload else {},
+            )
+            analysis = await self._resolve_route_intent(
+                call_id=call_id,
+                transcript=transcript,
+                context=context,
+                analysis=analysis,
+            )
+            return await self._fast_fallback_response(
+                call_id=call_id,
+                snippet=transcript,
+                reply=analysis.reply,
+                action_item="wake_word_directions",
+                speak_response=speak_response,
+            )
+
+        # Memory store (remember)
+        if action == "remember":
+            fact_record = self.memory.add_user_fact_if_requested(call_id=call_id, transcript=transcript)
+            if fact_record:
+                return await self._fast_fallback_response(
+                    call_id=call_id,
+                    snippet=transcript,
+                    reply=f"Got it. I wrote it down: {fact_record.get('fact')}",
+                    action_item="wake_word_remember",
+                    speak_response=speak_response,
+                )
+
+        return None
+
+    @staticmethod
+    def _extract_location_from_payload(text: str) -> tuple[str, str]:
+        """Parse 'in <location>' or 'near <location>' from payload text.
+
+        Returns ``(remaining_payload, location)`` where *location* may be
+        empty if no pattern matched.
+        """
+        m = re.search(r"\b(?:in|near|around)\s+([A-Za-z][A-Za-z\s]{1,40})", text)
+        if not m:
+            return text, ""
+        location = m.group(1).strip()
+        remaining = (text[: m.start()] + text[m.end() :]).strip()
+        return remaining, location
+
+    async def _handle_booking_search(
+        self,
+        call_id: str,
+        action: str,
+        search_payload: str = "",
+    ) -> dict[str, Any]:
+        """Execute a booking search and log the result."""
+        try:
+            remaining, location = self._extract_location_from_payload(search_payload)
+            extracted: dict[str, Any] = {}
+            if location:
+                extracted["location"] = location
+            result = await self.booking.search_by_action(
+                action=action,
+                payload=remaining,
+                extracted=extracted if extracted else None,
+            )
+            self.debug.log(
+                call_id,
+                "booking_search_result",
+                {
+                    "action": action,
+                    "category": result.get("category"),
+                    "results_count": len(result.get("results") or []),
+                    "voice_summary": str(result.get("voice_summary") or "")[:200],
+                },
+            )
+            self.memory.append_long_term(
+                "booking_search",
+                {
+                    "call_id": call_id,
+                    "action": action,
+                    "category": result.get("category"),
+                    "results_count": len(result.get("results") or []),
+                },
+            )
+            return result
+        except Exception as exc:
+            self.debug.log(
+                call_id,
+                "booking_search_error",
+                {"action": action, "error": f"{type(exc).__name__}: {exc}"},
+            )
+            return {
+                "category": action,
+                "results": [],
+                "voice_summary": "I had trouble searching right now. Please try again.",
+            }
 
     async def get_call(self, call_id: str) -> dict[str, Any] | None:
         return self.telegram.get_call(call_id)

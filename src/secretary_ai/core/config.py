@@ -99,6 +99,17 @@ class Settings(BaseSettings):
     audio_cleanup_max_age_hours: float = 24.0
     audio_cleanup_keep_recent_files: int = 60
 
+    # Wake-word engine — configurable trigger phrases for voice commands.
+    wake_word_enabled: bool = True
+    wake_word_prefix: str = "secretary"
+    wake_word_aliases: str = ""
+    wake_word_require_prefix: bool = False
+    wake_word_config_path: str = ".telegram/cache/wake_word_actions.json"
+
+    # Booking search defaults.
+    booking_default_location: str = "London"
+    booking_max_results: int = 5
+
     # Gemini Live — sole voice engine (audio-to-audio via WebSocket).
     gemini_api_key: str | None = None
     gemini_live_model: str = "gemini-3.1-flash-live-preview"

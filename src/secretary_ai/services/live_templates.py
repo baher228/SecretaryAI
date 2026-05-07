@@ -201,6 +201,42 @@ _DEFAULT_TEMPLATES = [
         "reply": "Perfect. What’s the next detail?",
         "priority": 1,
     },
+    # --- Booking search templates ---
+    {
+        "id": "booking_restaurant",
+        "keywords": ["find a restaurant", "find me a restaurant", "restaurant near", "where to eat", "book a table", "dinner reservations"],
+        "reply": "Searching for restaurants now, one moment.",
+        "booking_search": "find_restaurant",
+        "priority": 13,
+    },
+    {
+        "id": "booking_hotel",
+        "keywords": ["find a hotel", "find me a hotel", "hotel near", "place to stay", "book a hotel", "accommodation"],
+        "reply": "Searching for hotels now, one moment.",
+        "booking_search": "find_hotel",
+        "priority": 13,
+    },
+    {
+        "id": "booking_event",
+        "keywords": ["find an event", "find tickets", "concerts near", "things to do", "theatre tickets", "buy tickets"],
+        "reply": "Searching for events now, one moment.",
+        "booking_search": "find_event",
+        "priority": 13,
+    },
+    {
+        "id": "booking_travel",
+        "keywords": ["find a flight", "book a flight", "train to", "bus to", "flight to", "travel to"],
+        "reply": "Searching for travel options now, one moment.",
+        "booking_search": "find_travel",
+        "priority": 13,
+    },
+    {
+        "id": "booking_evening",
+        "keywords": ["plan an evening", "plan tonight", "evening out", "night out", "dinner and show"],
+        "reply": "Planning your evening now, one moment.",
+        "booking_search": "plan_evening",
+        "priority": 13,
+    },
 ]
 
 
@@ -270,6 +306,7 @@ class LiveTemplateMatcher:
             "priority": best_priority,
             "calendar_check": bool(best_item.get("calendar_check", False)),
             "calendar_enqueue": bool(best_item.get("calendar_enqueue", False)),
+            "booking_search": str(best_item.get("booking_search") or ""),
         }
 
     def _load_templates(self) -> list[dict[str, Any]]:
