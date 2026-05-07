@@ -540,10 +540,13 @@ class SecretaryService:
 
                 booking_action = str(template_hit.get("booking_search") or "").strip()
                 if booking_action:
+                    # Extract tail text after matched action phrase (like wake-word payload)
+                    wake_detect = self.wake_word.detect(transcript)
+                    booking_payload = wake_detect.payload if wake_detect else ""
                     booking_result = await self._handle_booking_search(
                         call_id=call_id,
                         action=booking_action,
-                        search_payload=transcript,
+                        search_payload=booking_payload,
                     )
                     if booking_result:
                         analysis.reply = str(booking_result.get("voice_summary") or analysis.reply)
