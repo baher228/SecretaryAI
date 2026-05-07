@@ -11,6 +11,8 @@ from secretary_ai.domain.models import (
     AgentReplyRequest,
     AgentReplyResponse,
     ArchitectureOverview,
+    BookingSearchRequest,
+    BookingSearchResponse,
     CalendarCacheResponse,
     CalendarProcessResponse,
     CalendarQueueRequest,
@@ -298,6 +300,60 @@ async def calendar_refresh(
     secretary: SecretaryService = Depends(get_secretary),
 ) -> dict:
     return await secretary.calendar_refresh(days=days, max_results=max_results)
+
+
+# --- Booking search endpoints ---
+
+
+@router.post("/booking/search", response_model=BookingSearchResponse)
+async def booking_search(
+    payload: BookingSearchRequest,
+    secretary: SecretaryService = Depends(get_secretary),
+) -> BookingSearchResponse:
+    """Search for restaurants, hotels, events, or travel options."""
+    result = await secretary.booking.search_by_action(
+        action=payload.booking_type,
+        payload=payload.location,
+        extracted=payload.query_params,
+    )
+    return BookingSearchResponse(
+        call_id=payload.call_id,
+        status="ok",
+        results=result.get("results") or [],
+        voice_summary=result.get("voice_summary"),
+        category=result.get("category"),
+    )
+
+
+@router.get("/booking/last-results")
+async def booking_last_results(
+    secretary: SecretaryService = Depends(get_secretary),
+) -> dict:
+    """Return the most recent booking search results."""
+    return secretary.booking.last_results
+
+
+# --- Wake word endpoints ---
+
+
+@router.get("/wake-word/actions")
+async def wake_word_actions(
+    secretary: SecretaryService = Depends(get_secretary),
+) -> list[dict]:
+    """List all registered wake-word actions and their trigger phrases."""
+    return secretary.wake_word.list_actions()
+
+
+@router.post("/wake-word/detect")
+async def wake_word_detect(
+    transcript: str = Query(..., description="Text to scan for wake-word triggers"),
+    secretary: SecretaryService = Depends(get_secretary),
+) -> dict:
+    """Test wake-word detection against a transcript."""
+    match = secretary.wake_word.detect(transcript)
+    if match is None:
+        return {"detected": False}
+    return {"detected": True, **match.to_dict()}
 
 
 @router.get("/calls")

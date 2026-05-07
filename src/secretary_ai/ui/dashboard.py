@@ -194,6 +194,7 @@ DASHBOARD_HTML = """<!doctype html>
     <div class="nav-container">
       <div class="nav-tabs">
         <button class="tab-btn active" onclick="switchTab('overview', this)">Status</button>
+        <button class="tab-btn" onclick="switchTab('bookings', this)">Bookings</button>
         <button class="tab-btn" onclick="switchTab('lab', this)">API Lab</button>
       </div>
     </div>
@@ -254,6 +255,50 @@ DASHBOARD_HTML = """<!doctype html>
             <button class="secondary" onclick="clearDebugLog()">Clear</button>
             <button class="secondary" onclick="refreshDebugLog()">Refresh</button>
           </div>
+        </div>
+      </div>
+
+      <!-- BOOKINGS TAB -->
+      <div id="bookings" class="tab-content">
+        <div class="panel">
+          <h2>Booking Search</h2>
+          <p class="subtitle">Search for restaurants, hotels, events, and travel options.</p>
+          <div style="display: grid; gap: 12px; grid-template-columns: 1fr 1fr; margin-bottom: 14px;">
+            <div>
+              <label style="font-size: 0.78rem; color: var(--muted); display: block; margin-bottom: 4px;">Search Type</label>
+              <select id="booking-type" style="width:100%; background: rgba(255,255,255,0.06); border: 1px solid var(--line); color: var(--ink); padding: 10px 12px; border-radius: 10px; font-family: Sora, sans-serif; font-size: 0.88rem;">
+                <option value="find_restaurant">Restaurants</option>
+                <option value="find_hotel">Hotels</option>
+                <option value="find_event">Events</option>
+                <option value="find_travel">Travel</option>
+                <option value="plan_evening">Plan Evening</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size: 0.78rem; color: var(--muted); display: block; margin-bottom: 4px;">Location</label>
+              <input id="booking-location" placeholder="e.g. London, Paris..." />
+            </div>
+          </div>
+          <div style="margin-bottom: 14px;">
+            <label style="font-size: 0.78rem; color: var(--muted); display: block; margin-bottom: 4px;">Additional Details (optional)</label>
+            <input id="booking-extra" placeholder="e.g. Italian cuisine, budget-friendly, tonight..." />
+          </div>
+          <button onclick="runBookingSearch()">Search</button>
+          <div id="booking-voice" style="margin-top: 14px; padding: 12px; border-radius: 10px; background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2); display: none;">
+            <span style="font-size: 0.78rem; color: var(--primary); text-transform: uppercase; font-weight: 700;">Voice Summary</span>
+            <p id="booking-voice-text" style="margin: 6px 0 0; font-size: 0.92rem;"></p>
+          </div>
+        </div>
+
+        <div class="panel" id="booking-results-panel" style="display: none;">
+          <h2>Results</h2>
+          <div id="booking-results-grid" class="cards"></div>
+        </div>
+
+        <div class="panel">
+          <h2>Wake Word Actions</h2>
+          <p class="subtitle">Voice trigger phrases that route to specific actions during calls.</p>
+          <div id="wake-word-list" style="margin-top: 10px;"></div>
         </div>
       </div>
 
@@ -509,8 +554,89 @@ DASHBOARD_HTML = """<!doctype html>
         }
       }
 
+      // --- Booking Search ---
+      async function runBookingSearch() {
+        const type = document.getElementById("booking-type").value;
+        const location = document.getElementById("booking-location").value.trim() || "London";
+        const extra = document.getElementById("booking-extra").value.trim();
+        const voiceBox = document.getElementById("booking-voice");
+        const voiceText = document.getElementById("booking-voice-text");
+        const resultsPanel = document.getElementById("booking-results-panel");
+        const resultsGrid = document.getElementById("booking-results-grid");
+
+        voiceBox.style.display = "none";
+        resultsPanel.style.display = "none";
+        resultsGrid.innerHTML = '<div class="loader"></div> Searching...';
+        resultsPanel.style.display = "block";
+
+        try {
+          const r = await fetchJson("/api/v1/booking/search", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              call_id: "dashboard-" + Date.now(),
+              booking_type: type,
+              location: location,
+              query_params: extra ? { preferences: extra } : {},
+            }),
+          }, 20000);
+
+          if (r.ok && r.body) {
+            if (r.body.voice_summary) {
+              voiceText.textContent = r.body.voice_summary;
+              voiceBox.style.display = "block";
+            }
+            const results = r.body.results || [];
+            if (results.length === 0) {
+              resultsGrid.innerHTML = '<p style="color: var(--muted);">No results found.</p>';
+            } else {
+              resultsGrid.innerHTML = results.map(r => {
+                const title = r.title || "Untitled";
+                const url = r.url || "#";
+                const content = (r.content || "").slice(0, 200);
+                const score = r.score ? `<span class="pill pill-active">${(r.score * 100).toFixed(0)}%</span>` : "";
+                return `<article class="card">
+                  <div class="row"><strong>${title}</strong> ${score}</div>
+                  <p style="color: var(--muted); font-size: 0.82rem; margin: 0 0 8px;">${content}${content.length >= 200 ? "..." : ""}</p>
+                  <a href="${url}" target="_blank" style="color: var(--primary); font-size: 0.82rem; text-decoration: none;">${url}</a>
+                </article>`;
+              }).join("");
+            }
+          } else {
+            resultsGrid.innerHTML = `<p style="color: var(--err);">Error: ${JSON.stringify(r.body)}</p>`;
+          }
+        } catch (e) {
+          resultsGrid.innerHTML = `<p style="color: var(--err);">Request failed: ${e}</p>`;
+        }
+      }
+
+      // --- Wake Word Actions ---
+      async function loadWakeWordActions() {
+        try {
+          const r = await fetchJson("/api/v1/wake-word/actions", { method: "GET" }, 5000);
+          const container = document.getElementById("wake-word-list");
+          if (r.ok && Array.isArray(r.body) && r.body.length > 0) {
+            container.innerHTML = r.body.map(a => {
+              const phrases = (a.phrases || []).map(p => `<span class="pill pill-completed" style="margin: 2px;">${p}</span>`).join(" ");
+              return `<div style="margin-bottom: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 10px;">
+                <div style="font-weight: 600; margin-bottom: 6px;">
+                  <span class="pill pill-active">${a.action}</span>
+                  <span style="color: var(--muted); font-size: 0.82rem; margin-left: 8px;">${a.description || ""}</span>
+                </div>
+                <div style="display: flex; flex-wrap: wrap; gap: 4px;">${phrases}</div>
+              </div>`;
+            }).join("");
+          } else {
+            container.innerHTML = '<p style="color: var(--muted);">No wake-word actions configured.</p>';
+          }
+        } catch (e) {
+          document.getElementById("wake-word-list").innerHTML = `<p style="color: var(--err);">Failed to load: ${e}</p>`;
+        }
+      }
+
       refreshDashboard();
       refreshDebugLog();
+      loadWakeWordActions();
       setInterval(refreshDashboard, 5000);
     </script>
   </body>
