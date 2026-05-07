@@ -1013,17 +1013,23 @@ class SecretaryService:
             except Exception:
                 pass
 
+        started_mono = session.get("started_monotonic")
+        duration_seconds = round(monotonic() - started_mono, 1) if started_mono else None
+
         call = self.telegram.get_call(call_id)
         if call is not None:
             live = call.setdefault("live_agent", {})
             live["running"] = False
             live["stopped_at"] = self._now_iso()
+            if duration_seconds is not None:
+                live["duration_seconds"] = duration_seconds
 
+        self.debug.log(call_id, "live_stop", {"duration_seconds": duration_seconds})
         self.live_sessions.pop(call_id, None)
         return TelegramLiveAgentResponse(
             call_id=call_id,
             status="stopped",
-            detail="Telegram live agent loop stopped.",
+            detail=f"Telegram live agent loop stopped. Duration: {duration_seconds}s." if duration_seconds else "Telegram live agent loop stopped.",
             recording_path=str(session.get("recording_path") or ""),
             stt_status=str(session.get("last_stt_status") or "unknown"),
             speak_response=bool(session.get("speak_response", True)),
@@ -1039,7 +1045,9 @@ class SecretaryService:
                 detail="No active Telegram live agent loop for this call.",
             )
         responses_sent = int(session.get("responses_sent") or 0)
-        detail = f"Telegram live agent loop status fetched. responses_sent={responses_sent}."
+        started_mono = session.get("started_monotonic")
+        duration = round(monotonic() - started_mono, 1) if started_mono else 0
+        detail = f"responses_sent={responses_sent}, duration={duration}s."
         return TelegramLiveAgentStatusResponse(
             call_id=call_id,
             running=bool(session.get("running")),
