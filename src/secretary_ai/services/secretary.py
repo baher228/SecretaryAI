@@ -53,7 +53,7 @@ from secretary_ai.services.tts import TTSEngine
 from secretary_ai.services.maps import MapService
 from secretary_ai.services.booking import BookingService
 from secretary_ai.services.gemini_live import GeminiLiveSession
-from secretary_ai.services.zai_client import extract_message, zai_chat_completion
+from secretary_ai.services.openai_client import close_client, extract_message, openai_chat_completion
 from secretary_ai.core.locales import (
     CHAT_RETRY_PROMPT,
     CHAT_SYSTEM_PROMPT,
@@ -111,6 +111,7 @@ class SecretaryService:
         await self._stop_calendar_worker_task()
         await self._stop_all_live_sessions()
         await self.telegram.stop()
+        await close_client()
 
     def architecture_overview(self) -> ArchitectureOverview:
         return ArchitectureOverview(
@@ -149,9 +150,10 @@ class SecretaryService:
             "temperature": 0.1,
             "max_completion_tokens": 100,
         }
-        result = await zai_chat_completion(self.settings, payload)
+        result = await openai_chat_completion(self.settings, payload)
         if result.get("error"):
             return ModelCheckResponse(
+                provider="openai",
                 model=self.settings.openai_model,
                 connected=False,
                 detail=result["error"],
@@ -159,6 +161,7 @@ class SecretaryService:
             )
         message = extract_message(result["data"])
         return ModelCheckResponse(
+            provider="openai",
             model=self.settings.openai_model,
             connected=True,
             detail="Connected to OpenAI successfully.",
@@ -183,7 +186,7 @@ class SecretaryService:
                 "temperature": self.settings.chat_temperature,
                 "max_completion_tokens": self.settings.chat_max_tokens,
             }
-            result = await zai_chat_completion(self.settings, api_payload)
+            result = await openai_chat_completion(self.settings, api_payload)
             if result.get("error"):
                 reply = f"AI error: {result['error']}"
             else:
@@ -203,7 +206,7 @@ class SecretaryService:
                         "temperature": 0.1,
                         "max_completion_tokens": max(18, min(48, int(self.settings.chat_max_tokens))),
                     }
-                    retry_result = await zai_chat_completion(self.settings, retry_payload)
+                    retry_result = await openai_chat_completion(self.settings, retry_payload)
                     if not retry_result.get("error"):
                         retry_msg = extract_message(retry_result["data"])
                         reply = self._extract_text_from_content(retry_msg.get("content"))

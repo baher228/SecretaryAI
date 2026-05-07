@@ -12,7 +12,7 @@ from secretary_ai.core.locales import (
     t_dict,
 )
 from secretary_ai.domain.models import AgentAnalyzeResponse, IntentType
-from secretary_ai.services.zai_client import extract_message, zai_chat_completion
+from secretary_ai.services.openai_client import extract_message, openai_chat_completion
 
 _HEURISTIC_RULES: list[tuple[IntentType, tuple[str, ...], str]] = [
     (IntentType.RESCHEDULE_EVENT, ("reschedule", "move meeting", "another time"), "Check available slots and propose alternatives."),
@@ -99,7 +99,7 @@ class SecretaryAIAgent:
             "temperature": temperature,
             "max_completion_tokens": max_tokens,
         }
-        result = await zai_chat_completion(self.settings, payload)
+        result = await openai_chat_completion(self.settings, payload)
         if result.get("error"):
             return self._heuristic_response(call_id, transcript, context)
 

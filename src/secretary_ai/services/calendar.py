@@ -1,11 +1,10 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
 import json
+import logging
 from pathlib import Path
 import re
 from typing import Any
-
-import httpx
 
 from secretary_ai.core.config import Settings
 from secretary_ai.core.locales import (
@@ -48,6 +47,8 @@ except Exception:  # pragma: no cover - optional dependency
     OAuthFlow = None  # type: ignore[assignment]
     build = None  # type: ignore[assignment]
     HttpError = Exception  # type: ignore[assignment]
+
+logger = logging.getLogger(__name__)
 
 CALENDAR_SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
@@ -294,9 +295,9 @@ class CalendarService:
         return self._plan_action_heuristic(task)
 
     async def _plan_action_llm(self, task: dict[str, Any]) -> dict[str, Any]:
+        from secretary_ai.services.openai_client import openai_chat_completion, extract_message
+
         model = self.settings.calendar_smart_model or self.settings.openai_model
-        base_url = self.settings.openai_base_url.rstrip("/")
-        url = f"{base_url}/chat/completions"
         payload = {
             "model": model,
             "temperature": 0.1,
@@ -318,41 +319,30 @@ class CalendarService:
                 },
             ],
         }
-        headers = {
-            "Authorization": f"Bearer {self.settings.openai_api_key}",
-            "Content-Type": "application/json",
-        }
-
-        try:
-            async with httpx.AsyncClient(timeout=self.settings.openai_timeout_seconds) as client:
-                response = await client.post(url, headers=headers, json=payload)
-            if response.status_code >= 300:
-                return {}
-            data = response.json()
-            choices = data.get("choices") or []
-            if not choices:
-                return {}
-            message = choices[0].get("message") or {}
-            raw = str(message.get("content") or "").strip()
-            if not raw:
-                return {}
-            parsed = self._try_parse_json(raw)
-            if not parsed:
-                return {}
-            action = str(parsed.get("action") or "none").strip().lower()
-            if action not in {"create", "delete", "none"}:
-                action = "none"
-            return {
-                "action": action,
-                "title": parsed.get("title"),
-                "start_iso": parsed.get("start_iso"),
-                "end_iso": parsed.get("end_iso"),
-                "event_id": parsed.get("event_id"),
-                "reason": parsed.get("reason") or "planned_by_llm",
-                "planner_model": model,
-            }
-        except Exception:
+        result = await openai_chat_completion(self.settings, payload)
+        if result.get("error"):
+            logger.warning("Calendar planner LLM error: %s", result["error"])
             return {}
+
+        message = extract_message(result["data"])
+        raw = str(message.get("content") or "").strip()
+        if not raw:
+            return {}
+        parsed = self._try_parse_json(raw)
+        if not parsed:
+            return {}
+        action = str(parsed.get("action") or "none").strip().lower()
+        if action not in {"create", "delete", "none"}:
+            action = "none"
+        return {
+            "action": action,
+            "title": parsed.get("title"),
+            "start_iso": parsed.get("start_iso"),
+            "end_iso": parsed.get("end_iso"),
+            "event_id": parsed.get("event_id"),
+            "reason": parsed.get("reason") or "planned_by_llm",
+            "planner_model": model,
+        }
 
     def _plan_action_heuristic(self, task: dict[str, Any]) -> dict[str, Any]:
         text = str(task.get("transcript") or "").strip()
