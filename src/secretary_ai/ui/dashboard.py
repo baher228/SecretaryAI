@@ -251,13 +251,15 @@ DASHBOARD_HTML = """<!doctype html>
         </div>
 
         <div class="panel">
-          <h2>Debug Log</h2>
-          <p class="subtitle">Recent debug events from the live agent loop.</p>
-          <div class="log-box" id="debug-log">Waiting for events...</div>
-          <div class="row" style="margin-top: 10px; justify-content: flex-end;">
-            <button class="secondary" onclick="clearDebugLog()">Clear</button>
-            <button class="secondary" onclick="refreshDebugLog()">Refresh</button>
+          <h2>Live Debug Log</h2>
+          <p class="subtitle">Real-time debug events from Gemini Live sessions. Auto-streams via WebSocket.</p>
+          <div class="row" style="margin-bottom: 8px; gap: 6px;">
+            <span id="ws-status" style="font-size: 0.78rem; color: var(--muted);"><span class="status-indicator status-warn"></span>Connecting...</span>
+            <div style="flex:1;"></div>
+            <input type="text" id="debug-filter" placeholder="Filter by call_id or stage..." style="width: 260px; margin: 0; font-size: 0.78rem; padding: 6px 10px;" />
+            <button class="secondary" onclick="clearDebugLog()" style="font-size: 0.78rem; padding: 6px 10px;">Clear</button>
           </div>
+          <div class="log-box" id="debug-log" style="max-height: 400px;">Waiting for events...</div>
         </div>
       </div>
 
@@ -511,26 +513,65 @@ DASHBOARD_HTML = """<!doctype html>
         }
       }
 
+      const MAX_LOG_LINES = 200;
+      let debugLogLines = [];
+
       function clearDebugLog() {
+        debugLogLines = [];
         document.getElementById("debug-log").textContent = "Cleared.";
       }
 
-      async function refreshDebugLog() {
+      function renderDebugLog() {
+        const el = document.getElementById("debug-log");
+        const filter = (document.getElementById("debug-filter")?.value || "").toLowerCase().trim();
+        const filtered = filter
+          ? debugLogLines.filter(l => l.toLowerCase().includes(filter))
+          : debugLogLines;
+        el.textContent = filtered.length ? filtered.join("\\n") : "No matching events.";
+        el.scrollTop = el.scrollHeight;
+      }
+
+      function addDebugEntry(entry) {
+        const ts = (entry.ts || "").substring(11, 19);
+        const line = `[${ts}] ${entry.call_id || "-"} | ${entry.stage || "?"} | ${JSON.stringify(entry.data || {})}`;
+        debugLogLines.push(line);
+        if (debugLogLines.length > MAX_LOG_LINES) debugLogLines.shift();
+        renderDebugLog();
+      }
+
+      async function loadInitialDebugLog() {
         try {
-          const r = await fetchJson("/api/v1/calls/events?limit=20", { method: "GET" }, 5000);
-          const el = document.getElementById("debug-log");
-          if (r.ok && Array.isArray(r.body) && r.body.length > 0) {
-            el.textContent = r.body.map(e => JSON.stringify(e)).join("\\n");
-          } else {
-            el.textContent = "No events.";
+          const r = await fetchJson("/api/v1/debug/logs?lines=50", { method: "GET" }, 5000);
+          if (r.ok && Array.isArray(r.body)) {
+            r.body.forEach(entry => addDebugEntry(entry));
           }
         } catch (e) {
-          document.getElementById("debug-log").textContent = "Failed to fetch events.";
+          document.getElementById("debug-log").textContent = "Failed to load initial log.";
         }
       }
 
+      function connectDebugWs() {
+        const wsEl = document.getElementById("ws-status");
+        const proto = location.protocol === "https:" ? "wss:" : "ws:";
+        const ws = new WebSocket(`${proto}//${location.host}/api/v1/debug/ws`);
+        ws.onopen = () => {
+          wsEl.innerHTML = '<span class="status-indicator status-ok"></span>Live';
+        };
+        ws.onmessage = (evt) => {
+          try { addDebugEntry(JSON.parse(evt.data)); } catch (e) {}
+        };
+        ws.onclose = () => {
+          wsEl.innerHTML = '<span class="status-indicator status-err"></span>Disconnected';
+          setTimeout(connectDebugWs, 3000);
+        };
+        ws.onerror = () => ws.close();
+      }
+
+      document.getElementById("debug-filter")?.addEventListener("input", renderDebugLog);
+
       refreshDashboard();
-      refreshDebugLog();
+      loadInitialDebugLog();
+      connectDebugWs();
       setInterval(refreshDashboard, 5000);
     </script>
   </body>

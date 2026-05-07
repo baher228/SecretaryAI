@@ -1,5 +1,7 @@
 import asyncio
+import json
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect, status
@@ -103,6 +105,63 @@ async def health(
 @router.get("/version")
 async def version() -> dict[str, str]:
     return {"version": "0.1.0", "name": "Secretary AI"}
+
+
+@router.get("/debug/logs")
+async def debug_logs(
+    lines: int = Query(50, ge=1, le=500),
+    secretary: SecretaryService = Depends(get_secretary),
+) -> list[dict[str, Any]]:
+    """Tail the live debug JSONL log file."""
+    log_path = Path(secretary.settings.telegram_live_debug_log_path)
+    if not log_path.exists():
+        return []
+    try:
+        raw_lines = log_path.read_text(encoding="utf-8").strip().splitlines()
+        tail = raw_lines[-lines:]
+        result = []
+        for line in tail:
+            try:
+                result.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+        return result
+    except Exception:
+        return []
+
+
+@router.websocket("/debug/ws")
+async def debug_ws(
+    websocket: WebSocket,
+) -> None:
+    """Stream live debug log entries over WebSocket."""
+    await websocket.accept()
+    secretary: SecretaryService = websocket.app.state.secretary
+    log_path = Path(secretary.settings.telegram_live_debug_log_path)
+    last_size = log_path.stat().st_size if log_path.exists() else 0
+
+    try:
+        while True:
+            await asyncio.sleep(1.0)
+            if not log_path.exists():
+                continue
+            current_size = log_path.stat().st_size
+            if current_size <= last_size:
+                continue
+            with log_path.open("r", encoding="utf-8") as f:
+                f.seek(last_size)
+                new_data = f.read()
+            last_size = current_size
+            for line in new_data.strip().splitlines():
+                try:
+                    entry = json.loads(line)
+                    await websocket.send_json(entry)
+                except (json.JSONDecodeError, Exception):
+                    continue
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
 
 
 @router.get("/architecture", response_model=ArchitectureOverview)
