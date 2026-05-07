@@ -215,12 +215,13 @@ class WakeWordEngine:
                 norm_phrase = self._normalize(phrase)
                 if not norm_phrase:
                     continue
-                if norm_phrase in stripped:
+                pattern = r"\b" + re.escape(norm_phrase) + r"\b"
+                m = re.search(pattern, stripped)
+                if m:
                     phrase_len = len(norm_phrase)
                     if phrase_len > best_len:
                         # Extract payload: everything after the matched phrase
-                        idx = stripped.index(norm_phrase) + phrase_len
-                        payload = stripped[idx:].strip().strip(".,!?")
+                        payload = stripped[m.end():].strip().strip(".,!?")
                         confidence = 0.9 if has_prefix else 0.7
                         best = WakeWordMatch(
                             action=action,

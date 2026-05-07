@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect, status
+from pydantic import BaseModel as _BaseModel
 
 from secretary_ai.domain.models import (
     AgentLiveRespondRequest,
@@ -344,13 +345,19 @@ async def wake_word_actions(
     return secretary.wake_word.list_actions()
 
 
+class WakeWordDetectRequest(_BaseModel):
+    transcript: str
+
+
 @router.post("/wake-word/detect")
 async def wake_word_detect(
-    transcript: str = Query(..., description="Text to scan for wake-word triggers"),
+    body: WakeWordDetectRequest | None = None,
+    transcript: str = Query(None, description="Text to scan for wake-word triggers"),
     secretary: SecretaryService = Depends(get_secretary),
 ) -> dict:
-    """Test wake-word detection against a transcript."""
-    match = secretary.wake_word.detect(transcript)
+    """Test wake-word detection against a transcript (JSON body or query param)."""
+    text = (body.transcript if body else None) or transcript or ""
+    match = secretary.wake_word.detect(text)
     if match is None:
         return {"detected": False}
     return {"detected": True, **match.to_dict()}
