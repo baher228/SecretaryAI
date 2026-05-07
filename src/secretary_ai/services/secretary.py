@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
 import hashlib
 import json
+import logging
 from pathlib import Path
 import re
 from time import monotonic
@@ -68,6 +69,8 @@ from secretary_ai.core.locales import (
     REMINDER_RESULT_PARTIAL,
     t,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class SecretaryService:
@@ -1101,6 +1104,7 @@ class SecretaryService:
             try:
                 await self.stop_telegram_live_agent(call_id)
             except Exception:
+                logger.debug("Error stopping live session %s", call_id, exc_info=True)
                 continue
 
     async def _stop_auto_live_task(self) -> None:
@@ -1116,8 +1120,10 @@ class SecretaryService:
         task.cancel()
         try:
             await task
-        except (asyncio.CancelledError, Exception):
+        except asyncio.CancelledError:
             pass
+        except Exception:
+            logger.debug("Task cancellation error", exc_info=True)
         return None
 
     async def _auto_attach_live_loop(self) -> None:
@@ -1180,7 +1186,7 @@ class SecretaryService:
             except asyncio.CancelledError:
                 raise
             except Exception:
-                pass
+                logger.warning("Auto-attach loop iteration failed", exc_info=True)
 
             await asyncio.sleep(scan_seconds)
 
@@ -1209,7 +1215,7 @@ class SecretaryService:
             except asyncio.CancelledError:
                 raise
             except Exception:
-                pass
+                logger.warning("Calendar worker loop iteration failed", exc_info=True)
             await asyncio.sleep(poll_seconds)
 
     def _load_reminder_state(self) -> dict[str, dict[str, Any]]:
@@ -1219,7 +1225,7 @@ class SecretaryService:
                 if isinstance(raw, dict):
                     return {str(k): v for k, v in raw.items() if isinstance(v, dict)}
         except Exception:
-            pass
+            logger.warning("Failed to load reminder state from %s", self._reminder_state_path, exc_info=True)
         return {}
 
     def _persist_reminder_state(self) -> None:
@@ -1230,7 +1236,7 @@ class SecretaryService:
                 encoding="utf-8",
             )
         except Exception:
-            pass
+            logger.warning("Failed to persist reminder state", exc_info=True)
 
     async def _maybe_schedule_reminders_from_queue_result(self, queue_result: dict[str, Any]) -> None:
         if not self.settings.reminder_enabled:
