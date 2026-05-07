@@ -605,19 +605,56 @@ class SecretaryService:
             analysis.action_items = list(analysis.action_items) + ["empty_reply_fallback"]
             analysis.action_items = analysis.action_items[:8]
 
-        tts_audio_path: str | None = None
-        tts_status: str | None = None
-        call_audio_status: str | None = None
-        if speak_response:
-            tts_audio_path, tts_status = await self.tts.synthesize(analysis.reply, call_id=call_id)
-            if tts_audio_path:
-                stream_result = await self.telegram.stream_audio_out(call_id, tts_audio_path)
-                call_audio_status = str(stream_result.get("status"))
-                self._apply_live_tts_pause(call_id, call_audio_status)
-            else:
-                call_audio_status = "not_streamed"
+        response = await self._build_live_response(
+            call_id=call_id,
+            transcript=transcript,
+            analysis=analysis,
+            speak_response=speak_response,
+        )
 
-        response = AgentLiveRespondResponse(
+        self._fire_booking_sidecar(analysis)
+        self.memory.add_short_term_turn(call_id=call_id, transcript=transcript, reply=response.reply)
+        self.memory.append_long_term(
+            "live_turn",
+            {
+                "call_id": call_id,
+                "transcript": transcript,
+                "reply": response.reply,
+                "intent": response.intent.value,
+                "confidence": response.confidence,
+            },
+        )
+        return response
+
+    async def _speak_and_stream(
+        self,
+        call_id: str,
+        text: str,
+        speak: bool,
+    ) -> tuple[str | None, str | None, str | None]:
+        """Synthesize TTS and stream to call. Returns (audio_path, tts_status, call_audio_status)."""
+        if not speak or not text:
+            return None, None, None
+        tts_audio_path, tts_status = await self.tts.synthesize(text, call_id=call_id)
+        if not tts_audio_path:
+            return None, tts_status, "not_streamed"
+        stream_result = await self.telegram.stream_audio_out(call_id, tts_audio_path)
+        call_audio_status = str(stream_result.get("status"))
+        self._apply_live_tts_pause(call_id, call_audio_status)
+        return tts_audio_path, tts_status, call_audio_status
+
+    async def _build_live_response(
+        self,
+        call_id: str,
+        transcript: str,
+        analysis: AgentAnalyzeResponse,
+        speak_response: bool,
+    ) -> AgentLiveRespondResponse:
+        """Build a live response with optional TTS."""
+        tts_audio_path, tts_status, call_audio_status = await self._speak_and_stream(
+            call_id, analysis.reply, speak_response,
+        )
+        return AgentLiveRespondResponse(
             call_id=call_id,
             transcript=transcript,
             reply=analysis.reply,
@@ -632,29 +669,17 @@ class SecretaryService:
             tts_status=tts_status,
             call_audio_status=call_audio_status,
         )
-        
-        # Async process bookings
-        raw_intent = analysis.intent.value
-        if raw_intent == "search_booking":
-            location = analysis.extracted_fields.get("location", "London")
-            booking_type = analysis.extracted_fields.get("topic", "restaurants")
-            if "hotel" in booking_type:
-                asyncio.create_task(self.booking.search_hotels(location, "2026-05-01", "2026-05-05"))
-            else:
-                asyncio.create_task(self.booking.search_restaurants(location))
 
-        self.memory.add_short_term_turn(call_id=call_id, transcript=transcript, reply=response.reply)
-        self.memory.append_long_term(
-            "live_turn",
-            {
-                "call_id": call_id,
-                "transcript": transcript,
-                "reply": response.reply,
-                "intent": response.intent.value,
-                "confidence": response.confidence,
-            },
-        )
-        return response
+    def _fire_booking_sidecar(self, analysis: AgentAnalyzeResponse) -> None:
+        """Fire-and-forget booking search if intent matches."""
+        if analysis.intent.value != "search_booking":
+            return
+        location = analysis.extracted_fields.get("location", "London")
+        booking_type = analysis.extracted_fields.get("topic", "restaurants")
+        if "hotel" in booking_type:
+            asyncio.create_task(self.booking.search_hotels(location, "2026-05-01", "2026-05-05"))
+        else:
+            asyncio.create_task(self.booking.search_restaurants(location))
 
     async def analyze_agent_turn(
         self,
