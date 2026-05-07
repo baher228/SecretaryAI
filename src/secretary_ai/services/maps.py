@@ -1,7 +1,5 @@
 from urllib.parse import quote_plus
 
-import httpx
-
 from secretary_ai.core.config import Settings
 
 
@@ -110,6 +108,8 @@ class MapService:
         mode: str,
         api_key: str,
     ) -> dict:
+        from secretary_ai.services.openai_client import _get_client
+
         params = {
             "origins": origin,
             "destinations": destination,
@@ -118,11 +118,12 @@ class MapService:
             "units": "metric",
             "key": api_key,
         }
-        async with httpx.AsyncClient(timeout=12.0) as client:
-            response = await client.get(
-                "https://maps.googleapis.com/maps/api/distancematrix/json",
-                params=params,
-            )
+        client = _get_client()
+        response = await client.get(
+            "https://maps.googleapis.com/maps/api/distancematrix/json",
+            params=params,
+            timeout=12.0,
+        )
         response.raise_for_status()
         return response.json()
 

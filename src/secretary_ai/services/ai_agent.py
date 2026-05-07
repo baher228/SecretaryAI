@@ -12,7 +12,7 @@ from secretary_ai.core.locales import (
     t_dict,
 )
 from secretary_ai.domain.models import AgentAnalyzeResponse, IntentType
-from secretary_ai.services.zai_client import extract_message, zai_chat_completion
+from secretary_ai.services.openai_client import extract_message, openai_chat_completion
 
 _HEURISTIC_RULES: list[tuple[IntentType, tuple[str, ...], str]] = [
     (IntentType.RESCHEDULE_EVENT, ("reschedule", "move meeting", "another time"), "Check available slots and propose alternatives."),
@@ -83,11 +83,11 @@ class SecretaryAIAgent:
         temperature: float,
         live_mode: bool,
     ) -> AgentAnalyzeResponse:
-        if not self.settings.zai_api_key:
+        if not self.settings.openai_api_key:
             return self._heuristic_response(call_id, transcript, context)
 
         payload = {
-            "model": self.settings.zai_model,
+            "model": self.settings.openai_model,
             "messages": self._build_messages(
                 call_id=call_id,
                 transcript=transcript,
@@ -97,9 +97,9 @@ class SecretaryAIAgent:
                 live_mode=live_mode,
             ),
             "temperature": temperature,
-            "max_tokens": max_tokens,
+            "max_completion_tokens": max_tokens,
         }
-        result = await zai_chat_completion(self.settings, payload)
+        result = await openai_chat_completion(self.settings, payload)
         if result.get("error"):
             return self._heuristic_response(call_id, transcript, context)
 
@@ -172,7 +172,7 @@ class SecretaryAIAgent:
             transfer_reason=transfer_reason,
             action_items=action_items[:8],
             extracted_fields=extracted_fields,
-            model=self.settings.zai_model,
+            model=self.settings.openai_model,
         )
 
     def _heuristic_response(
@@ -204,7 +204,7 @@ class SecretaryAIAgent:
             transfer_reason=t(TRANSFER_REASON_DEFAULT, self.settings.language) if intent == IntentType.TRANSFER_HUMAN else None,
             action_items=action_items,
             extracted_fields=extracted,
-            model=self.settings.zai_model,
+            model=self.settings.openai_model,
         )
 
     @staticmethod

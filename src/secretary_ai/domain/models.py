@@ -122,7 +122,7 @@ class ModelCheckRequest(BaseModel):
 
 
 class ModelCheckResponse(BaseModel):
-    provider: str = "z.ai"
+    provider: str = "openai"
     model: str
     connected: bool
     detail: str
