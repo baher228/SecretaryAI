@@ -398,6 +398,9 @@ DASHBOARD_HTML = """<!doctype html>
         if (btn) btn.classList.add('active');
       }
 
+      function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+      function safeHref(u) { return /^https?:\/\//i.test(u) ? esc(u) : '#'; }
+
       async function fetchJson(path, init = {}, timeoutMs = 8000) {
         const ctrl = new AbortController();
         const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -591,9 +594,9 @@ DASHBOARD_HTML = """<!doctype html>
               resultsGrid.innerHTML = '<p style="color: var(--muted);">No results found.</p>';
             } else {
               resultsGrid.innerHTML = results.map(r => {
-                const title = r.title || "Untitled";
-                const url = r.url || "#";
-                const content = (r.content || "").slice(0, 200);
+                const title = esc(r.title || "Untitled");
+                const url = safeHref(r.url || "");
+                const content = esc((r.content || "").slice(0, 200));
                 const score = r.score ? `<span class="pill pill-active">${(r.score * 100).toFixed(0)}%</span>` : "";
                 return `<article class="card">
                   <div class="row"><strong>${title}</strong> ${score}</div>

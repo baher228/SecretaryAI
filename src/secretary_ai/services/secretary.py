@@ -543,7 +543,6 @@ class SecretaryService:
                     booking_result = await self._handle_booking_search(
                         call_id=call_id,
                         action=booking_action,
-                        transcript=transcript,
                     )
                     if booking_result:
                         analysis.reply = str(booking_result.get("voice_summary") or analysis.reply)
@@ -736,7 +735,7 @@ class SecretaryService:
             booking_result = await self._handle_booking_search(
                 call_id=call_id,
                 action=action,
-                transcript=transcript,
+                search_payload=payload,
             )
             voice = str(booking_result.get("voice_summary") or "Searching now, one moment.")
             return await self._fast_fallback_response(
@@ -812,13 +811,13 @@ class SecretaryService:
         self,
         call_id: str,
         action: str,
-        transcript: str,
+        search_payload: str = "",
     ) -> dict[str, Any]:
         """Execute a booking search and log the result."""
         try:
             result = await self.booking.search_by_action(
                 action=action,
-                payload=transcript,
+                payload=search_payload,
             )
             self.debug.log(
                 call_id,
