@@ -513,7 +513,17 @@ class GeminiLiveSession:
                 {"error": exc.__class__.__name__, "detail": str(exc)[:200]},
             )
         finally:
-            wav_path.unlink(missing_ok=True)
+            # Defer WAV cleanup — py-tgcalls play() spawns ffmpeg in the
+            # background, so the file must remain readable until playback
+            # finishes.  Estimate duration from PCM size + 5s safety margin.
+            audio_seconds = len(pcm_48k) / (PLAYBACK_SAMPLE_RATE * 2)  # 16-bit mono
+            delay = audio_seconds + 5.0
+
+            async def _deferred_unlink(p: Path, d: float) -> None:
+                await asyncio.sleep(d)
+                p.unlink(missing_ok=True)
+
+            asyncio.get_running_loop().create_task(_deferred_unlink(wav_path, delay))
 
     # ------------------------------------------------------------------
     # Helpers
