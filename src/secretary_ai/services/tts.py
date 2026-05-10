@@ -39,21 +39,19 @@ async def _get_silero_model(settings: Settings) -> Any:
 
 
 def _load_silero_sync(settings: Settings) -> Any:
-    """Synchronous Silero model load — runs in executor."""
+    """Synchronous Silero model load via pip package — runs in executor."""
     try:
         import torch  # noqa: F811
+        from silero import silero_tts
     except ImportError as exc:
-        raise RuntimeError("torch is required for Silero TTS: pip install torch") from exc
+        raise RuntimeError(
+            "silero and torch are required: pip install silero torch"
+        ) from exc
 
     model_id = settings.tts_silero_model_id
     language = "ru" if "ru" in model_id else "en"
 
-    model, _ = torch.hub.load(
-        repo_or_dir="snakers4/silero-models",
-        model="silero_tts",
-        language=language,
-        speaker=model_id,
-    )
+    model, _ = silero_tts(language=language, speaker=model_id)
     device = torch.device(settings.tts_silero_device)
     model.to(device)
     logger.info("Silero TTS model loaded: %s on %s", model_id, device)
