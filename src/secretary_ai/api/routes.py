@@ -363,6 +363,45 @@ async def wake_word_detect(
     return {"detected": True, **match.to_dict()}
 
 
+# ---------------------------------------------------------------------------
+# Voice / TTS settings
+# ---------------------------------------------------------------------------
+
+@router.get("/voice/providers")
+async def voice_providers(
+    secretary: SecretaryService = Depends(get_secretary),
+) -> dict[str, Any]:
+    """List available TTS providers and current configuration."""
+    from secretary_ai.core.locales import SILERO_VOICES
+    from secretary_ai.services.tts import TTSEngine
+
+    s = secretary.settings
+    return {
+        "current_provider": s.tts_provider,
+        "available_providers": TTSEngine.available_providers(),
+        "edge_tts": {
+            "voice": s.tts_voice,
+            "rate": s.tts_rate,
+            "volume": s.tts_volume,
+        },
+        "silero": {
+            "model_id": s.tts_silero_model_id,
+            "speaker": s.tts_silero_speaker,
+            "sample_rate": s.tts_silero_sample_rate,
+            "device": s.tts_silero_device,
+            "available_voices": SILERO_VOICES,
+        },
+    }
+
+
+@router.get("/voice/silero/voices")
+async def silero_voices() -> dict[str, list[dict[str, str]]]:
+    """List all available Silero voice speakers by language."""
+    from secretary_ai.core.locales import SILERO_VOICES
+
+    return SILERO_VOICES
+
+
 @router.get("/calls")
 async def list_calls(secretary: SecretaryService = Depends(get_secretary)) -> list[dict]:
     return await secretary.list_calls()

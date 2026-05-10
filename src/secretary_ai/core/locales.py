@@ -467,6 +467,31 @@ DEFAULT_TTS_VOICE: dict[str, str] = {
     "ru": "ru-RU-DmitryNeural",
 }
 
+# Silero TTS defaults per language
+DEFAULT_SILERO_MODEL: dict[str, str] = {
+    "ru": "v5_5_ru",
+    "en": "v3_en",
+}
+
+DEFAULT_SILERO_SPEAKER: dict[str, str] = {
+    "ru": "xenia",
+    "en": "en_0",
+}
+
+# Available Silero Russian speakers for voice selection UI
+SILERO_VOICES: dict[str, list[dict[str, str]]] = {
+    "ru": [
+        {"id": "aidar", "name": "Aidar", "gender": "male"},
+        {"id": "baya", "name": "Baya", "gender": "female"},
+        {"id": "kseniya", "name": "Kseniya", "gender": "female"},
+        {"id": "xenia", "name": "Xenia", "gender": "female"},
+        {"id": "eugene", "name": "Eugene", "gender": "male"},
+    ],
+    "en": [
+        {"id": "en_0", "name": "English Speaker", "gender": "neutral"},
+    ],
+}
+
 # ---------------------------------------------------------------------------
 # STT model defaults per language
 # ---------------------------------------------------------------------------

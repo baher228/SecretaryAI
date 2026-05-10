@@ -194,6 +194,7 @@ DASHBOARD_HTML = """<!doctype html>
     <div class="nav-container">
       <div class="nav-tabs">
         <button class="tab-btn active" onclick="switchTab('overview', this)">Status</button>
+        <button class="tab-btn" onclick="switchTab('voice', this)">Voice</button>
         <button class="tab-btn" onclick="switchTab('bookings', this)">Bookings</button>
         <button class="tab-btn" onclick="switchTab('lab', this)">API Lab</button>
       </div>
@@ -219,6 +220,10 @@ DASHBOARD_HTML = """<!doctype html>
           <div class="stat-card">
             <span class="stat-title">Active Calls</span>
             <span class="stat-value" id="status-active-calls">0</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-title">Voice TTS</span>
+            <span class="stat-value" id="status-tts"><span class="loader"></span></span>
           </div>
         </div>
 
@@ -254,6 +259,51 @@ DASHBOARD_HTML = """<!doctype html>
           <div class="row" style="margin-top: 10px; justify-content: flex-end;">
             <button class="secondary" onclick="clearDebugLog()">Clear</button>
             <button class="secondary" onclick="refreshDebugLog()">Refresh</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- VOICE TAB -->
+      <div id="voice" class="tab-content">
+        <div class="panel">
+          <h2>Voice Provider</h2>
+          <p class="subtitle">Current TTS engine and configuration.</p>
+          <div class="stats-grid">
+            <div class="stat-card">
+              <span class="stat-title">Provider</span>
+              <span class="stat-value" id="voice-provider"><span class="loader"></span></span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-title">Voice / Speaker</span>
+              <span class="stat-value" id="voice-speaker"><span class="loader"></span></span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-title">Sample Rate</span>
+              <span class="stat-value" id="voice-sample-rate">-</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Silero TTS — Russian Native Voices</h2>
+          <p class="subtitle">Open-source, local inference. No API key needed. 5 Russian speakers with auto-stress and homograph resolution.</p>
+          <div id="silero-voices-grid" style="display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); margin-top: 12px;">
+            <div class="loader"></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Edge TTS — Microsoft Neural Voices</h2>
+          <p class="subtitle">Cloud-based voices. Russian: ru-RU-DmitryNeural (male), ru-RU-SvetlanaNeural (female).</p>
+          <div style="display: grid; gap: 12px; grid-template-columns: 1fr 1fr; margin-top: 12px;">
+            <article class="card">
+              <strong>DmitryNeural</strong>
+              <p style="color: var(--muted); font-size: 0.82rem; margin: 4px 0 0;">Male · ru-RU · Cloud</p>
+            </article>
+            <article class="card">
+              <strong>SvetlanaNeural</strong>
+              <p style="color: var(--muted); font-size: 0.82rem; margin: 4px 0 0;">Female · ru-RU · Cloud</p>
+            </article>
           </div>
         </div>
       </div>
@@ -637,9 +687,60 @@ DASHBOARD_HTML = """<!doctype html>
         }
       }
 
+      // --- Voice Provider ---
+      async function loadVoiceConfig() {
+        try {
+          const r = await fetchJson("/api/v1/voice/providers", { method: "GET" }, 5000);
+          if (!r.ok) return;
+          const d = r.body;
+
+          // Status card
+          const ttsEl = document.getElementById("status-tts");
+          const provider = d.current_provider || "unknown";
+          if (provider === "silero") {
+            ttsEl.innerHTML = '<span class="status-indicator status-ok"></span>Silero';
+          } else if (provider === "edge_tts") {
+            ttsEl.innerHTML = '<span class="status-indicator status-ok"></span>Edge TTS';
+          } else {
+            ttsEl.innerHTML = '<span class="status-indicator status-warn"></span>' + esc(provider);
+          }
+
+          // Voice tab details
+          document.getElementById("voice-provider").textContent = provider === "silero" ? "Silero (Russian Native)" : provider === "edge_tts" ? "Edge TTS (Microsoft)" : provider;
+          if (provider === "silero" && d.silero) {
+            document.getElementById("voice-speaker").textContent = d.silero.speaker || "-";
+            document.getElementById("voice-sample-rate").textContent = (d.silero.sample_rate || "-") + " Hz";
+          } else if (d.edge_tts) {
+            document.getElementById("voice-speaker").textContent = d.edge_tts.voice || "-";
+            document.getElementById("voice-sample-rate").textContent = "-";
+          }
+
+          // Silero voices grid
+          const sileroGrid = document.getElementById("silero-voices-grid");
+          const ruVoices = d.silero?.available_voices?.ru || [];
+          if (ruVoices.length > 0) {
+            const activeSpeaker = d.silero?.speaker || "";
+            sileroGrid.innerHTML = ruVoices.map(v => {
+              const isActive = v.id === activeSpeaker;
+              const border = isActive ? "border-color: var(--primary);" : "";
+              const badge = isActive ? '<span class="pill pill-active" style="font-size: 0.7rem;">Active</span>' : "";
+              return `<article class="card" style="${border}">
+                <div class="row"><strong>${esc(v.name)}</strong> ${badge}</div>
+                <p style="color: var(--muted); font-size: 0.82rem; margin: 4px 0 0;">${esc(v.gender)} · Local · No API key</p>
+              </article>`;
+            }).join("");
+          } else {
+            sileroGrid.innerHTML = '<p style="color: var(--muted);">Install silero + torch to enable Russian native voices.</p>';
+          }
+        } catch (e) {
+          console.error("Failed to load voice config", e);
+        }
+      }
+
       refreshDashboard();
       refreshDebugLog();
       loadWakeWordActions();
+      loadVoiceConfig();
       setInterval(refreshDashboard, 5000);
     </script>
   </body>
