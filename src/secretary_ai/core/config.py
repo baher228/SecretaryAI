@@ -54,6 +54,12 @@ class Settings(BaseSettings):
     tts_rate: str = "+0%"
     tts_volume: str = "+0%"
 
+    # Silero TTS settings (used when tts_provider=silero)
+    tts_silero_model_id: str = "v5_5_ru"
+    tts_silero_speaker: str = "xenia"
+    tts_silero_sample_rate: int = 48000
+    tts_silero_device: str = "cpu"
+
     stt_enabled: bool = True
     stt_provider: str = "faster_whisper"
     stt_model: str | None = None
