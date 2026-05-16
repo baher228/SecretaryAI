@@ -196,6 +196,7 @@ DASHBOARD_HTML = """<!doctype html>
         <button class="tab-btn active" onclick="switchTab('overview', this)">Status</button>
         <button class="tab-btn" onclick="switchTab('voice', this)">Voice</button>
         <button class="tab-btn" onclick="switchTab('bookings', this)">Bookings</button>
+        <button class="tab-btn" onclick="switchTab('contacts', this)">Contacts</button>
         <button class="tab-btn" onclick="switchTab('lab', this)">API Lab</button>
       </div>
     </div>
@@ -356,6 +357,22 @@ DASHBOARD_HTML = """<!doctype html>
           <p class="subtitle">Voice trigger phrases that route to specific actions during calls.</p>
           <div id="wake-word-list" style="margin-top: 10px;"></div>
         </div>
+      </div>
+
+      <!-- CONTACTS TAB -->
+      <div id="contacts" class="tab-content">
+        <section class="layout">
+          <div>
+            <h2 style="margin-bottom: 14px;">Contact Book</h2>
+            <div style="display:flex;gap:8px;margin-bottom:16px;">
+              <input id="contact-id" placeholder="Caller ID (username or phone)" style="flex:1;padding:8px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:0.85rem;" />
+              <input id="contact-name" placeholder="Name" style="flex:1;padding:8px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:0.85rem;" />
+              <input id="contact-lang" placeholder="Language (en/ru)" style="width:100px;padding:8px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:0.85rem;" />
+              <button onclick="saveContact()" style="padding:8px 16px;font-size:0.82rem;">Save</button>
+            </div>
+            <div id="contacts-grid" class="cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;"></div>
+          </div>
+        </section>
       </div>
 
       <!-- API LAB TAB -->
@@ -797,11 +814,61 @@ DASHBOARD_HTML = """<!doctype html>
 
       document.getElementById("debug-filter")?.addEventListener("input", renderDebugLog);
 
+      // --- Contacts ---
+      async function loadContacts() {
+        const grid = document.getElementById("contacts-grid");
+        try {
+          const r = await fetchJson("/api/v1/contacts", { method: "GET" }, 5000);
+          if (!r.ok || !Array.isArray(r.body)) {
+            grid.innerHTML = '<p style="color: var(--muted);">Failed to load contacts.</p>';
+            return;
+          }
+          if (r.body.length === 0) {
+            grid.innerHTML = '<p style="color: var(--muted);">No contacts yet. Add one above.</p>';
+            return;
+          }
+          grid.innerHTML = r.body.map(c => `
+            <article class="card" style="padding:14px;">
+              <h3 style="margin:0 0 6px 0;font-size:0.95rem;">${c.name || c.caller_id}</h3>
+              <p style="font-size:0.8rem;color:var(--muted);margin:0;">ID: ${c.caller_id}</p>
+              ${c.language ? `<p style="font-size:0.8rem;color:var(--muted);margin:2px 0 0 0;">Language: ${c.language}</p>` : ""}
+              ${c.call_count ? `<p style="font-size:0.8rem;color:var(--muted);margin:2px 0 0 0;">Calls: ${c.call_count}</p>` : ""}
+              ${c.notes ? `<p style="font-size:0.8rem;margin:4px 0 0 0;">${c.notes}</p>` : ""}
+              <button onclick="deleteContact('${c.caller_id}')" style="margin-top:8px;font-size:0.75rem;padding:3px 10px;color:var(--err);">Delete</button>
+            </article>
+          `).join("");
+        } catch (e) {
+          grid.innerHTML = '<p style="color: var(--muted);">Error loading contacts.</p>';
+        }
+      }
+
+      async function saveContact() {
+        const callerId = document.getElementById("contact-id").value.trim();
+        const name = document.getElementById("contact-name").value.trim();
+        const lang = document.getElementById("contact-lang").value.trim();
+        if (!callerId) { alert("Caller ID is required"); return; }
+        await fetchJson(`/api/v1/contacts/${encodeURIComponent(callerId)}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: name || null, language: lang || null }),
+        }, 5000);
+        document.getElementById("contact-id").value = "";
+        document.getElementById("contact-name").value = "";
+        document.getElementById("contact-lang").value = "";
+        loadContacts();
+      }
+
+      async function deleteContact(callerId) {
+        await fetchJson(`/api/v1/contacts/${encodeURIComponent(callerId)}`, { method: "DELETE" }, 5000);
+        loadContacts();
+      }
+
       refreshDashboard();
       loadInitialDebugLog();
       connectDebugWs();
       loadWakeWordActions();
       loadVoiceConfig();
+      loadContacts();
       setInterval(refreshDashboard, 5000);
     </script>
   </body>

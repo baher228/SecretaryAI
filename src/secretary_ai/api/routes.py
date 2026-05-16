@@ -541,6 +541,62 @@ async def calendar_oauth_status(
     return {"connected": ready, "detail": detail}
 
 
+# ─── Contacts ─────────────────────────────────────────────────────
+
+
+@router.get("/contacts")
+async def list_contacts(
+    secretary: SecretaryService = Depends(get_secretary),
+) -> list[dict]:
+    """Return all contacts sorted by most recently called."""
+    return secretary.contacts.list_all()
+
+
+@router.get("/contacts/{caller_id}")
+async def get_contact(
+    caller_id: str,
+    secretary: SecretaryService = Depends(get_secretary),
+) -> dict:
+    """Return a single contact by caller ID."""
+    contact = secretary.contacts.get(caller_id)
+    if contact is None:
+        raise HTTPException(status_code=404, detail="Contact not found.")
+    return contact
+
+
+class ContactUpsertRequest(_BaseModel):
+    name: str | None = None
+    language: str | None = None
+    notes: str | None = None
+
+
+@router.put("/contacts/{caller_id}")
+async def upsert_contact(
+    caller_id: str,
+    body: ContactUpsertRequest,
+    secretary: SecretaryService = Depends(get_secretary),
+) -> dict:
+    """Create or update a contact."""
+    return secretary.contacts.upsert(
+        caller_id,
+        name=body.name,
+        language=body.language,
+        notes=body.notes,
+    )
+
+
+@router.delete("/contacts/{caller_id}")
+async def delete_contact(
+    caller_id: str,
+    secretary: SecretaryService = Depends(get_secretary),
+) -> dict:
+    """Delete a contact."""
+    deleted = secretary.contacts.delete(caller_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Contact not found.")
+    return {"deleted": True, "caller_id": caller_id}
+
+
 @router.get("/calls")
 async def list_calls(secretary: SecretaryService = Depends(get_secretary)) -> list[dict]:
     return await secretary.list_calls()

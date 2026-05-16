@@ -54,6 +54,7 @@ from secretary_ai.services.telegram_calls import TelegramCallService
 from secretary_ai.services.tts import TTSEngine
 from secretary_ai.services.maps import MapService
 from secretary_ai.services.booking import BookingService
+from secretary_ai.services.contacts import ContactBook
 from secretary_ai.services.wake_word import WakeWordEngine, WakeWordMatch
 from secretary_ai.services.gemini_live import GeminiLiveSession
 from secretary_ai.services.openai_client import close_client, extract_message, openai_chat_completion
@@ -90,6 +91,7 @@ class SecretaryService:
         self.maps = MapService(settings)
         self.booking = BookingService(settings)
         self.wake_word = WakeWordEngine(settings)
+        self.contacts = ContactBook(settings)
         self.live_sessions: dict[str, dict[str, Any]] = {}
         self._auto_live_task: asyncio.Task | None = None
         self._calendar_worker_task: asyncio.Task | None = None
