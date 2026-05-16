@@ -1320,12 +1320,43 @@ class SecretaryService:
             )
         finally:
             s = self.live_sessions.get(call_id)
+            started_at = ""
+            started_mono = 0.0
             if s is not None:
                 s["running"] = False
                 s["last_stt_status"] = "gemini_live_ended"
-            asyncio.create_task(self._send_call_summary(call_id))
+                started_at = s.get("started_at", "")
+                started_mono = s.get("started_monotonic", 0.0)
 
-    async def _send_call_summary(self, call_id: str) -> None:
+            # Build transcript from gemini session before it's garbage collected
+            transcript_in = list(gemini.transcript_in)
+            transcript_out = list(gemini.transcript_out)
+            duration_s = monotonic() - started_mono if started_mono else 0.0
+
+            # Get caller info from the Telegram call record
+            call_record = self.telegram.get_call(call_id) or {}
+            caller = call_record.get("target_user") or call_record.get("chat_id") or "Unknown"
+
+            asyncio.create_task(
+                self._send_call_summary(
+                    call_id=call_id,
+                    transcript_in=transcript_in,
+                    transcript_out=transcript_out,
+                    caller=str(caller),
+                    duration_s=duration_s,
+                    started_at=started_at,
+                )
+            )
+
+    async def _send_call_summary(
+        self,
+        call_id: str,
+        transcript_in: list[str],
+        transcript_out: list[str],
+        caller: str,
+        duration_s: float,
+        started_at: str,
+    ) -> None:
         """Generate and send a call summary notification via Telegram."""
         if not self.settings.call_summary_enabled:
             return
@@ -1333,30 +1364,26 @@ class SecretaryService:
         if not target:
             return
 
-        session = self.live_sessions.get(call_id) or {}
-        transcript_entries = session.get("transcript", [])
-        if not transcript_entries:
+        if not transcript_in and not transcript_out:
             return
 
-        caller = session.get("caller", "Unknown")
-        duration_s = session.get("duration_seconds", 0)
-        started = session.get("started_at", "")
-
-        lines = []
-        for entry in transcript_entries[-20:]:
-            role = entry.get("role", "?")
-            text = (entry.get("text") or "")[:200]
-            if text:
-                lines.append(f"{'📞 Caller' if role == 'user' else '🤖 Secretary'}: {text}")
+        # Interleave in/out transcripts chronologically
+        lines: list[str] = []
+        max_entries = max(len(transcript_in), len(transcript_out))
+        for i in range(min(max_entries, 20)):
+            if i < len(transcript_in) and transcript_in[i]:
+                lines.append(f"📞 Caller: {transcript_in[i][:200]}")
+            if i < len(transcript_out) and transcript_out[i]:
+                lines.append(f"🤖 Secretary: {transcript_out[i][:200]}")
 
         transcript_text = "\n".join(lines) if lines else "(no transcript captured)"
-        duration_min = round(duration_s / 60, 1) if duration_s else "?"
+        duration_min = round(duration_s / 60, 1) if duration_s > 0 else "?"
 
         summary = (
             f"📋 **Call Summary**\n"
             f"Caller: {caller}\n"
             f"Duration: {duration_min} min\n"
-            f"Time: {started}\n\n"
+            f"Time: {started_at}\n\n"
             f"**Transcript:**\n{transcript_text}"
         )
 

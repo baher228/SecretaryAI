@@ -827,16 +827,18 @@ DASHBOARD_HTML = """<!doctype html>
             grid.innerHTML = '<p style="color: var(--muted);">No contacts yet. Add one above.</p>';
             return;
           }
-          grid.innerHTML = r.body.map(c => `
+          grid.innerHTML = r.body.map(c => {
+            const safeId = esc(c.caller_id).replace(/'/g, "\\'");
+            return `
             <article class="card" style="padding:14px;">
-              <h3 style="margin:0 0 6px 0;font-size:0.95rem;">${c.name || c.caller_id}</h3>
-              <p style="font-size:0.8rem;color:var(--muted);margin:0;">ID: ${c.caller_id}</p>
-              ${c.language ? `<p style="font-size:0.8rem;color:var(--muted);margin:2px 0 0 0;">Language: ${c.language}</p>` : ""}
+              <h3 style="margin:0 0 6px 0;font-size:0.95rem;">${esc(c.name || c.caller_id)}</h3>
+              <p style="font-size:0.8rem;color:var(--muted);margin:0;">ID: ${esc(c.caller_id)}</p>
+              ${c.language ? `<p style="font-size:0.8rem;color:var(--muted);margin:2px 0 0 0;">Language: ${esc(c.language)}</p>` : ""}
               ${c.call_count ? `<p style="font-size:0.8rem;color:var(--muted);margin:2px 0 0 0;">Calls: ${c.call_count}</p>` : ""}
-              ${c.notes ? `<p style="font-size:0.8rem;margin:4px 0 0 0;">${c.notes}</p>` : ""}
-              <button onclick="deleteContact('${c.caller_id}')" style="margin-top:8px;font-size:0.75rem;padding:3px 10px;color:var(--err);">Delete</button>
-            </article>
-          `).join("");
+              ${c.notes ? `<p style="font-size:0.8rem;margin:4px 0 0 0;">${esc(c.notes)}</p>` : ""}
+              <button onclick="deleteContact('${safeId}')" style="margin-top:8px;font-size:0.75rem;padding:3px 10px;color:var(--err);">Delete</button>
+            </article>`;
+          }).join("");
         } catch (e) {
           grid.innerHTML = '<p style="color: var(--muted);">Error loading contacts.</p>';
         }
