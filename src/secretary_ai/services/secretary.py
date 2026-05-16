@@ -103,6 +103,7 @@ class SecretaryService:
 
     async def startup(self) -> None:
         await self.telegram.start()
+        await self.tts.prewarm()
         await self.calendar.refresh_cache()
         self.memory.prune_short_term(max_age_hours=24)
         self.memory.set_mid_term_upcoming(self.calendar.cache_snapshot(limit=50).get("events", []))

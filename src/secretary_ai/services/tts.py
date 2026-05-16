@@ -109,8 +109,8 @@ class TTSEngine:
         try:
             model = await _get_silero_model(self.settings)
         except Exception:
-            logger.exception("Failed to load Silero model")
-            return None, "silero_model_load_failed"
+            logger.warning("Silero model unavailable, falling back to Edge TTS")
+            return await self._synthesize_edge(text, call_id)
 
         output_path = self._output_path(call_id, "wav")
         speaker = self.settings.tts_silero_speaker
@@ -129,8 +129,8 @@ class TTSEngine:
             )
             return str(output_path.resolve()), "generated"
         except Exception:
-            logger.exception("Silero TTS synthesis failed")
-            return None, "generation_failed"
+            logger.warning("Silero synthesis failed, falling back to Edge TTS")
+            return await self._synthesize_edge(text, call_id)
 
     # ------------------------------------------------------------------
     # Helpers
@@ -152,6 +152,16 @@ class TTSEngine:
             "Polly.Joanna": "en-US-JennyNeural",
         }
         return polly_aliases.get(voice, voice)
+
+    async def prewarm(self) -> None:
+        """Pre-load the TTS model on startup to avoid cold-start latency."""
+        provider = (self.settings.tts_provider or "").lower().strip()
+        if provider == "silero":
+            try:
+                await _get_silero_model(self.settings)
+                logger.info("Silero TTS model pre-warmed")
+            except Exception:
+                logger.warning("Silero pre-warm failed; will use Edge TTS fallback")
 
     @staticmethod
     def available_providers() -> list[str]:
