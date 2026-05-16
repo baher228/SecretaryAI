@@ -1,10 +1,13 @@
 import asyncio
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 import shutil
 from typing import Any
 
 from secretary_ai.core.config import Settings
+
+logger = logging.getLogger(__name__)
 
 try:
     from pytgcalls import PyTgCalls, filters
@@ -109,6 +112,21 @@ class TelegramCallService:
             ),
             "session_path": self.settings.telegram_session_path,
         }
+
+    async def send_message(self, target_user: str, text: str) -> bool:
+        """Send a text message to a user via Telegram. Returns True on success."""
+        try:
+            await self._ensure_connected()
+            if self._client is None:
+                return False
+            chat_id = await self._resolve_chat_id(target_user)
+            if chat_id is None:
+                return False
+            await self._client.send_message(chat_id, text)
+            return True
+        except Exception:
+            logger.warning("Failed to send Telegram message to %s", target_user, exc_info=True)
+            return False
 
     async def send_code(self, phone_number: str) -> dict[str, Any]:
         ready, detail = self.readiness()

@@ -120,6 +120,10 @@ class Settings(BaseSettings):
     booking_default_location: str = "London"
     booking_max_results: int = 5
 
+    # Call summary notification after call ends.
+    call_summary_enabled: bool = True
+    call_summary_target: str | None = None  # Telegram user/chat to send summary to
+
     # Gemini Live — sole voice engine (audio-to-audio via WebSocket).
     gemini_api_key: str | None = None
     gemini_live_model: str = "gemini-3.1-flash-live-preview"

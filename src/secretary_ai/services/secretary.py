@@ -1321,6 +1321,44 @@ class SecretaryService:
             if s is not None:
                 s["running"] = False
                 s["last_stt_status"] = "gemini_live_ended"
+            asyncio.create_task(self._send_call_summary(call_id))
+
+    async def _send_call_summary(self, call_id: str) -> None:
+        """Generate and send a call summary notification via Telegram."""
+        if not self.settings.call_summary_enabled:
+            return
+        target = self.settings.call_summary_target or self.settings.reminder_target_user
+        if not target:
+            return
+
+        session = self.live_sessions.get(call_id) or {}
+        transcript_entries = session.get("transcript", [])
+        if not transcript_entries:
+            return
+
+        caller = session.get("caller", "Unknown")
+        duration_s = session.get("duration_seconds", 0)
+        started = session.get("started_at", "")
+
+        lines = []
+        for entry in transcript_entries[-20:]:
+            role = entry.get("role", "?")
+            text = (entry.get("text") or "")[:200]
+            if text:
+                lines.append(f"{'📞 Caller' if role == 'user' else '🤖 Secretary'}: {text}")
+
+        transcript_text = "\n".join(lines) if lines else "(no transcript captured)"
+        duration_min = round(duration_s / 60, 1) if duration_s else "?"
+
+        summary = (
+            f"📋 **Call Summary**\n"
+            f"Caller: {caller}\n"
+            f"Duration: {duration_min} min\n"
+            f"Time: {started}\n\n"
+            f"**Transcript:**\n{transcript_text}"
+        )
+
+        await self.telegram.send_message(target, summary)
 
     async def _stop_all_live_sessions(self) -> None:
         call_ids = list(self.live_sessions.keys())
