@@ -18,13 +18,13 @@ class Settings(BaseSettings):
     timezone: str = "Europe/London"
     language: str = "ru"
 
-    zai_api_key: str | None = None
+    openai_api_key: str | None = None
     tavily_api_key: str | None = None
     google_maps_api_key: str | None = None
-    zai_base_url: str = "https://api.z.ai/api/coding/paas/v4"
-    zai_model: str = "glm-4.5-air"
-    zai_chat_model: str | None = None
-    zai_timeout_seconds: float = 30.0
+    openai_base_url: str = "https://api.openai.com/v1"
+    openai_model: str = "gpt-5.2"
+    openai_chat_model: str | None = None
+    openai_timeout_seconds: float = 30.0
     agent_max_tokens: int = 160
     agent_history_turns: int = 4
     agent_live_max_tokens: int = 72
@@ -85,6 +85,10 @@ class Settings(BaseSettings):
     calendar_timezone: str = "Europe/London"
     calendar_id: str | None = None
     calendar_service_account_json: str | None = None
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    google_oauth_token_path: str = ".telegram/cache/google_oauth_token.json"
+    google_oauth_redirect_uri: str = "http://localhost:8000/api/v1/calendar/oauth/callback"
     calendar_cache_path: str = ".telegram/cache/calendar_events.json"
     calendar_queue_path: str = ".telegram/cache/calendar_queue.json"
     calendar_worker_enabled: bool = True

@@ -6,7 +6,7 @@ from secretary_ai.services.secretary import SecretaryService
 
 
 def test_live_route_workflow_returns_eta_reply() -> None:
-    secretary = SecretaryService(Settings(zai_api_key=None, google_maps_api_key="test-key"))
+    secretary = SecretaryService(Settings(openai_api_key=None, google_maps_api_key="test-key"))
 
     async def fake_plan_route(origin: str, destination: str, mode: str = "driving") -> dict:
         return {

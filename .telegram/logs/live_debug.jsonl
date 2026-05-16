@@ -568,3 +568,70 @@
 {"ts": "2026-04-30T10:24:01.713848+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_audio_played", "data": {"idx": 2, "bytes": 74880, "status": "streaming_out"}}
 {"ts": "2026-04-30T10:24:03.554174+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_turn_complete", "data": {"turns": 1}}
 {"ts": "2026-04-30T10:24:03.610667+00:00", "call_id": "tg-5523073095", "stage": "gemini_greeting_cached", "data": {"path": ".telegram/cache/gemini_greeting_ru_d2485ad4.wav", "bytes": 318728}}
+{"ts": "2026-05-10T15:54:48.668222+00:00", "call_id": "tg-1", "stage": "fallback_tts", "data": {"tts_status": "generated", "has_audio": true, "reply": "queued"}}
+{"ts": "2026-05-10T15:54:48.668305+00:00", "call_id": "tg-1", "stage": "fallback_audio_out", "data": {"audio_path": "fake.mp3", "status": "streaming_out", "detail": "ok"}}
+{"ts": "2026-05-10T15:54:48.704939+00:00", "call_id": "tg-imm", "stage": "template_or_forced_reply", "data": {"forced_reply": true, "template_hit": null, "transcript": "set reminder today at five"}}
+{"ts": "2026-05-10T15:54:48.723529+00:00", "call_id": "tg-1", "stage": "live_start", "data": {"recording_path": "/tmp/pytest-of-ubuntu/pytest-1/test_start_live_agent_resets_p0/audio/recordings/tg-1-20260510T155448723323Z.wav", "speak_response": false, "context": {"source": "test"}, "mode": "gemini_live", "greeting_played": false}}
+{"ts": "2026-05-10T16:25:17.773719+00:00", "call_id": "tg-5523073095", "stage": "live_start", "data": {"recording_path": "/home/ubuntu/repos/SecretaryAI/.telegram/audio/recordings/tg-5523073095-20260510T162517756125Z.wav", "speak_response": true, "context": {"source": "outbound_auto_start"}, "mode": "gemini_live", "greeting_played": false}}
+{"ts": "2026-05-10T16:25:18.199672+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_connected", "data": {"model": "gemini-3.1-flash-live-preview"}}
+{"ts": "2026-05-10T16:25:18.200058+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_initial_prompt_sent", "data": {"prompt": "Телефонный звонок только что подключён. Тепло поприветствуй звонящего и спроси, чем можешь помочь.", "greeting_played": false}}
+{"ts": "2026-05-10T16:25:18.810227+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": "Здравствуйте! Это"}}
+{"ts": "2026-05-10T16:25:19.219882+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": " помощник"}}
+{"ts": "2026-05-10T16:25:19.367850+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": " руководителя."}}
+{"ts": "2026-05-10T16:25:19.659411+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": " Чем"}}
+{"ts": "2026-05-10T16:25:19.732925+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": " могу"}}
+{"ts": "2026-05-10T16:25:19.899789+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": " помочь"}}
+{"ts": "2026-05-10T16:25:19.970983+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": " сегодня?"}}
+{"ts": "2026-05-10T16:25:23.606327+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_turn_complete", "data": {"turns": 1}}
+{"ts": "2026-05-10T16:25:23.753124+00:00", "call_id": "tg-5523073095", "stage": "gemini_greeting_cached", "data": {"path": ".telegram/cache/gemini_greeting_ru_d2485ad4.wav", "bytes": 460860}}
+{"ts": "2026-05-10T16:25:24.067445+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_audio_played", "data": {"idx": 0, "bytes": 230430, "status": "streaming_out"}}
+{"ts": "2026-05-10T16:26:47.835045+00:00", "call_id": "tg-5523073095", "stage": "live_start", "data": {"recording_path": "/home/ubuntu/repos/SecretaryAI/.telegram/audio/recordings/tg-5523073095-20260510T162647817069Z.wav", "speak_response": true, "context": {"source": "outbound_auto_start"}, "mode": "gemini_live", "greeting_played": false}}
+{"ts": "2026-05-10T16:26:48.196940+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_connected", "data": {"model": "gemini-3.1-flash-live-preview"}}
+{"ts": "2026-05-10T16:26:48.197420+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_initial_prompt_sent", "data": {"prompt": "Телефонный звонок только что подключён. Тепло поприветствуй звонящего и спроси, чем можешь помочь.", "greeting_played": false}}
+{"ts": "2026-05-10T16:26:48.752268+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": "Здравствуйте! Это"}}
+{"ts": "2026-05-10T16:26:49.197592+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": " офис"}}
+{"ts": "2026-05-10T16:26:49.295341+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": " вашего"}}
+{"ts": "2026-05-10T16:26:49.427747+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": " работодателя."}}
+{"ts": "2026-05-10T16:26:49.660678+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": " Чем"}}
+{"ts": "2026-05-10T16:26:49.819292+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": " могу"}}
+{"ts": "2026-05-10T16:26:49.939442+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": " помочь?"}}
+{"ts": "2026-05-10T16:26:53.156424+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_turn_complete", "data": {"turns": 1}}
+{"ts": "2026-05-10T16:26:53.298166+00:00", "call_id": "tg-5523073095", "stage": "gemini_greeting_cached", "data": {"path": ".telegram/cache/gemini_greeting_ru_d2485ad4.wav", "bytes": 413768}}
+{"ts": "2026-05-10T16:26:53.624667+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_audio_played", "data": {"idx": 0, "bytes": 206884, "status": "streaming_out"}}
+{"ts": "2026-05-10T19:11:59.839395+00:00", "call_id": "tg-5523073095", "stage": "live_start", "data": {"recording_path": "/home/ubuntu/repos/SecretaryAI/.telegram/audio/recordings/tg-5523073095-20260510T191159824380Z.wav", "speak_response": true, "context": {"source": "outbound_auto_start"}, "mode": "gemini_live", "greeting_played": false}}
+{"ts": "2026-05-10T19:12:00.182041+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_connected", "data": {"model": "gemini-3.1-flash-live-preview"}}
+{"ts": "2026-05-10T19:12:00.182356+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_initial_prompt_sent", "data": {"prompt": "Телефонный звонок только что подключён. Тепло поприветствуй звонящего и спроси, чем можешь помочь.", "greeting_played": false}}
+{"ts": "2026-05-10T19:12:00.848034+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": "Здравствуйте! Это"}}
+{"ts": "2026-05-10T19:12:01.310459+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": " секретарь."}}
+{"ts": "2026-05-10T19:12:01.518307+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": " Чем"}}
+{"ts": "2026-05-10T19:12:01.647799+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": " могу"}}
+{"ts": "2026-05-10T19:12:01.709271+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": " помочь"}}
+{"ts": "2026-05-10T19:12:01.837434+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": " сегодня?"}}
+{"ts": "2026-05-10T19:12:04.941159+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_turn_complete", "data": {"turns": 1}}
+{"ts": "2026-05-10T19:12:05.065949+00:00", "call_id": "tg-5523073095", "stage": "gemini_greeting_cached", "data": {"path": ".telegram/cache/gemini_greeting_ru_d2485ad4.wav", "bytes": 383048}}
+{"ts": "2026-05-10T19:12:05.402766+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_audio_played", "data": {"idx": 0, "bytes": 191524, "status": "streaming_out"}}
+{"ts": "2026-05-10T19:15:01.464097+00:00", "call_id": "tg-5523073095", "stage": "live_start", "data": {"recording_path": "/home/ubuntu/repos/SecretaryAI/.telegram/audio/recordings/tg-5523073095-20260510T191501455646Z.wav", "speak_response": true, "context": {"source": "outbound_auto_start"}, "mode": "gemini_live", "greeting_played": false}}
+{"ts": "2026-05-10T19:15:01.849274+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_connected", "data": {"model": "gemini-3.1-flash-live-preview"}}
+{"ts": "2026-05-10T19:15:01.849587+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_initial_prompt_sent", "data": {"prompt": "Телефонный звонок только что подключён. Тепло поприветствуй звонящего и спроси, чем можешь помочь.", "greeting_played": false}}
+{"ts": "2026-05-10T19:15:02.403454+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": "Здравствуйте! Это"}}
+{"ts": "2026-05-10T19:15:02.858312+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": " приёмная."}}
+{"ts": "2026-05-10T19:15:03.101385+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": " Чем"}}
+{"ts": "2026-05-10T19:15:03.238056+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": " могу"}}
+{"ts": "2026-05-10T19:15:03.245290+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": " помочь"}}
+{"ts": "2026-05-10T19:15:03.372403+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": " сегодня?"}}
+{"ts": "2026-05-10T19:15:06.564075+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_turn_complete", "data": {"turns": 1}}
+{"ts": "2026-05-10T19:15:06.694062+00:00", "call_id": "tg-5523073095", "stage": "gemini_greeting_cached", "data": {"path": ".telegram/cache/gemini_greeting_ru_d2485ad4.wav", "bytes": 390728}}
+{"ts": "2026-05-10T19:15:06.961559+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_audio_played", "data": {"idx": 0, "bytes": 195364, "status": "streaming_out"}}
+{"ts": "2026-05-13T20:20:13.104056+00:00", "call_id": "tg-5523073095", "stage": "live_start", "data": {"recording_path": "/home/ubuntu/repos/SecretaryAI/.telegram/audio/recordings/tg-5523073095-20260513T202013094737Z.wav", "speak_response": true, "context": {"source": "auto_attach_watcher"}, "mode": "gemini_live", "greeting_played": false}}
+{"ts": "2026-05-13T20:20:13.521429+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_connected", "data": {"model": "gemini-3.1-flash-live-preview"}}
+{"ts": "2026-05-13T20:20:13.521924+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_initial_prompt_sent", "data": {"prompt": "Телефонный звонок только что подключён. Тепло поприветствуй звонящего и спроси, чем можешь помочь.", "greeting_played": false}}
+{"ts": "2026-05-13T20:20:14.085052+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": "Здравствуйте! Вы"}}
+{"ts": "2026-05-13T20:20:14.505388+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": " позвонили"}}
+{"ts": "2026-05-13T20:20:14.668468+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": " в компанию."}}
+{"ts": "2026-05-13T20:20:14.910369+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": " Чем"}}
+{"ts": "2026-05-13T20:20:15.125367+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": " могу"}}
+{"ts": "2026-05-13T20:20:15.219223+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": " помочь"}}
+{"ts": "2026-05-13T20:20:15.251408+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": " сегодня?"}}
+{"ts": "2026-05-13T20:20:18.734549+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_turn_complete", "data": {"turns": 1}}
+{"ts": "2026-05-13T20:20:18.886048+00:00", "call_id": "tg-5523073095", "stage": "gemini_greeting_cached", "data": {"path": ".telegram/cache/gemini_greeting_ru_d2485ad4.wav", "bytes": 436808}}
+{"ts": "2026-05-13T20:20:19.181150+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_audio_played", "data": {"idx": 0, "bytes": 218404, "status": "streaming_out"}}

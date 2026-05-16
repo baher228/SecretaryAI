@@ -1,3 +1,34 @@
 {
-  "calls": {}
+  "calls": {
+    "tg-imm": {
+      "turns": [
+        {
+          "ts": "2026-05-10T15:54:48.705047+00:00",
+          "transcript": "set reminder today at five",
+          "reply": "Done. Scheduled 'Buy stocks' for Tuesday at 5:00 PM."
+        },
+        {
+          "ts": "2026-05-10T15:54:48.705328+00:00",
+          "transcript": "set reminder today at five",
+          "reply": "Done. Scheduled 'Buy stocks' for Tuesday at 5:00 PM."
+        }
+      ],
+      "updated_at": "2026-05-10T15:54:48.705344+00:00"
+    },
+    "route-1": {
+      "turns": [
+        {
+          "ts": "2026-05-10T15:54:48.928106+00:00",
+          "transcript": "How long is the route from London to Heathrow Airport?",
+          "reply": null
+        },
+        {
+          "ts": "2026-05-10T15:54:48.928764+00:00",
+          "transcript": "How long is the route from London to Heathrow Airport?",
+          "reply": "Calculating route now. ETA is 28 mins from London to Heathrow Airport, covering 19 km."
+        }
+      ],
+      "updated_at": "2026-05-10T15:54:48.928772+00:00"
+    }
+  }
 }
