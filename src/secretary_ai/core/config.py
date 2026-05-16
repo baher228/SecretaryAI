@@ -18,13 +18,13 @@ class Settings(BaseSettings):
     timezone: str = "Europe/London"
     language: str = "ru"
 
-    zai_api_key: str | None = None
+    openai_api_key: str | None = None
     tavily_api_key: str | None = None
     google_maps_api_key: str | None = None
-    zai_base_url: str = "https://api.z.ai/api/coding/paas/v4"
-    zai_model: str = "glm-4.5-air"
-    zai_chat_model: str | None = None
-    zai_timeout_seconds: float = 30.0
+    openai_base_url: str = "https://api.openai.com/v1"
+    openai_model: str = "gpt-5.2"
+    openai_chat_model: str | None = None
+    openai_timeout_seconds: float = 30.0
     agent_max_tokens: int = 160
     agent_history_turns: int = 4
     agent_live_max_tokens: int = 72
@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     agent_live_temperature: float = 0.1
     agent_live_template_enabled: bool = True
     agent_live_template_path: str = ".telegram/cache/live_reply_templates.json"
-    agent_live_timeout_seconds: float = 1.8
+    agent_live_timeout_seconds: float = 4.0
     agent_live_low_quality_reply: str | None = None
     chat_max_tokens: int = 64
     chat_temperature: float = 0.15
@@ -53,6 +53,12 @@ class Settings(BaseSettings):
     tts_voice: str | None = None
     tts_rate: str = "+0%"
     tts_volume: str = "+0%"
+
+    # Silero TTS settings (used when tts_provider=silero)
+    tts_silero_model_id: str = "v5_5_ru"
+    tts_silero_speaker: str = "xenia"
+    tts_silero_sample_rate: int = 48000
+    tts_silero_device: str = "cpu"
 
     stt_enabled: bool = True
     stt_provider: str = "faster_whisper"
@@ -79,6 +85,10 @@ class Settings(BaseSettings):
     calendar_timezone: str = "Europe/London"
     calendar_id: str | None = None
     calendar_service_account_json: str | None = None
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    google_oauth_token_path: str = ".telegram/cache/google_oauth_token.json"
+    google_oauth_redirect_uri: str = "http://localhost:8000/api/v1/calendar/oauth/callback"
     calendar_cache_path: str = ".telegram/cache/calendar_events.json"
     calendar_queue_path: str = ".telegram/cache/calendar_queue.json"
     calendar_worker_enabled: bool = True
@@ -98,6 +108,21 @@ class Settings(BaseSettings):
     audio_cleanup_interval_seconds: float = 600.0
     audio_cleanup_max_age_hours: float = 24.0
     audio_cleanup_keep_recent_files: int = 60
+
+    # Wake-word engine — configurable trigger phrases for voice commands.
+    wake_word_enabled: bool = True
+    wake_word_prefix: str = "secretary"
+    wake_word_aliases: str = ""
+    wake_word_require_prefix: bool = False
+    wake_word_config_path: str = ".telegram/cache/wake_word_actions.json"
+
+    # Booking search defaults.
+    booking_default_location: str = "London"
+    booking_max_results: int = 5
+
+    # Call summary notification after call ends.
+    call_summary_enabled: bool = True
+    call_summary_target: str | None = None  # Telegram user/chat to send summary to
 
     # Gemini Live — sole voice engine (audio-to-audio via WebSocket).
     gemini_api_key: str | None = None

@@ -122,7 +122,7 @@ class ModelCheckRequest(BaseModel):
 
 
 class ModelCheckResponse(BaseModel):
-    provider: str = "z.ai"
+    provider: str = "openai"
     model: str
     connected: bool
     detail: str
@@ -297,3 +297,5 @@ class BookingSearchResponse(BaseModel):
     call_id: str
     status: str
     results: list[dict[str, Any]] = Field(default_factory=list)
+    voice_summary: str | None = None
+    category: str | None = None

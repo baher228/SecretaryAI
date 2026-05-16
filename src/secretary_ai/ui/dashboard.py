@@ -194,6 +194,9 @@ DASHBOARD_HTML = """<!doctype html>
     <div class="nav-container">
       <div class="nav-tabs">
         <button class="tab-btn active" onclick="switchTab('overview', this)">Status</button>
+        <button class="tab-btn" onclick="switchTab('voice', this)">Voice</button>
+        <button class="tab-btn" onclick="switchTab('bookings', this)">Bookings</button>
+        <button class="tab-btn" onclick="switchTab('contacts', this)">Contacts</button>
         <button class="tab-btn" onclick="switchTab('lab', this)">API Lab</button>
       </div>
     </div>
@@ -218,6 +221,14 @@ DASHBOARD_HTML = """<!doctype html>
           <div class="stat-card">
             <span class="stat-title">Active Calls</span>
             <span class="stat-value" id="status-active-calls">0</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-title">Voice TTS</span>
+            <span class="stat-value" id="status-tts"><span class="loader"></span></span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-title">Calendar</span>
+            <span class="stat-value" id="status-calendar"><span class="loader"></span></span>
           </div>
         </div>
 
@@ -247,14 +258,121 @@ DASHBOARD_HTML = """<!doctype html>
         </div>
 
         <div class="panel">
-          <h2>Debug Log</h2>
-          <p class="subtitle">Recent debug events from the live agent loop.</p>
-          <div class="log-box" id="debug-log">Waiting for events...</div>
-          <div class="row" style="margin-top: 10px; justify-content: flex-end;">
-            <button class="secondary" onclick="clearDebugLog()">Clear</button>
-            <button class="secondary" onclick="refreshDebugLog()">Refresh</button>
+          <h2>Live Debug Log</h2>
+          <p class="subtitle">Real-time debug events from Gemini Live sessions. Auto-streams via WebSocket.</p>
+          <div class="row" style="margin-bottom: 8px; gap: 6px;">
+            <span id="ws-status" style="font-size: 0.78rem; color: var(--muted);"><span class="status-indicator status-warn"></span>Connecting...</span>
+            <div style="flex:1;"></div>
+            <input type="text" id="debug-filter" placeholder="Filter by call_id or stage..." style="width: 260px; margin: 0; font-size: 0.78rem; padding: 6px 10px;" />
+            <button class="secondary" onclick="clearDebugLog()" style="font-size: 0.78rem; padding: 6px 10px;">Clear</button>
+          </div>
+          <div class="log-box" id="debug-log" style="max-height: 400px;">Waiting for events...</div>
+        </div>
+      </div>
+
+      <!-- VOICE TAB -->
+      <div id="voice" class="tab-content">
+        <div class="panel">
+          <h2>Voice Provider</h2>
+          <p class="subtitle">Current TTS engine and configuration.</p>
+          <div class="stats-grid">
+            <div class="stat-card">
+              <span class="stat-title">Provider</span>
+              <span class="stat-value" id="voice-provider"><span class="loader"></span></span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-title">Voice / Speaker</span>
+              <span class="stat-value" id="voice-speaker"><span class="loader"></span></span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-title">Sample Rate</span>
+              <span class="stat-value" id="voice-sample-rate">-</span>
+            </div>
           </div>
         </div>
+
+        <div class="panel">
+          <h2>Silero TTS — Russian Native Voices</h2>
+          <p class="subtitle">Open-source, local inference. No API key needed. 5 Russian speakers with auto-stress and homograph resolution.</p>
+          <div id="silero-voices-grid" style="display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); margin-top: 12px;">
+            <div class="loader"></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Edge TTS — Microsoft Neural Voices</h2>
+          <p class="subtitle">Cloud-based voices. Russian: ru-RU-DmitryNeural (male), ru-RU-SvetlanaNeural (female).</p>
+          <div style="display: grid; gap: 12px; grid-template-columns: 1fr 1fr; margin-top: 12px;">
+            <article class="card">
+              <strong>DmitryNeural</strong>
+              <p style="color: var(--muted); font-size: 0.82rem; margin: 4px 0 0;">Male · ru-RU · Cloud</p>
+            </article>
+            <article class="card">
+              <strong>SvetlanaNeural</strong>
+              <p style="color: var(--muted); font-size: 0.82rem; margin: 4px 0 0;">Female · ru-RU · Cloud</p>
+            </article>
+          </div>
+        </div>
+      </div>
+
+      <!-- BOOKINGS TAB -->
+      <div id="bookings" class="tab-content">
+        <div class="panel">
+          <h2>Booking Search</h2>
+          <p class="subtitle">Search for restaurants, hotels, events, and travel options.</p>
+          <div style="display: grid; gap: 12px; grid-template-columns: 1fr 1fr; margin-bottom: 14px;">
+            <div>
+              <label style="font-size: 0.78rem; color: var(--muted); display: block; margin-bottom: 4px;">Search Type</label>
+              <select id="booking-type" style="width:100%; background: rgba(255,255,255,0.06); border: 1px solid var(--line); color: var(--ink); padding: 10px 12px; border-radius: 10px; font-family: Sora, sans-serif; font-size: 0.88rem;">
+                <option value="find_restaurant">Restaurants</option>
+                <option value="find_hotel">Hotels</option>
+                <option value="find_event">Events</option>
+                <option value="find_travel">Travel</option>
+                <option value="plan_evening">Plan Evening</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size: 0.78rem; color: var(--muted); display: block; margin-bottom: 4px;">Location</label>
+              <input id="booking-location" placeholder="e.g. London, Paris..." />
+            </div>
+          </div>
+          <div style="margin-bottom: 14px;">
+            <label style="font-size: 0.78rem; color: var(--muted); display: block; margin-bottom: 4px;">Additional Details (optional)</label>
+            <input id="booking-extra" placeholder="e.g. Italian cuisine, budget-friendly, tonight..." />
+          </div>
+          <button onclick="runBookingSearch()">Search</button>
+          <div id="booking-voice" style="margin-top: 14px; padding: 12px; border-radius: 10px; background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2); display: none;">
+            <span style="font-size: 0.78rem; color: var(--primary); text-transform: uppercase; font-weight: 700;">Voice Summary</span>
+            <p id="booking-voice-text" style="margin: 6px 0 0; font-size: 0.92rem;"></p>
+          </div>
+        </div>
+
+        <div class="panel" id="booking-results-panel" style="display: none;">
+          <h2>Results</h2>
+          <div id="booking-results-grid" class="cards"></div>
+        </div>
+
+        <div class="panel">
+          <h2>Wake Word Actions</h2>
+          <p class="subtitle">Voice trigger phrases that route to specific actions during calls.</p>
+          <div id="wake-word-list" style="margin-top: 10px;"></div>
+        </div>
+      </div>
+
+      <!-- CONTACTS TAB -->
+      <div id="contacts" class="tab-content">
+        <section class="layout">
+          <div>
+            <h2 style="margin-bottom: 14px;">Contact Book</h2>
+            <div style="display:flex;gap:8px;margin-bottom:16px;">
+              <input id="contact-id" placeholder="Caller ID (username or phone)" style="flex:1;padding:8px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:0.85rem;" />
+              <input id="contact-name" placeholder="Name" style="flex:1;padding:8px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:0.85rem;" />
+              <input id="contact-lang" placeholder="Language (en/ru)" style="width:100px;padding:8px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:0.85rem;" />
+              <button onclick="saveContact()" style="padding:8px 16px;font-size:0.82rem;">Save</button>
+            </div>
+            <div id="contacts-grid" class="cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;"></div>
+          </div>
+        </section>
       </div>
 
       <!-- API LAB TAB -->
@@ -305,7 +423,7 @@ DASHBOARD_HTML = """<!doctype html>
               </article>
               <article class="card">
                 <div class="row"><span class="method post">POST</span><code class="path">/api/v1/chat</code></div>
-                <p class="hint">Text chat via Z.AI GLM.</p>
+                <p class="hint">Text chat via OpenAI.</p>
                 <textarea id="payload-chat">{
   "message": "Hello, what can you do?"
 }</textarea>
@@ -352,6 +470,9 @@ DASHBOARD_HTML = """<!doctype html>
         document.getElementById(tabId).classList.add('active');
         if (btn) btn.classList.add('active');
       }
+
+      function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+      function safeHref(u) { return /^https?:\/\//i.test(u) ? esc(u) : '#'; }
 
       async function fetchJson(path, init = {}, timeoutMs = 8000) {
         const ctrl = new AbortController();
@@ -425,12 +546,17 @@ DASHBOARD_HTML = """<!doctype html>
         } catch (e) { alert("Error: " + e); }
       }
 
+      function connectCalendar() {
+        window.open("/api/v1/calendar/oauth/authorize", "_blank");
+      }
+
       async function refreshDashboard() {
         try {
-          const [health, auth, calls] = await Promise.all([
+          const [health, auth, calls, cal] = await Promise.all([
             fetchJson("/api/v1/health", { method: "GET" }, 5000),
             fetchJson("/api/v1/telegram/auth/status", { method: "GET" }, 5000),
             fetchJson("/api/v1/calls", { method: "GET" }, 5000),
+            fetchJson("/api/v1/calendar/oauth/status", { method: "GET" }, 5000),
           ]);
 
           const hEl = document.getElementById("status-health");
@@ -440,6 +566,7 @@ DASHBOARD_HTML = """<!doctype html>
             hEl.innerHTML = '<span class="status-indicator status-err"></span>Offline';
           }
           updateGeminiStatus(health.body);
+          updateCalendarStatus(cal.body);
 
           const aEl = document.getElementById("status-auth");
           const ab = auth.body || {};
@@ -491,26 +618,259 @@ DASHBOARD_HTML = """<!doctype html>
         }
       }
 
-      function clearDebugLog() {
-        document.getElementById("debug-log").textContent = "Cleared.";
-      }
-
-      async function refreshDebugLog() {
-        try {
-          const r = await fetchJson("/api/v1/calls/events?limit=20", { method: "GET" }, 5000);
-          const el = document.getElementById("debug-log");
-          if (r.ok && Array.isArray(r.body) && r.body.length > 0) {
-            el.textContent = r.body.map(e => JSON.stringify(e)).join("\\n");
-          } else {
-            el.textContent = "No events.";
-          }
-        } catch (e) {
-          document.getElementById("debug-log").textContent = "Failed to fetch events.";
+      function updateCalendarStatus(calBody) {
+        const el = document.getElementById("status-calendar");
+        if (calBody?.connected) {
+          el.innerHTML = '<span class="status-indicator status-ok"></span>Connected';
+        } else {
+          el.innerHTML = '<span class="status-indicator status-warn"></span>Not connected ' +
+            '<button onclick="connectCalendar()" style="font-size:0.72rem;padding:4px 10px;margin-left:6px;">Connect</button>';
         }
       }
 
+      // --- Booking Search ---
+      async function runBookingSearch() {
+        const type = document.getElementById("booking-type").value;
+        const location = document.getElementById("booking-location").value.trim() || "London";
+        const extra = document.getElementById("booking-extra").value.trim();
+        const voiceBox = document.getElementById("booking-voice");
+        const voiceText = document.getElementById("booking-voice-text");
+        const resultsPanel = document.getElementById("booking-results-panel");
+        const resultsGrid = document.getElementById("booking-results-grid");
+
+        voiceBox.style.display = "none";
+        resultsPanel.style.display = "none";
+        resultsGrid.innerHTML = '<div class="loader"></div> Searching...';
+        resultsPanel.style.display = "block";
+
+        try {
+          const r = await fetchJson("/api/v1/booking/search", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              call_id: "dashboard-" + Date.now(),
+              booking_type: type,
+              location: location,
+              query_params: extra ? { preferences: extra } : {},
+            }),
+          }, 20000);
+
+          if (r.ok && r.body) {
+            if (r.body.voice_summary) {
+              voiceText.textContent = r.body.voice_summary;
+              voiceBox.style.display = "block";
+            }
+            const results = r.body.results || [];
+            if (results.length === 0) {
+              resultsGrid.innerHTML = '<p style="color: var(--muted);">No results found.</p>';
+            } else {
+              resultsGrid.innerHTML = results.map(r => {
+                const title = esc(r.title || "Untitled");
+                const url = safeHref(r.url || "");
+                const content = esc((r.content || "").slice(0, 200));
+                const score = r.score ? `<span class="pill pill-active">${(r.score * 100).toFixed(0)}%</span>` : "";
+                return `<article class="card">
+                  <div class="row"><strong>${title}</strong> ${score}</div>
+                  <p style="color: var(--muted); font-size: 0.82rem; margin: 0 0 8px;">${content}${content.length >= 200 ? "..." : ""}</p>
+                  <a href="${url}" target="_blank" style="color: var(--primary); font-size: 0.82rem; text-decoration: none;">${url}</a>
+                </article>`;
+              }).join("");
+            }
+          } else {
+            resultsGrid.innerHTML = `<p style="color: var(--err);">Error: ${JSON.stringify(r.body)}</p>`;
+          }
+        } catch (e) {
+          resultsGrid.innerHTML = `<p style="color: var(--err);">Request failed: ${e}</p>`;
+        }
+      }
+
+      // --- Wake Word Actions ---
+      async function loadWakeWordActions() {
+        try {
+          const r = await fetchJson("/api/v1/wake-word/actions", { method: "GET" }, 5000);
+          const container = document.getElementById("wake-word-list");
+          if (r.ok && Array.isArray(r.body) && r.body.length > 0) {
+            container.innerHTML = r.body.map(a => {
+              const phrases = (a.phrases || []).map(p => `<span class="pill pill-completed" style="margin: 2px;">${esc(p)}</span>`).join(" ");
+              return `<div style="margin-bottom: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 10px;">
+                <div style="font-weight: 600; margin-bottom: 6px;">
+                  <span class="pill pill-active">${esc(a.action)}</span>
+                  <span style="color: var(--muted); font-size: 0.82rem; margin-left: 8px;">${esc(a.description || "")}</span>
+                </div>
+                <div style="display: flex; flex-wrap: wrap; gap: 4px;">${phrases}</div>
+              </div>`;
+            }).join("");
+          } else {
+            container.innerHTML = '<p style="color: var(--muted);">No wake-word actions configured.</p>';
+          }
+        } catch (e) {
+          document.getElementById("wake-word-list").innerHTML = `<p style="color: var(--err);">Failed to load: ${e}</p>`;
+        }
+      }
+
+      // --- Voice Provider ---
+      async function loadVoiceConfig() {
+        try {
+          const r = await fetchJson("/api/v1/voice/providers", { method: "GET" }, 5000);
+          if (!r.ok) return;
+          const d = r.body;
+
+          // Status card
+          const ttsEl = document.getElementById("status-tts");
+          const provider = d.current_provider || "unknown";
+          if (provider === "silero") {
+            ttsEl.innerHTML = '<span class="status-indicator status-ok"></span>Silero';
+          } else if (provider === "edge_tts") {
+            ttsEl.innerHTML = '<span class="status-indicator status-ok"></span>Edge TTS';
+          } else {
+            ttsEl.innerHTML = '<span class="status-indicator status-warn"></span>' + esc(provider);
+          }
+
+          // Voice tab details
+          document.getElementById("voice-provider").textContent = provider === "silero" ? "Silero (Russian Native)" : provider === "edge_tts" ? "Edge TTS (Microsoft)" : provider;
+          if (provider === "silero" && d.silero) {
+            document.getElementById("voice-speaker").textContent = d.silero.speaker || "-";
+            document.getElementById("voice-sample-rate").textContent = (d.silero.sample_rate || "-") + " Hz";
+          } else if (d.edge_tts) {
+            document.getElementById("voice-speaker").textContent = d.edge_tts.voice || "-";
+            document.getElementById("voice-sample-rate").textContent = "-";
+          }
+
+          // Silero voices grid
+          const sileroGrid = document.getElementById("silero-voices-grid");
+          const ruVoices = d.silero?.available_voices?.ru || [];
+          if (ruVoices.length > 0) {
+            const activeSpeaker = d.silero?.speaker || "";
+            sileroGrid.innerHTML = ruVoices.map(v => {
+              const isActive = v.id === activeSpeaker;
+              const border = isActive ? "border-color: var(--primary);" : "";
+              const badge = isActive ? '<span class="pill pill-active" style="font-size: 0.7rem;">Active</span>' : "";
+              return `<article class="card" style="${border}">
+                <div class="row"><strong>${esc(v.name)}</strong> ${badge}</div>
+                <p style="color: var(--muted); font-size: 0.82rem; margin: 4px 0 0;">${esc(v.gender)} · Local · No API key</p>
+              </article>`;
+            }).join("");
+          } else {
+            sileroGrid.innerHTML = '<p style="color: var(--muted);">Install silero + torch to enable Russian native voices.</p>';
+          }
+        } catch (e) {
+          console.error("Failed to load voice config", e);
+        }
+      }
+
+      const MAX_LOG_LINES = 200;
+      let debugLogLines = [];
+
+      function clearDebugLog() {
+        debugLogLines = [];
+        document.getElementById("debug-log").textContent = "Cleared.";
+      }
+
+      function renderDebugLog() {
+        const el = document.getElementById("debug-log");
+        const filter = (document.getElementById("debug-filter")?.value || "").toLowerCase().trim();
+        const filtered = filter
+          ? debugLogLines.filter(l => l.toLowerCase().includes(filter))
+          : debugLogLines;
+        el.textContent = filtered.length ? filtered.join("\\n") : "No matching events.";
+        el.scrollTop = el.scrollHeight;
+      }
+
+      function addDebugEntry(entry) {
+        const ts = (entry.ts || "").substring(11, 19);
+        const line = `[${ts}] ${entry.call_id || "-"} | ${entry.stage || "?"} | ${JSON.stringify(entry.data || {})}`;
+        debugLogLines.push(line);
+        if (debugLogLines.length > MAX_LOG_LINES) debugLogLines.shift();
+        renderDebugLog();
+      }
+
+      async function loadInitialDebugLog() {
+        try {
+          const r = await fetchJson("/api/v1/debug/logs?lines=50", { method: "GET" }, 5000);
+          if (r.ok && Array.isArray(r.body)) {
+            r.body.forEach(entry => addDebugEntry(entry));
+          }
+        } catch (e) {
+          document.getElementById("debug-log").textContent = "Failed to load initial log.";
+        }
+      }
+
+      function connectDebugWs() {
+        const wsEl = document.getElementById("ws-status");
+        const proto = location.protocol === "https:" ? "wss:" : "ws:";
+        const ws = new WebSocket(`${proto}//${location.host}/api/v1/debug/ws`);
+        ws.onopen = () => {
+          wsEl.innerHTML = '<span class="status-indicator status-ok"></span>Live';
+        };
+        ws.onmessage = (evt) => {
+          try { addDebugEntry(JSON.parse(evt.data)); } catch (e) {}
+        };
+        ws.onclose = () => {
+          wsEl.innerHTML = '<span class="status-indicator status-err"></span>Disconnected';
+          setTimeout(connectDebugWs, 3000);
+        };
+        ws.onerror = () => ws.close();
+      }
+
+      document.getElementById("debug-filter")?.addEventListener("input", renderDebugLog);
+
+      // --- Contacts ---
+      async function loadContacts() {
+        const grid = document.getElementById("contacts-grid");
+        try {
+          const r = await fetchJson("/api/v1/contacts", { method: "GET" }, 5000);
+          if (!r.ok || !Array.isArray(r.body)) {
+            grid.innerHTML = '<p style="color: var(--muted);">Failed to load contacts.</p>';
+            return;
+          }
+          if (r.body.length === 0) {
+            grid.innerHTML = '<p style="color: var(--muted);">No contacts yet. Add one above.</p>';
+            return;
+          }
+          grid.innerHTML = r.body.map(c => {
+            const safeId = esc(c.caller_id).replace(/'/g, "\\'");
+            return `
+            <article class="card" style="padding:14px;">
+              <h3 style="margin:0 0 6px 0;font-size:0.95rem;">${esc(c.name || c.caller_id)}</h3>
+              <p style="font-size:0.8rem;color:var(--muted);margin:0;">ID: ${esc(c.caller_id)}</p>
+              ${c.language ? `<p style="font-size:0.8rem;color:var(--muted);margin:2px 0 0 0;">Language: ${esc(c.language)}</p>` : ""}
+              ${c.call_count ? `<p style="font-size:0.8rem;color:var(--muted);margin:2px 0 0 0;">Calls: ${c.call_count}</p>` : ""}
+              ${c.notes ? `<p style="font-size:0.8rem;margin:4px 0 0 0;">${esc(c.notes)}</p>` : ""}
+              <button onclick="deleteContact('${safeId}')" style="margin-top:8px;font-size:0.75rem;padding:3px 10px;color:var(--err);">Delete</button>
+            </article>`;
+          }).join("");
+        } catch (e) {
+          grid.innerHTML = '<p style="color: var(--muted);">Error loading contacts.</p>';
+        }
+      }
+
+      async function saveContact() {
+        const callerId = document.getElementById("contact-id").value.trim();
+        const name = document.getElementById("contact-name").value.trim();
+        const lang = document.getElementById("contact-lang").value.trim();
+        if (!callerId) { alert("Caller ID is required"); return; }
+        await fetchJson(`/api/v1/contacts/${encodeURIComponent(callerId)}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: name || null, language: lang || null }),
+        }, 5000);
+        document.getElementById("contact-id").value = "";
+        document.getElementById("contact-name").value = "";
+        document.getElementById("contact-lang").value = "";
+        loadContacts();
+      }
+
+      async function deleteContact(callerId) {
+        await fetchJson(`/api/v1/contacts/${encodeURIComponent(callerId)}`, { method: "DELETE" }, 5000);
+        loadContacts();
+      }
+
       refreshDashboard();
-      refreshDebugLog();
+      loadInitialDebugLog();
+      connectDebugWs();
+      loadWakeWordActions();
+      loadVoiceConfig();
+      loadContacts();
       setInterval(refreshDashboard, 5000);
     </script>
   </body>

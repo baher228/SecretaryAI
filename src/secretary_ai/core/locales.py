@@ -406,6 +406,12 @@ _TEMPLATES_EN: list[dict[str, Any]] = [
     {"id": "smalltalk_how_are_you", "keywords": ["how are you", "hows it going", "how are things"], "reply": "I'm good and ready to help. What would you like to schedule?", "priority": 2},
     {"id": "smalltalk_name", "keywords": ["who are you", "what are you", "your name"], "reply": "I'm your AI secretary. I can help with reminders and scheduling.", "priority": 2},
     {"id": "short_ack", "keywords": ["okay", "ok", "alright", "sounds good"], "reply": "Perfect. What's the next detail?", "priority": 1},
+    # Booking search templates
+    {"id": "booking_restaurant", "keywords": ["find a restaurant", "find me a restaurant", "restaurant near", "where to eat", "book a table", "dinner reservations"], "reply": "Searching for restaurants now, one moment.", "booking_search": "find_restaurant", "priority": 13},
+    {"id": "booking_hotel", "keywords": ["find a hotel", "find me a hotel", "hotel near", "place to stay", "book a hotel", "accommodation"], "reply": "Searching for hotels now, one moment.", "booking_search": "find_hotel", "priority": 13},
+    {"id": "booking_event", "keywords": ["find an event", "find tickets", "concerts near", "things to do", "theatre tickets", "buy tickets"], "reply": "Searching for events now, one moment.", "booking_search": "find_event", "priority": 13},
+    {"id": "booking_travel", "keywords": ["find a flight", "book a flight", "train to", "bus to", "flight to", "travel to"], "reply": "Searching for travel options now, one moment.", "booking_search": "find_travel", "priority": 13},
+    {"id": "booking_evening", "keywords": ["plan an evening", "plan tonight", "evening out", "night out", "dinner and show"], "reply": "Planning your evening now, one moment.", "booking_search": "plan_evening", "priority": 13},
 ]
 
 _TEMPLATES_RU: list[dict[str, Any]] = [
@@ -438,6 +444,12 @@ _TEMPLATES_RU: list[dict[str, Any]] = [
     {"id": "smalltalk_how_are_you", "keywords": ["как дела", "как ты", "как поживаешь"], "reply": "Всё отлично, готов помочь. Что запланировать?", "priority": 2},
     {"id": "smalltalk_name", "keywords": ["кто ты", "что ты", "как тебя зовут"], "reply": "Я ваш ИИ-секретарь. Помогаю с напоминаниями и расписанием.", "priority": 2},
     {"id": "short_ack", "keywords": ["ладно", "хорошо", "ок", "понятно"], "reply": "Отлично. Что дальше?", "priority": 1},
+    # Booking search templates
+    {"id": "booking_restaurant", "keywords": ["найди ресторан", "ресторан рядом", "где поесть", "забронируй столик", "бронь ресторана"], "reply": "Ищу рестораны, одну секунду.", "booking_search": "find_restaurant", "priority": 13},
+    {"id": "booking_hotel", "keywords": ["найди отель", "отель рядом", "где остановиться", "забронируй отель", "гостиница"], "reply": "Ищу отели, одну секунду.", "booking_search": "find_hotel", "priority": 13},
+    {"id": "booking_event", "keywords": ["найди мероприятие", "найди билеты", "концерты рядом", "что происходит", "билеты в театр", "купить билеты"], "reply": "Ищу мероприятия, одну секунду.", "booking_search": "find_event", "priority": 13},
+    {"id": "booking_travel", "keywords": ["найди рейс", "забронируй рейс", "поезд до", "автобус до", "рейс в", "как добраться"], "reply": "Ищу варианты поездки, одну секунду.", "booking_search": "find_travel", "priority": 13},
+    {"id": "booking_evening", "keywords": ["спланируй вечер", "вечер сегодня", "вечерний выход", "ночная прогулка", "ужин и шоу"], "reply": "Планирую вечер, одну секунду.", "booking_search": "plan_evening", "priority": 13},
 ]
 
 DEFAULT_TEMPLATES: dict[str, list[dict[str, Any]]] = {
@@ -453,6 +465,31 @@ DEFAULT_TEMPLATES: dict[str, list[dict[str, Any]]] = {
 DEFAULT_TTS_VOICE: dict[str, str] = {
     "en": "en-GB-SoniaNeural",
     "ru": "ru-RU-DmitryNeural",
+}
+
+# Silero TTS defaults per language
+DEFAULT_SILERO_MODEL: dict[str, str] = {
+    "ru": "v5_5_ru",
+    "en": "v3_en",
+}
+
+DEFAULT_SILERO_SPEAKER: dict[str, str] = {
+    "ru": "xenia",
+    "en": "en_0",
+}
+
+# Available Silero Russian speakers for voice selection UI
+SILERO_VOICES: dict[str, list[dict[str, str]]] = {
+    "ru": [
+        {"id": "aidar", "name": "Aidar", "gender": "male"},
+        {"id": "baya", "name": "Baya", "gender": "female"},
+        {"id": "kseniya", "name": "Kseniya", "gender": "female"},
+        {"id": "xenia", "name": "Xenia", "gender": "female"},
+        {"id": "eugene", "name": "Eugene", "gender": "male"},
+    ],
+    "en": [
+        {"id": "en_0", "name": "English Speaker", "gender": "neutral"},
+    ],
 }
 
 # ---------------------------------------------------------------------------
