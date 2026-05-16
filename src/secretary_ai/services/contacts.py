@@ -58,10 +58,10 @@ class ContactBook:
 
     def record_call(self, caller_id: str) -> None:
         """Increment the call count and update last_called timestamp."""
-        contact = self._contacts.get(caller_id, {"caller_id": caller_id})
-        contact["call_count"] = contact.get("call_count", 0) + 1
-        contact["last_called"] = datetime.now(timezone.utc).isoformat()
-        self.upsert(caller_id, **contact)
+        contact = self._contacts.get(caller_id, {})
+        call_count = contact.get("call_count", 0) + 1
+        last_called = datetime.now(timezone.utc).isoformat()
+        self.upsert(caller_id, call_count=call_count, last_called=last_called)
 
     def list_all(self) -> list[dict[str, Any]]:
         """Return all contacts sorted by most recently called."""

@@ -67,15 +67,16 @@ def test_silero_config_defaults() -> None:
     assert s.tts_silero_device == "cpu"
 
 
-def test_silero_model_load_failure_returns_error() -> None:
-    """If torch/silero is not available, synthesis returns a clear error."""
+def test_silero_model_load_failure_falls_back_to_edge() -> None:
+    """If Silero is unavailable, synthesis falls back to Edge TTS."""
     settings = Settings(tts_enabled=True, tts_provider="silero")
     engine = TTSEngine(settings)
 
     with patch("secretary_ai.services.tts._get_silero_model", side_effect=RuntimeError("no torch")):
         path, status = asyncio.run(engine.synthesize("Привет", "call-6"))
-    assert path is None
-    assert status == "silero_model_load_failed"
+    # Falls back to Edge TTS which should produce a file
+    assert path is not None
+    assert status == "generated"
 
 
 def test_silero_synthesis_success() -> None:
