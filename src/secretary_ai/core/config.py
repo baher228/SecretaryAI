@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     agent_live_temperature: float = 0.1
     agent_live_template_enabled: bool = True
     agent_live_template_path: str = ".telegram/cache/live_reply_templates.json"
-    agent_live_timeout_seconds: float = 1.8
+    agent_live_timeout_seconds: float = 4.0
     agent_live_low_quality_reply: str | None = None
     chat_max_tokens: int = 64
     chat_temperature: float = 0.15
