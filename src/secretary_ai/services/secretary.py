@@ -740,7 +740,7 @@ class SecretaryService:
         location = analysis.extracted_fields.get("location", "London")
         booking_type = analysis.extracted_fields.get("topic", "restaurants")
         if "hotel" in booking_type:
-            asyncio.create_task(self.booking.search_hotels(location, "2026-05-01", "2026-05-05"))
+            asyncio.create_task(self.booking.search_hotels(location))
         else:
             asyncio.create_task(self.booking.search_restaurants(location))
 
