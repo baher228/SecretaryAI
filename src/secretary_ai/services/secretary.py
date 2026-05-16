@@ -810,7 +810,7 @@ class SecretaryService:
             analysis = AgentAnalyzeResponse(
                 call_id=call_id,
                 reply="Calculating route now.",
-                model=self.settings.zai_model,
+                model=self.settings.openai_model,
                 intent=IntentType.PLAN_ROUTE,
                 extracted_fields={"destination": payload} if payload else {},
             )
