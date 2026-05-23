@@ -2256,7 +2256,7 @@ class SecretaryService:
             call_id=call_id,
             transcript=snippet,
             reply=reply,
-            intent=AgentAnalyzeResponse(call_id=call_id, reply=reply, model=self.settings.openai_model).intent,
+            intent=IntentType.UNKNOWN,
             confidence=0.2,
             requires_human=False,
             transfer_reason=None,

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
 import shutil
@@ -39,7 +40,7 @@ class TelegramCallService:
         self._lock = asyncio.Lock()
 
         self.calls: dict[str, dict[str, Any]] = {}
-        self.call_events: list[dict[str, Any]] = []
+        self.call_events: deque[dict[str, Any]] = deque(maxlen=2000)
         self.pending_phone_hashes: dict[str, str] = {}
 
     async def start(self) -> None:
@@ -404,7 +405,9 @@ class TelegramCallService:
         return sorted(self.calls.values(), key=lambda call: call.get("updated_at", ""), reverse=True)
 
     def list_events(self, limit: int = 50) -> list[dict[str, Any]]:
-        return self.call_events[-limit:]
+        if limit >= len(self.call_events):
+            return list(self.call_events)
+        return list(self.call_events)[-limit:]
 
     def append_transcript(
         self,
@@ -604,8 +607,6 @@ class TelegramCallService:
             "timestamp": self._now_iso(),
         }
         self.call_events.append(evt)
-        if len(self.call_events) > 2000:
-            self.call_events = self.call_events[-1000:]
 
     def _normalize_optional_audio_path(self, audio_path: str | None) -> str | None:
         if not audio_path:

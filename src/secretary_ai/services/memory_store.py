@@ -28,6 +28,9 @@ class MemoryStore:
         self.short_term: dict[str, Any] = self._load_json(self.short_path, default={"calls": {}})
         self.mid_term: dict[str, Any] = self._load_json(self.mid_path, default={"upcoming": [], "updated_at": None})
 
+        self._fact_cache: list[dict[str, Any]] = []
+        self._fact_cache_size: int = 0
+
     def append_long_term(self, record_type: str, payload: dict[str, Any]) -> None:
         row = {
             "ts": datetime.now(timezone.utc).isoformat(),
@@ -47,7 +50,6 @@ class MemoryStore:
         }
         turns = call.setdefault("turns", [])
         turns.append(turn)
-        # keep short-term bounded
         if len(turns) > 30:
             call["turns"] = turns[-30:]
         call["updated_at"] = datetime.now(timezone.utc).isoformat()
@@ -128,14 +130,39 @@ class MemoryStore:
 
     def retrieve_user_fact(self, query: str, limit: int = 3) -> list[dict[str, Any]]:
         query_text = " ".join((query or "").split()).strip().lower()
-        if not query_text or not self.long_path.exists():
+        if not query_text:
             return []
 
         query_tokens = set(re.findall(r"[a-z0-9]+", query_text))
         if not query_tokens:
             return []
 
+        self._refresh_fact_cache()
+
         matches: list[tuple[int, dict[str, Any]]] = []
+        for record in self._fact_cache:
+            fact = record["fact"]
+            tokens = set(re.findall(r"[a-z0-9]+", fact.lower()))
+            score = len(query_tokens & tokens)
+            if score > 0:
+                matches.append((score, record))
+
+        matches.sort(key=lambda item: item[0], reverse=True)
+        return [item[1] for item in matches[: max(1, limit)]]
+
+    def _refresh_fact_cache(self) -> None:
+        """Reload user facts from long-term log only when the file changes."""
+        if not self.long_path.exists():
+            self._fact_cache = []
+            self._fact_cache_size = 0
+            return
+        try:
+            current_size = self.long_path.stat().st_size
+        except OSError:
+            return
+        if current_size == self._fact_cache_size:
+            return
+        facts: list[dict[str, Any]] = []
         try:
             for line in self.long_path.read_text(encoding="utf-8").splitlines():
                 line = line.strip()
@@ -149,15 +176,12 @@ class MemoryStore:
                     continue
                 payload = row.get("payload") or {}
                 fact = str(payload.get("fact") or "")
-                tokens = set(re.findall(r"[a-z0-9]+", fact.lower()))
-                score = len(query_tokens.intersection(tokens))
-                if score > 0:
-                    matches.append((score, {"fact": fact, "ts": row.get("ts"), "call_id": payload.get("call_id")}))
+                if fact:
+                    facts.append({"fact": fact, "ts": row.get("ts"), "call_id": payload.get("call_id")})
         except Exception:
-            return []
-
-        matches.sort(key=lambda item: item[0], reverse=True)
-        return [item[1] for item in matches[: max(1, limit)]]
+            return
+        self._fact_cache = facts
+        self._fact_cache_size = current_size
 
     @staticmethod
     def _load_json(path: Path, default: dict[str, Any]) -> dict[str, Any]:

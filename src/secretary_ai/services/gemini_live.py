@@ -12,6 +12,7 @@ import array
 import asyncio
 import hashlib
 import wave
+from collections import deque
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
@@ -91,8 +92,8 @@ class GeminiLiveSession:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.audio_out_queue: asyncio.Queue[bytes] = asyncio.Queue()
-        self.transcript_in: list[str] = []
-        self.transcript_out: list[str] = []
+        self.transcript_in: deque[str] = deque(maxlen=MAX_TRANSCRIPT_ENTRIES)
+        self.transcript_out: deque[str] = deque(maxlen=MAX_TRANSCRIPT_ENTRIES)
         self._running = False
         self._first_turn_complete = asyncio.Event()
 
@@ -421,15 +422,11 @@ class GeminiLiveSession:
         input_tx = getattr(server_content, "input_transcription", None)
         if input_tx and getattr(input_tx, "text", None):
             self.transcript_in.append(input_tx.text)
-            if len(self.transcript_in) > MAX_TRANSCRIPT_ENTRIES:
-                self.transcript_in = self.transcript_in[-MAX_TRANSCRIPT_ENTRIES:]
             debug_log("gemini_live_input_transcript", {"text": input_tx.text[:200]})
 
         output_tx = getattr(server_content, "output_transcription", None)
         if output_tx and getattr(output_tx, "text", None):
             self.transcript_out.append(output_tx.text)
-            if len(self.transcript_out) > MAX_TRANSCRIPT_ENTRIES:
-                self.transcript_out = self.transcript_out[-MAX_TRANSCRIPT_ENTRIES:]
             debug_log("gemini_live_output_transcript", {"text": output_tx.text[:200]})
 
     # ------------------------------------------------------------------
