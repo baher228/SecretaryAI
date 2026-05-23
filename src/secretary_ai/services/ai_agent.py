@@ -28,6 +28,9 @@ _HEURISTIC_RULES: list[tuple[IntentType, tuple[str, ...], str]] = [
 class SecretaryAIAgent:
     """LLM-driven secretary brain with structured intent/action extraction."""
 
+    _MAX_HISTORY_PER_CALL = 40
+    _MAX_CALLS_TRACKED = 200
+
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.histories: dict[str, list[dict[str, str]]] = {}
@@ -72,6 +75,17 @@ class SecretaryAIAgent:
             live_mode=True,
         )
 
+    def clear_call(self, call_id: str) -> None:
+        """Remove history for a finished call to free memory."""
+        self.histories.pop(call_id, None)
+
+    def _trim_histories(self) -> None:
+        """Evict oldest call histories if tracking too many calls."""
+        if len(self.histories) > self._MAX_CALLS_TRACKED:
+            excess = len(self.histories) - self._MAX_CALLS_TRACKED
+            for key in list(self.histories)[:excess]:
+                del self.histories[key]
+
     async def _analyze_with_profile(
         self,
         call_id: str,
@@ -111,6 +125,8 @@ class SecretaryAIAgent:
 
         response = self._normalize_response(call_id=call_id, parsed=parsed)
         history.append({"role": "assistant", "content": response.reply})
+        if len(history) > self._MAX_HISTORY_PER_CALL:
+            del history[: len(history) - self._MAX_HISTORY_PER_CALL]
         return response
 
     def _build_messages(
@@ -195,7 +211,7 @@ class SecretaryAIAgent:
         if context:
             extracted["context_keys"] = sorted(context.keys())
 
-        return AgentAnalyzeResponse(
+        response = AgentAnalyzeResponse(
             call_id=call_id,
             intent=intent,
             confidence=0.45,
@@ -206,6 +222,13 @@ class SecretaryAIAgent:
             extracted_fields=extracted,
             model=self.settings.openai_model,
         )
+        history = self.histories.get(call_id)
+        if history is not None:
+            history.append({"role": "assistant", "content": response.reply})
+            if len(history) > self._MAX_HISTORY_PER_CALL:
+                del history[: len(history) - self._MAX_HISTORY_PER_CALL]
+        self._trim_histories()
+        return response
 
     @staticmethod
     def _fallback_reply_from_intent(intent: str, lang: str = "en") -> str:

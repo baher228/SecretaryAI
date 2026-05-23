@@ -269,9 +269,18 @@ class CalendarService:
                     "result": apply_result,
                 })
 
+            self._prune_queue()
             self._persist_queue()
 
         return {"status": "ok", "processed": processed, "results": results}
+
+    def _prune_queue(self, keep_done: int = 50) -> None:
+        """Remove old completed/failed items from the queue to prevent unbounded growth."""
+        finished = [i for i, item in enumerate(self.queue) if item.get("status") in ("done", "failed")]
+        if len(finished) <= keep_done:
+            return
+        remove_indices = set(finished[: len(finished) - keep_done])
+        self.queue = [item for i, item in enumerate(self.queue) if i not in remove_indices]
 
     def _enqueue_task(self, call_id: str, transcript: str, context: dict[str, Any]) -> dict[str, Any]:
         task_id = f"cal-{int(datetime.now(timezone.utc).timestamp() * 1000)}-{len(self.queue)+1}"
@@ -515,7 +524,15 @@ class CalendarService:
     def _extract_datetime_from_text(self, text: str) -> datetime | None:
         lang = self.settings.language
         lower = (text or "").lower()
-        base = datetime.now(timezone.utc)
+
+        # Use the user's configured timezone so "today 3pm" means 3pm local.
+        try:
+            from zoneinfo import ZoneInfo
+            user_tz = ZoneInfo(self.settings.calendar_timezone)
+        except Exception:
+            user_tz = timezone.utc
+        base_local = datetime.now(user_tz)
+
         day_offset = 1
         today_kw = CALENDAR_TODAY_KEYWORDS.get(lang, ()) + CALENDAR_TODAY_KEYWORDS.get("en", ())
         tomorrow_kw = CALENDAR_TOMORROW_KEYWORDS.get(lang, ()) + CALENDAR_TOMORROW_KEYWORDS.get("en", ())
@@ -546,8 +563,10 @@ class CalendarService:
         if hour >= 24 or minute >= 60:
             return None
 
-        when = base + timedelta(days=day_offset)
-        return when.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        when_local = (base_local + timedelta(days=day_offset)).replace(
+            hour=hour, minute=minute, second=0, microsecond=0,
+        )
+        return when_local.astimezone(timezone.utc)
 
     def _mutation_signature(self, text: str, start: datetime | None) -> str:
         normalized = " ".join((text or "").lower().split())
@@ -571,6 +590,15 @@ class CalendarService:
             "signature": signature,
             "at": datetime.now(timezone.utc).isoformat(),
         }
+        # Prevent unbounded growth — evict entries older than 5 minutes.
+        if len(self._last_mutation_by_call) > 100:
+            now = datetime.now(timezone.utc)
+            stale = [
+                k for k, v in self._last_mutation_by_call.items()
+                if (now - (self._parse_iso_datetime(str(v.get("at") or "")) or now)).total_seconds() > 300
+            ]
+            for k in stale:
+                del self._last_mutation_by_call[k]
 
     def _build_mutation_reply(self, text: str, start: datetime | None, duplicate: bool) -> str:
         lang = self.settings.language
@@ -593,18 +621,23 @@ class CalendarService:
 
     def _human_datetime_phrase(self, value: datetime) -> str:
         lang = self.settings.language
-        now = datetime.now(timezone.utc)
-        today = now.date()
-        utc_value = value.astimezone(timezone.utc)
-        date_value = utc_value.date()
+        try:
+            from zoneinfo import ZoneInfo
+            user_tz = ZoneInfo(self.settings.calendar_timezone)
+        except Exception:
+            user_tz = timezone.utc
+        local_now = datetime.now(user_tz)
+        today = local_now.date()
+        local_value = value.astimezone(user_tz)
+        date_value = local_value.date()
         weekday_names = WEEKDAY_NAMES.get(lang, WEEKDAY_NAMES["en"])
-        day_label = weekday_names[utc_value.weekday()]
+        day_label = weekday_names[local_value.weekday()]
         if date_value == today:
             day_label = t(CALENDAR_DAY_TODAY, lang)
         elif date_value == (today + timedelta(days=1)):
             day_label = t(CALENDAR_DAY_TOMORROW, lang)
         time_fmt = t(CALENDAR_TIME_FORMAT, lang)
-        time_label = utc_value.strftime(time_fmt).lstrip("0") if "%I" in time_fmt else utc_value.strftime(time_fmt)
+        time_label = local_value.strftime(time_fmt).lstrip("0") if "%I" in time_fmt else local_value.strftime(time_fmt)
         return t(CALENDAR_DATETIME_FORMAT, lang).format(day=day_label, time=time_label)
 
     @staticmethod
@@ -855,11 +888,15 @@ class CalendarService:
 
     def _persist_cache(self) -> None:
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)
-        self.cache_path.write_text(json.dumps(self.cache, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp = self.cache_path.with_suffix(self.cache_path.suffix + ".tmp")
+        tmp.write_text(json.dumps(self.cache, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(self.cache_path)
 
     def _persist_queue(self) -> None:
         self.queue_path.parent.mkdir(parents=True, exist_ok=True)
-        self.queue_path.write_text(json.dumps(self.queue, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp = self.queue_path.with_suffix(self.queue_path.suffix + ".tmp")
+        tmp.write_text(json.dumps(self.queue, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(self.queue_path)
 
     @staticmethod
     def _now_iso() -> str:

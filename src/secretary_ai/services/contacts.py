@@ -33,10 +33,12 @@ class ContactBook:
     def _save(self) -> None:
         try:
             self._path.parent.mkdir(parents=True, exist_ok=True)
-            self._path.write_text(
+            tmp = self._path.with_suffix(self._path.suffix + ".tmp")
+            tmp.write_text(
                 json.dumps(self._contacts, ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
+            tmp.replace(self._path)
         except Exception:
             logger.warning("Failed to save contacts to %s", self._path, exc_info=True)
 

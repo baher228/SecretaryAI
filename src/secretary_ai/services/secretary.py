@@ -569,9 +569,8 @@ class SecretaryService:
 
                 booking_action = str(template_hit.get("booking_search") or "").strip()
                 if booking_action:
-                    # Extract tail text after matched action phrase (like wake-word payload)
-                    wake_detect = self.wake_word.detect(transcript)
-                    booking_payload = wake_detect.payload if wake_detect else ""
+                    # Reuse earlier wake_match to avoid redundant regex work.
+                    booking_payload = wake_match.payload if wake_match else ""
                     booking_result = await self._handle_booking_search(
                         call_id=call_id,
                         action=booking_action,
@@ -739,12 +738,20 @@ class SecretaryService:
         """Fire-and-forget booking search if intent matches."""
         if analysis.intent.value != "search_booking":
             return
-        location = analysis.extracted_fields.get("location", "London")
-        booking_type = analysis.extracted_fields.get("topic", "restaurants")
-        if "hotel" in booking_type:
-            asyncio.create_task(self.booking.search_hotels(location))
-        else:
-            asyncio.create_task(self.booking.search_restaurants(location))
+        fields = analysis.extracted_fields or {}
+        location = str(fields.get("location") or "London")
+        booking_type = str(fields.get("topic") or "restaurants")
+
+        async def _safe_booking() -> None:
+            try:
+                if "hotel" in booking_type:
+                    await self.booking.search_hotels(location)
+                else:
+                    await self.booking.search_restaurants(location)
+            except Exception:
+                logger.debug("Background booking search failed", exc_info=True)
+
+        asyncio.create_task(_safe_booking())
 
     async def analyze_agent_turn(
         self,
@@ -753,7 +760,8 @@ class SecretaryService:
         context: dict[str, Any],
     ) -> AgentAnalyzeResponse:
         self.telegram.append_transcript(call_id, transcript, metadata=context)
-        self.memory.add_short_term_turn(call_id=call_id, transcript=transcript)
+        # NOTE: short_term memory is written by the caller (live_agent_respond)
+        # with the reply attached, avoiding duplicate writes.
         live_mode = str((context or {}).get("source") or "") == "telegram_live_loop"
         if live_mode:
             analysis = await self.ai.analyze_turn_live(call_id=call_id, transcript=transcript, context=context)
@@ -1319,7 +1327,7 @@ class SecretaryService:
                 {"error": exc.__class__.__name__, "detail": str(exc)[:300]},
             )
         finally:
-            s = self.live_sessions.get(call_id)
+            s = self.live_sessions.pop(call_id, None)
             started_at = ""
             started_mono = 0.0
             if s is not None:
@@ -1336,6 +1344,11 @@ class SecretaryService:
             # Get caller info from the Telegram call record
             call_record = self.telegram.get_call(call_id) or {}
             caller = call_record.get("target_user") or call_record.get("chat_id") or "Unknown"
+
+            # Free per-call ephemeral state
+            self.ai.clear_call(call_id)
+            self._template_reply_state.pop(call_id, None)
+            self._reminder_flow_state.pop(call_id, None)
 
             asyncio.create_task(
                 self._send_call_summary(
@@ -1367,14 +1380,16 @@ class SecretaryService:
         if not transcript_in and not transcript_out:
             return
 
-        # Interleave in/out transcripts chronologically
+        # Reconstruct conversation by alternating caller/secretary turns.
+        # Gemini Live transcripts naturally alternate: caller speaks, then
+        # the model responds, so zip-longest is the correct interleaving.
         lines: list[str] = []
         max_entries = max(len(transcript_in), len(transcript_out))
-        for i in range(min(max_entries, 20)):
+        for i in range(min(max_entries, 30)):
             if i < len(transcript_in) and transcript_in[i]:
-                lines.append(f"📞 Caller: {transcript_in[i][:200]}")
+                lines.append(f"Caller: {transcript_in[i][:200]}")
             if i < len(transcript_out) and transcript_out[i]:
-                lines.append(f"🤖 Secretary: {transcript_out[i][:200]}")
+                lines.append(f"Secretary: {transcript_out[i][:200]}")
 
         transcript_text = "\n".join(lines) if lines else "(no transcript captured)"
         duration_min = round(duration_s / 60, 1) if duration_s > 0 else "?"
@@ -1522,10 +1537,12 @@ class SecretaryService:
     def _persist_reminder_state(self) -> None:
         try:
             self._reminder_state_path.parent.mkdir(parents=True, exist_ok=True)
-            self._reminder_state_path.write_text(
+            tmp = self._reminder_state_path.with_suffix(self._reminder_state_path.suffix + ".tmp")
+            tmp.write_text(
                 json.dumps(self._reminder_state, ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
+            tmp.replace(self._reminder_state_path)
         except Exception:
             logger.warning("Failed to persist reminder state", exc_info=True)
 
