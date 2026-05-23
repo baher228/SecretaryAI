@@ -320,12 +320,12 @@ class LiveTemplateMatcher:
         if lang_marker.exists():
             stored_lang = lang_marker.read_text(encoding="utf-8").strip()
         if stored_lang != lang:
-            self.path.write_text(json.dumps(defaults, ensure_ascii=False, indent=2), encoding="utf-8")
+            self._atomic_write(self.path, json.dumps(defaults, ensure_ascii=False, indent=2))
             lang_marker.write_text(lang, encoding="utf-8")
             return list(defaults)
 
         if not self.path.exists():
-            self.path.write_text(json.dumps(defaults, ensure_ascii=False, indent=2), encoding="utf-8")
+            self._atomic_write(self.path, json.dumps(defaults, ensure_ascii=False, indent=2))
             lang_marker.write_text(lang, encoding="utf-8")
             return list(defaults)
 
@@ -335,11 +335,17 @@ class LiveTemplateMatcher:
                 valid = [item for item in raw if isinstance(item, dict)]
                 if valid:
                     merged = self._merge_with_defaults(valid, defaults)
-                    self.path.write_text(json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8")
+                    self._atomic_write(self.path, json.dumps(merged, ensure_ascii=False, indent=2))
                     return merged
         except Exception:
             pass
         return list(defaults)
+
+    @staticmethod
+    def _atomic_write(path: Path, content: str) -> None:
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_text(content, encoding="utf-8")
+        tmp.replace(path)
 
     @staticmethod
     def _merge_with_defaults(

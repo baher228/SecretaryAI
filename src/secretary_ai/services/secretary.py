@@ -1350,16 +1350,20 @@ class SecretaryService:
             self._template_reply_state.pop(call_id, None)
             self._reminder_flow_state.pop(call_id, None)
 
-            asyncio.create_task(
-                self._send_call_summary(
-                    call_id=call_id,
-                    transcript_in=transcript_in,
-                    transcript_out=transcript_out,
-                    caller=str(caller),
-                    duration_s=duration_s,
-                    started_at=started_at,
-                )
-            )
+            async def _safe_summary() -> None:
+                try:
+                    await self._send_call_summary(
+                        call_id=call_id,
+                        transcript_in=transcript_in,
+                        transcript_out=transcript_out,
+                        caller=str(caller),
+                        duration_s=duration_s,
+                        started_at=started_at,
+                    )
+                except Exception:
+                    logger.debug("Call summary send failed for %s", call_id, exc_info=True)
+
+            asyncio.create_task(_safe_summary())
 
     async def _send_call_summary(
         self,

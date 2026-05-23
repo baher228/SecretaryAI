@@ -541,8 +541,11 @@ class GeminiLiveSession:
             delay = audio_seconds + 5.0
 
             async def _deferred_unlink(p: Path, d: float) -> None:
-                await asyncio.sleep(d)
-                p.unlink(missing_ok=True)
+                try:
+                    await asyncio.sleep(d)
+                    p.unlink(missing_ok=True)
+                except Exception:
+                    pass  # Best-effort cleanup; file will be reaped later.
 
             asyncio.get_running_loop().create_task(_deferred_unlink(wav_path, delay))
 
