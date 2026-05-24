@@ -127,6 +127,7 @@ class SecretaryAIAgent:
         history.append({"role": "assistant", "content": response.reply})
         if len(history) > self._MAX_HISTORY_PER_CALL:
             del history[: len(history) - self._MAX_HISTORY_PER_CALL]
+        self._trim_histories()
         return response
 
     def _build_messages(
@@ -249,8 +250,6 @@ class SecretaryAIAgent:
         if requires_human and not reason:
             reason = t(TRANSFER_REASON_DEFAULT, lang)
         return reason
-
-
 
     @staticmethod
     def _try_parse_json(raw: str) -> dict[str, Any]:

@@ -30,6 +30,9 @@ class MemoryStore:
 
         self._fact_cache: list[dict[str, Any]] = []
         self._fact_cache_size: int = 0
+        self._long_term_write_count: int = 0
+
+    _MAX_LONG_TERM_BYTES = 20 * 1024 * 1024  # 20 MB
 
     def append_long_term(self, record_type: str, payload: dict[str, Any]) -> None:
         row = {
@@ -39,6 +42,9 @@ class MemoryStore:
         }
         with self.long_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
+        self._long_term_write_count += 1
+        if self._long_term_write_count % 500 == 0:
+            self._rotate_long_term_if_needed()
 
     def add_short_term_turn(self, call_id: str, transcript: str, reply: str | None = None) -> None:
         calls = self.short_term.setdefault("calls", {})
@@ -182,6 +188,21 @@ class MemoryStore:
             return
         self._fact_cache = facts
         self._fact_cache_size = current_size
+
+    def _rotate_long_term_if_needed(self) -> None:
+        """Rotate long-term log when it exceeds size limit."""
+        try:
+            if not self.long_path.exists():
+                return
+            if self.long_path.stat().st_size < self._MAX_LONG_TERM_BYTES:
+                return
+            rotated = self.long_path.with_suffix(".jsonl.old")
+            rotated.unlink(missing_ok=True)
+            self.long_path.rename(rotated)
+            self._fact_cache = []
+            self._fact_cache_size = 0
+        except Exception:
+            return
 
     @staticmethod
     def _load_json(path: Path, default: dict[str, Any]) -> dict[str, Any]:
