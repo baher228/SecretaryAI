@@ -7,6 +7,7 @@ from secretary_ai.api.routes import router
 from secretary_ai.core.config import get_settings
 from secretary_ai.services.secretary import SecretaryService
 from secretary_ai.ui.dashboard import router as dashboard_router
+from secretary_ai import APP_VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,7 @@ def create_app() -> FastAPI:
             await secretary.shutdown()
             logger.info("Secretary AI shut down")
 
-    app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title=settings.app_name, version=APP_VERSION, lifespan=lifespan)
     app.state.secretary = secretary
     app.include_router(router, prefix="/api/v1")
     app.include_router(dashboard_router)

@@ -11,6 +11,7 @@ import logging
 from typing import Any
 
 from secretary_ai.core.config import Settings
+from secretary_ai.core.locales import BOOKING_NO_RESULTS, BOOKING_ONE_RESULT, BOOKING_TOP_RESULTS, t
 from secretary_ai.services.tavily_search import tavily_search
 
 logger = logging.getLogger(__name__)
@@ -23,16 +24,19 @@ _TRAIN_DOMAINS = ["nationalrail.co.uk", "trainline.com", "raileurope.com"]
 _BUS_DOMAINS = ["nationalexpress.com", "megabus.com", "flixbus.com"]
 
 
-def _voice_summary(results: list[dict[str, Any]], category: str) -> str:
-    """Build a short voice-friendly summary from search results."""
+def _voice_summary(results: list[dict[str, Any]], category: str, lang: str = "en") -> str:
+    """Build a short, localized, voice-friendly summary from search results."""
     valid = [r for r in results if r.get("title") and not r.get("error")]
     if not valid:
-        return f"I couldn't find any {category} right now. Please try again later."
+        return t(BOOKING_NO_RESULTS, lang).format(category=category)
     names = [str(r["title"]).strip() for r in valid[:3]]
     if len(names) == 1:
-        return f"I found one option: {names[0]}."
+        return t(BOOKING_ONE_RESULT, lang).format(name=names[0])
     listing = ", ".join(names[:-1]) + (" and " if len(names) == 2 else ", and ") + names[-1]
-    return f"Here are the top results: {listing}."
+    return t(BOOKING_TOP_RESULTS, lang).format(listing=listing)
+
+
+_MAX_CACHED_CATEGORIES = 20
 
 
 class BookingService:
@@ -46,6 +50,14 @@ class BookingService:
     def last_results(self) -> dict[str, list[dict[str, Any]]]:
         """Most recent search results keyed by category."""
         return self._last_results
+
+    def _store_results(self, category: str, results: list[dict[str, Any]]) -> None:
+        """Store results, pruning oldest categories if limit exceeded."""
+        self._last_results[category] = results
+        if len(self._last_results) > _MAX_CACHED_CATEGORIES:
+            excess = len(self._last_results) - _MAX_CACHED_CATEGORIES
+            for key in list(self._last_results)[:excess]:
+                del self._last_results[key]
 
     async def search_restaurants(
         self,
@@ -66,12 +78,12 @@ class BookingService:
             max_results=self.settings.booking_max_results,
             include_domains=_RESTAURANT_DOMAINS,
         )
-        self._last_results["restaurants"] = results
+        self._store_results("restaurants", results)
         return {
             "category": "restaurants",
             "location": loc,
             "results": results,
-            "voice_summary": _voice_summary(results, "restaurants"),
+            "voice_summary": _voice_summary(results, "restaurants", self.settings.language),
         }
 
     async def search_hotels(
@@ -92,12 +104,12 @@ class BookingService:
             max_results=self.settings.booking_max_results,
             include_domains=_HOTEL_DOMAINS,
         )
-        self._last_results["hotels"] = results
+        self._store_results("hotels", results)
         return {
             "category": "hotels",
             "location": loc,
             "results": results,
-            "voice_summary": _voice_summary(results, "hotels"),
+            "voice_summary": _voice_summary(results, "hotels", self.settings.language),
         }
 
     async def search_events(
@@ -116,12 +128,12 @@ class BookingService:
             max_results=self.settings.booking_max_results,
             include_domains=_EVENT_DOMAINS,
         )
-        self._last_results["events"] = results
+        self._store_results("events", results)
         return {
             "category": "events",
             "location": loc,
             "results": results,
-            "voice_summary": _voice_summary(results, "events"),
+            "voice_summary": _voice_summary(results, "events", self.settings.language),
         }
 
     async def search_travel(
@@ -153,14 +165,14 @@ class BookingService:
             max_results=self.settings.booking_max_results,
             include_domains=domains,
         )
-        self._last_results["travel"] = results
+        self._store_results("travel", results)
         return {
             "category": "travel",
             "mode": mode_l,
             "origin": orig,
             "destination": dest,
             "results": results,
-            "voice_summary": _voice_summary(results, f"{mode_l} options"),
+            "voice_summary": _voice_summary(results, f"{mode_l} options", self.settings.language),
         }
 
     async def plan_evening(
@@ -177,11 +189,11 @@ class BookingService:
             tavily_search(self.settings, dinner_q, max_results=3, include_domains=_RESTAURANT_DOMAINS),
             tavily_search(self.settings, ent_q, max_results=3, include_domains=_EVENT_DOMAINS),
         )
-        self._last_results["evening_dinner"] = dinner
-        self._last_results["evening_entertainment"] = entertainment
+        self._store_results("evening_dinner", dinner)
+        self._store_results("evening_entertainment", entertainment)
 
-        dinner_summary = _voice_summary(dinner, "dinner spots")
-        ent_summary = _voice_summary(entertainment, "entertainment options")
+        dinner_summary = _voice_summary(dinner, "dinner spots", self.settings.language)
+        ent_summary = _voice_summary(entertainment, "entertainment options", self.settings.language)
         return {
             "category": "evening_plan",
             "location": loc,

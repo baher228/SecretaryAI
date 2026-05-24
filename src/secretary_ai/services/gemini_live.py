@@ -120,10 +120,12 @@ class GeminiLiveSession:
             api_key=self.settings.gemini_api_key,
         )
 
-    def _live_config(self) -> Any:
+    def _live_config(self, caller_hint: str | None = None) -> Any:
         from secretary_ai.core.locales import GEMINI_LIVE_SYSTEM_PROMPT, t
 
         system_prompt = t(GEMINI_LIVE_SYSTEM_PROMPT, self.settings.language)
+        if caller_hint:
+            system_prompt += f"\n{caller_hint}"
         return types.LiveConnectConfig(
             responseModalities=[types.Modality.AUDIO],
             systemInstruction=system_prompt,
@@ -149,6 +151,7 @@ class GeminiLiveSession:
         stop_check: StopCheck,
         debug_log: DebugLog,
         greeting_played: bool = False,
+        caller_hint: str | None = None,
     ) -> None:
         """Main entry point: bridges call audio <-> Gemini Live.
 
@@ -166,6 +169,9 @@ class GeminiLiveSession:
         greeting_played:
             If True, a cached greeting was already played before Gemini
             connected.  The initial prompt tells Gemini not to greet again.
+        caller_hint:
+            Optional hint about the caller (e.g. name) to inject into the
+            system instruction for personalized greetings.
         """
         if not _GENAI_AVAILABLE:
             debug_log("gemini_live_unavailable", {"reason": "google-genai not installed"})
@@ -180,7 +186,7 @@ class GeminiLiveSession:
         try:
             async with client.aio.live.connect(
                 model=self.settings.gemini_live_model,
-                config=self._live_config(),
+                config=self._live_config(caller_hint=caller_hint),
             ) as session:
                 debug_log("gemini_live_connected", {"model": self.settings.gemini_live_model})
 

@@ -373,6 +373,26 @@ PREDICTIVE_REMINDER_KEYWORDS: dict[str, list[str]] = {
 
 
 # ---------------------------------------------------------------------------
+# Booking voice summaries
+# ---------------------------------------------------------------------------
+
+BOOKING_NO_RESULTS: dict[str, str] = {
+    "en": "I couldn't find any {category} right now. Please try again later.",
+    "ru": "Не удалось найти {category} прямо сейчас. Попробуйте позже.",
+}
+
+BOOKING_ONE_RESULT: dict[str, str] = {
+    "en": "I found one option: {name}.",
+    "ru": "Нашёл один вариант: {name}.",
+}
+
+BOOKING_TOP_RESULTS: dict[str, str] = {
+    "en": "Here are the top results: {listing}.",
+    "ru": "Вот лучшие варианты: {listing}.",
+}
+
+
+# ---------------------------------------------------------------------------
 # Live templates (keyword → reply)
 # ---------------------------------------------------------------------------
 

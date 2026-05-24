@@ -48,6 +48,7 @@ from secretary_ai.domain.models import (
     TelegramLiveAgentStatusResponse,
     TelegramAuthStatusResponse,
 )
+from secretary_ai import APP_VERSION
 from secretary_ai.services.secretary import SecretaryService
 
 router = APIRouter()
@@ -81,7 +82,7 @@ async def health(
     cal_ready, cal_detail = secretary.calendar.readiness()
     return {
         "status": "ok",
-        "version": "0.1.0",
+        "version": APP_VERSION,
         "mode": "telegram_mtproto_mvp",
         "language": s.language,
         "openai": {
@@ -107,7 +108,7 @@ async def health(
 
 @router.get("/version")
 async def version() -> dict[str, str]:
-    return {"version": "0.1.0", "name": "Secretary AI"}
+    return {"version": APP_VERSION, "name": "Secretary AI"}
 
 
 @router.get("/debug/logs")
@@ -595,6 +596,41 @@ async def delete_contact(
     if not deleted:
         raise HTTPException(status_code=404, detail="Contact not found.")
     return {"deleted": True, "caller_id": caller_id}
+
+
+class TranscribeRequest(_BaseModel):
+    audio_path: str
+
+
+@router.post("/stt/transcribe")
+async def transcribe_audio(
+    body: TranscribeRequest,
+    secretary: SecretaryService = Depends(get_secretary),
+) -> dict:
+    """Transcribe an audio file using the STT engine (faster-whisper)."""
+    text, stt_status = await secretary.stt.transcribe(body.audio_path)
+    return {"text": text, "status": stt_status}
+
+
+@router.get("/reminders")
+async def list_reminders(
+    status: str | None = Query(None, description="Filter by status (scheduled, sent, cancelled)"),
+    secretary: SecretaryService = Depends(get_secretary),
+) -> list[dict]:
+    """List all reminders, optionally filtered by status."""
+    return secretary.list_reminders(status_filter=status)
+
+
+@router.delete("/reminders/{event_id}")
+async def cancel_reminder(
+    event_id: str,
+    secretary: SecretaryService = Depends(get_secretary),
+) -> dict:
+    """Cancel a scheduled reminder."""
+    cancelled = secretary.cancel_reminder(event_id)
+    if not cancelled:
+        raise HTTPException(status_code=404, detail="Reminder not found.")
+    return {"cancelled": True, "event_id": event_id}
 
 
 @router.get("/calls")

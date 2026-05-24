@@ -86,7 +86,7 @@ class STTEngine:
         )
         collected: list[str] = []
         for segment in segments:
-            text = str(getattr(segment, "text", "")).strip()
+            text = str(segment.text).strip() if hasattr(segment, "text") else ""
             if text:
                 collected.append(text)
         return " ".join(collected).strip()

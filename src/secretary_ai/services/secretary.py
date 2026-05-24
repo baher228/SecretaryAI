@@ -57,6 +57,7 @@ from secretary_ai.services.booking import BookingService
 from secretary_ai.services.contacts import ContactBook
 from secretary_ai.services.wake_word import WakeWordEngine, WakeWordMatch
 from secretary_ai.services.gemini_live import GeminiLiveSession
+from secretary_ai.services.stt import STTEngine
 from secretary_ai.services.openai_client import close_client, extract_message, openai_chat_completion
 from secretary_ai.core.locales import (
     CHAT_RETRY_PROMPT,
@@ -92,6 +93,7 @@ class SecretaryService:
         self.booking = BookingService(settings)
         self.wake_word = WakeWordEngine(settings)
         self.contacts = ContactBook(settings)
+        self.stt = STTEngine(settings)
         self.live_sessions: dict[str, dict[str, Any]] = {}
         self._auto_live_task: asyncio.Task | None = None
         self._calendar_worker_task: asyncio.Task | None = None
@@ -147,19 +149,27 @@ class SecretaryService:
             name="Secretary AI",
             mode="telegram_mtproto_mvp",
             components=[
-                "API Layer (FastAPI routes)",
+                "API Layer (FastAPI routes + WebSocket live agent)",
                 "Telegram MTProto (Telethon user session)",
                 "Telegram Calls Engine (py-tgcalls private calls)",
                 "AI Orchestrator (intent + response + actions)",
                 "Gemini Live Bridge (audio-to-audio via Gemini 3.1 Flash Live)",
                 "Greeting Cache (instant playback of cached Gemini greeting)",
+                "TTS Engine (Silero Russian-native + Edge TTS fallback)",
+                "Wake Word Engine (configurable trigger phrases → action routing)",
+                "Booking Search (Tavily-powered: restaurants, hotels, events, travel)",
+                "Contact Book (caller names, preferences, greeting personalization)",
+                "Call Summary Notifications (post-call transcript via Telegram)",
+                "Calendar (Google Calendar OAuth 2.0, queue + planner + reminders)",
+                "Three-tier Memory (short-term, mid-term, long-term JSONL)",
+                "Live Debug Logger (JSONL with 10 MB rotation + WebSocket stream)",
                 "Secretary Orchestrator (this service)",
-                "OpenAI Reasoning Endpoint (text chat)",
-                "Storage Layer (in-memory MVP)",
+                "OpenAI/Pydantic Gateway (text chat + agent reasoning)",
             ],
             notes=(
-                "Experimental hackathon stack using a real Telegram user account session. "
-                "Designed for easy provider swap to Twilio/others later."
+                "Production-ready Telegram voice secretary. Uses a real Telegram "
+                "user account session. Designed for easy provider swap to "
+                "Twilio/others later."
             ),
         )
 
@@ -618,13 +628,13 @@ class SecretaryService:
                     if tts_audio_path and not is_booking_template:
                         self._template_audio_cache[template_id] = tts_audio_path
 
-                call_audio_status = "not_streamed"
+                call_audio_status: str | None = None
                 if speak_response and tts_audio_path:
                     stream_result = await self.telegram.stream_audio_out(call_id, tts_audio_path)
                     call_audio_status = str(stream_result.get("status"))
                     self._apply_live_tts_pause(call_id, call_audio_status)
 
-                response = AgentLiveRespondResponse(
+                return AgentLiveRespondResponse(
                     call_id=call_id,
                     transcript=transcript,
                     reply=analysis.reply,
@@ -639,7 +649,6 @@ class SecretaryService:
                     tts_status=tts_status,
                     call_audio_status=call_audio_status,
                 )
-                return response
         else:
             try:
                 analysis = await asyncio.wait_for(
@@ -1025,19 +1034,26 @@ class SecretaryService:
             destination=payload.destination,
             mode=payload.mode,
         )
+        _s = self._opt_str
+        eta_raw = route.get("eta_minutes")
         return MapRouteResponse(
             call_id=payload.call_id,
             status=str(route.get("status") or "error"),
-            detail=str(route.get("detail")) if route.get("detail") is not None else None,
-            origin=str(route.get("origin")) if route.get("origin") is not None else payload.origin,
-            destination=str(route.get("destination")) if route.get("destination") is not None else payload.destination,
-            mode=str(route.get("mode")) if route.get("mode") is not None else payload.mode,
-            eta_text=str(route.get("eta_text")) if route.get("eta_text") is not None else None,
-            eta_minutes=int(route.get("eta_minutes")) if route.get("eta_minutes") is not None else None,
-            distance_text=str(route.get("distance_text")) if route.get("distance_text") is not None else None,
-            map_url=str(route.get("map_url")) if route.get("map_url") is not None else None,
-            route_details=str(route.get("details")) if route.get("details") is not None else None,
+            detail=_s(route, "detail"),
+            origin=_s(route, "origin") or payload.origin,
+            destination=_s(route, "destination") or payload.destination,
+            mode=_s(route, "mode") or payload.mode,
+            eta_text=_s(route, "eta_text"),
+            eta_minutes=int(eta_raw) if eta_raw is not None else None,
+            distance_text=_s(route, "distance_text"),
+            map_url=_s(route, "map_url"),
+            route_details=_s(route, "details"),
         )
+
+    @staticmethod
+    def _opt_str(d: dict[str, Any], key: str) -> str | None:
+        v = d.get(key)
+        return str(v) if v is not None else None
 
     async def _resolve_route_intent(
         self,
@@ -1191,6 +1207,11 @@ class SecretaryService:
         self._reminder_flow_state.pop(call_id, None)
         self.memory.clear_short_term_call(call_id)
 
+        # Track call in contacts for personalization.
+        caller_id = str(call.get("target_user") or call.get("chat_id") or "")
+        if caller_id:
+            self.contacts.record_call(caller_id)
+
         call["live_agent"] = {
             "running": True,
             "started_at": session["started_at"],
@@ -1310,6 +1331,11 @@ class SecretaryService:
         async def audio_out_callback(wav_path: str) -> dict[str, Any]:
             return await self.telegram.stream_audio_out(call_id, wav_path)
 
+        # Build personalized caller hint from contact book.
+        call_record = self.telegram.get_call(call_id) or {}
+        caller_id = str(call_record.get("target_user") or call_record.get("chat_id") or "")
+        caller_hint = self.contacts.greeting_for(caller_id) if caller_id else None
+
         try:
             await gemini.run(
                 recording_path=recording_path,
@@ -1317,6 +1343,7 @@ class SecretaryService:
                 stop_check=stop_check,
                 debug_log=debug_log,
                 greeting_played=greeting_played,
+                caller_hint=caller_hint,
             )
         except asyncio.CancelledError:
             raise
@@ -1682,11 +1709,7 @@ class SecretaryService:
         lead_minutes = max(1, int(self.settings.reminder_lead_minutes))
         remind_at = start_dt - timedelta(minutes=lead_minutes)
         summary = str(event.get("summary") or "your event").strip() or "your event"
-        start_local = start_dt.astimezone()
-        reminder_text = (
-            f"Reminder: {summary} starts in {lead_minutes} minutes at "
-            f"{start_local.strftime('%H:%M')}."
-        )
+        reminder_text = self._format_reminder_text(summary, start_dt, lead_minutes)
         existing = self._reminder_state.get(event_id)
         if existing:
             existing_start = self._parse_iso(str(existing.get("start_iso") or ""))
@@ -1719,9 +1742,12 @@ class SecretaryService:
 
     def _build_reminder_text_from_state(self, state: dict[str, Any]) -> str:
         summary = str(state.get("summary") or "your event").strip() or "your event"
-        start_iso = str(state.get("start_iso") or "").strip()
         lead_minutes = max(1, int(self.settings.reminder_lead_minutes))
-        start_dt = self._parse_iso(start_iso)
+        start_dt = self._parse_iso(str(state.get("start_iso") or "").strip())
+        return self._format_reminder_text(summary, start_dt, lead_minutes)
+
+    @staticmethod
+    def _format_reminder_text(summary: str, start_dt: datetime | None, lead_minutes: int) -> str:
         if start_dt is not None:
             start_local = start_dt.astimezone()
             return (
@@ -1729,6 +1755,23 @@ class SecretaryService:
                 f"{start_local.strftime('%H:%M')}."
             )
         return f"Reminder: {summary} starts in {lead_minutes} minutes."
+
+    def list_reminders(self, status_filter: str | None = None) -> list[dict[str, Any]]:
+        """Return all reminders, optionally filtered by status."""
+        reminders = list(self._reminder_state.values())
+        if status_filter:
+            reminders = [r for r in reminders if r.get("status") == status_filter]
+        reminders.sort(key=lambda r: r.get("remind_at", ""), reverse=True)
+        return reminders
+
+    def cancel_reminder(self, event_id: str) -> bool:
+        """Cancel a scheduled reminder. Returns True if found and cancelled."""
+        state = self._reminder_state.get(event_id)
+        if state is None:
+            return False
+        state["status"] = "cancelled"
+        self._persist_reminder_state()
+        return True
 
     def _resolve_reminder_target_user(self, call_id: str) -> str | None:
         call = self.telegram.get_call(call_id) if call_id else None
@@ -2228,7 +2271,9 @@ class SecretaryService:
             if not replaced:
                 data.append(dynamic_item)
 
-            path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+            tmp = path.with_suffix(path.suffix + ".tmp")
+            tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+            tmp.replace(path)
             self.template_matcher = LiveTemplateMatcher(self.settings)
             self.memory.append_long_term(
                 "predictive_template_update",
@@ -2250,29 +2295,9 @@ class SecretaryService:
         action_item: str,
         speak_response: bool,
     ) -> AgentLiveRespondResponse:
-        tts_audio_path: str | None = None
-        tts_status: str | None = None
-        call_audio_status: str | None = None
-
-        if speak_response:
-            tts_audio_path, tts_status = await self.tts.synthesize(reply, call_id=call_id)
-            self.debug.log(
-                call_id,
-                "fallback_tts",
-                {"tts_status": tts_status, "has_audio": bool(tts_audio_path), "reply": reply[:120]},
-            )
-            if tts_audio_path:
-                stream_result = await self.telegram.stream_audio_out(call_id, tts_audio_path)
-                call_audio_status = str(stream_result.get("status"))
-                self._apply_live_tts_pause(call_id, call_audio_status)
-                self.debug.log(
-                    call_id,
-                    "fallback_audio_out",
-                    {"audio_path": tts_audio_path, "status": call_audio_status, "detail": stream_result.get("detail")},
-                )
-            else:
-                call_audio_status = "not_streamed"
-
+        tts_audio_path, tts_status, call_audio_status = await self._speak_and_stream(
+            call_id, reply, speak_response,
+        )
         return AgentLiveRespondResponse(
             call_id=call_id,
             transcript=snippet,
