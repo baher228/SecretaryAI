@@ -103,6 +103,18 @@ async def health(
             "ready": cal_ready,
             "detail": cal_detail,
         },
+        "tts": {
+            "enabled": s.tts_enabled,
+            "provider": s.tts_provider,
+        },
+        "stt": {
+            "enabled": s.stt_enabled,
+            "provider": s.stt_provider,
+        },
+        "wake_word": {
+            "enabled": s.wake_word_enabled,
+            "prefix": s.wake_word_prefix,
+        },
     }
 
 
