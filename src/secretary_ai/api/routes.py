@@ -645,6 +645,75 @@ async def cancel_reminder(
     return {"cancelled": True, "event_id": event_id}
 
 
+@router.get("/settings")
+async def settings_overview(
+    secretary: SecretaryService = Depends(get_secretary),
+) -> dict[str, Any]:
+    """Return non-secret runtime configuration for the settings dashboard."""
+    s = secretary.settings
+    return {
+        "general": {
+            "app_name": s.app_name,
+            "environment": s.environment,
+            "language": s.language,
+            "timezone": s.timezone,
+        },
+        "llm": {
+            "model": s.openai_model,
+            "chat_model": s.openai_chat_model or s.openai_model,
+            "base_url": s.openai_base_url,
+            "timeout_seconds": s.openai_timeout_seconds,
+            "configured": bool(s.openai_api_key),
+        },
+        "gemini_live": {
+            "enabled": bool(s.gemini_live_enabled and s.gemini_api_key),
+            "model": s.gemini_live_model,
+            "voice": s.gemini_live_voice,
+        },
+        "telegram": {
+            "auto_answer_inbound": s.telegram_auto_answer_inbound,
+            "auto_start_live_agent": s.telegram_auto_start_live_agent,
+            "auto_greet_on_connect": s.assistant_auto_greet_on_connect,
+        },
+        "tts": {
+            "enabled": s.tts_enabled,
+            "provider": s.tts_provider,
+            "voice": s.tts_voice,
+            "silero_speaker": s.tts_silero_speaker if s.tts_provider == "silero" else None,
+        },
+        "stt": {
+            "enabled": s.stt_enabled,
+            "provider": s.stt_provider,
+            "model": s.stt_model,
+            "language": s.stt_language,
+        },
+        "calendar": {
+            "enabled": s.calendar_enabled,
+            "timezone": s.calendar_timezone,
+            "worker_enabled": s.calendar_worker_enabled,
+            "worker_poll_seconds": s.calendar_worker_poll_seconds,
+            "refresh_interval_seconds": s.calendar_refresh_interval_seconds,
+        },
+        "reminders": {
+            "enabled": s.reminder_enabled,
+            "lead_minutes": s.reminder_lead_minutes,
+            "scan_horizon_hours": s.reminder_scan_horizon_hours,
+        },
+        "wake_word": {
+            "enabled": s.wake_word_enabled,
+            "prefix": s.wake_word_prefix,
+            "require_prefix": s.wake_word_require_prefix,
+        },
+        "booking": {
+            "default_location": s.booking_default_location,
+            "max_results": s.booking_max_results,
+        },
+        "call_summary": {
+            "enabled": s.call_summary_enabled,
+        },
+    }
+
+
 @router.get("/calls")
 async def list_calls(secretary: SecretaryService = Depends(get_secretary)) -> list[dict]:
     return await secretary.list_calls()

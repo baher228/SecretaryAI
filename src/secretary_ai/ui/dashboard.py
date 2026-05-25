@@ -508,6 +508,16 @@ DASHBOARD_HTML = """<!doctype html>
                 <button onclick="callGet('/api/v1/calls/events?limit=50')">Run</button>
               </article>
               <article class="card">
+                <div class="row"><span class="method">GET</span><code class="path">/api/v1/settings</code></div>
+                <p class="hint">Full runtime configuration.</p>
+                <button onclick="callGet('/api/v1/settings')">Run</button>
+              </article>
+              <article class="card">
+                <div class="row"><span class="method">GET</span><code class="path">/api/v1/reminders</code></div>
+                <p class="hint">All scheduled reminders.</p>
+                <button onclick="callGet('/api/v1/reminders')">Run</button>
+              </article>
+              <article class="card">
                 <div class="row"><span class="method">GET</span><code class="path">/api/v1/calendar/cache</code></div>
                 <p class="hint">Cached calendar events.</p>
                 <button onclick="callGet('/api/v1/calendar/cache')">Run</button>
@@ -979,19 +989,28 @@ DASHBOARD_HTML = """<!doctype html>
       async function loadSettings() {
         const grid = document.getElementById("settings-grid");
         try {
-          const r = await fetchJson("/api/v1/health", { method: "GET" }, 5000);
+          const r = await fetchJson("/api/v1/settings", { method: "GET" }, 5000);
           if (!r.ok) { grid.innerHTML = '<p style="color:var(--err);">Failed to load settings.</p>'; return; }
-          const h = r.body;
+          const s = r.body;
           const items = [
-            { title: "Language", value: h.language || "-" },
-            { title: "LLM Model", value: (h.openai?.model) || "-" },
-            { title: "Gemini Live Model", value: (h.gemini_live?.model) || "-" },
-            { title: "Gemini Voice", value: (h.gemini_live?.voice) || "-" },
-            { title: "TTS Provider", value: (h.tts?.provider) || "-" },
-            { title: "TTS Enabled", value: h.tts?.enabled ? "Yes" : "No" },
-            { title: "STT Provider", value: (h.stt?.provider) || "-" },
-            { title: "Wake Word Prefix", value: (h.wake_word?.prefix) || "-" },
-            { title: "Calendar", value: h.calendar?.ready ? "Connected" : "Not connected" },
+            { title: "Language", value: s.general?.language || "-" },
+            { title: "Timezone", value: s.general?.timezone || "-" },
+            { title: "Environment", value: s.general?.environment || "-" },
+            { title: "LLM Model", value: s.llm?.model || "-" },
+            { title: "LLM Base URL", value: s.llm?.base_url || "-" },
+            { title: "Gemini Live", value: s.gemini_live?.enabled ? s.gemini_live.model : "Disabled" },
+            { title: "Gemini Voice", value: s.gemini_live?.voice || "-" },
+            { title: "TTS Provider", value: s.tts?.provider || "-" },
+            { title: "TTS Voice", value: s.tts?.silero_speaker || s.tts?.voice || "-" },
+            { title: "STT Provider", value: s.stt?.enabled ? (s.stt.provider || "-") : "Disabled" },
+            { title: "STT Model", value: s.stt?.model || "-" },
+            { title: "Calendar", value: s.calendar?.enabled ? "Enabled" : "Disabled" },
+            { title: "Calendar TZ", value: s.calendar?.timezone || "-" },
+            { title: "Reminders", value: s.reminders?.enabled ? (s.reminders.lead_minutes + " min lead") : "Disabled" },
+            { title: "Wake Word", value: s.wake_word?.enabled ? s.wake_word.prefix : "Disabled" },
+            { title: "Auto-Answer", value: s.telegram?.auto_answer_inbound ? "Yes" : "No" },
+            { title: "Auto-Greet", value: s.telegram?.auto_greet_on_connect ? "Yes" : "No" },
+            { title: "Call Summaries", value: s.call_summary?.enabled ? "Enabled" : "Disabled" },
           ];
           grid.innerHTML = items.map(i => `
             <div class="stat-card">
