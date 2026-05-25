@@ -52,6 +52,10 @@ except Exception:  # pragma: no cover - optional dependency
 
 logger = logging.getLogger(__name__)
 
+_RE_AMPM = re.compile(r"\b(\d{1,2})(?:(?::|\.)(\d{2}))?\s*(am|pm)\b")
+_RE_24H = re.compile(r"\b(\d{1,2})[:.](\d{2})\b")
+_RE_NON_ALPHANUM = re.compile(r"[^\w: ]+")
+
 CALENDAR_SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
 
@@ -544,7 +548,7 @@ class CalendarService:
             day_offset = 1
 
         lower = lower.replace("a.m.", "am").replace("p.m.", "pm")
-        match_ampm = re.search(r"\b(\d{1,2})(?:(?::|\.)(\d{2}))?\s*(am|pm)\b", lower)
+        match_ampm = _RE_AMPM.search(lower)
         hour: int
         minute: int
         if match_ampm:
@@ -556,7 +560,7 @@ class CalendarService:
             if ampm == "pm":
                 hour += 12
         else:
-            match_24h = re.search(r"\b(\d{1,2})[:.](\d{2})\b", lower)
+            match_24h = _RE_24H.search(lower)
             if not match_24h:
                 return None
             hour = int(match_24h.group(1))
@@ -571,7 +575,7 @@ class CalendarService:
         return when_local.astimezone(timezone.utc)
 
     def _mutation_signature(self, text: str, start: datetime | None) -> str:
-        normalized = re.sub(r"[^\w: ]+", "", normalize_text(text, lowercase=True))
+        normalized = _RE_NON_ALPHANUM.sub("", normalize_text(text, lowercase=True))
         if start is not None:
             rounded = start.replace(second=0, microsecond=0).isoformat()
             return f"{normalized}|{rounded}"

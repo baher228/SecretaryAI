@@ -14,6 +14,8 @@ from secretary_ai.core.locales import (
 from secretary_ai.domain.models import AgentAnalyzeResponse, IntentType
 from secretary_ai.services.openai_client import extract_message, openai_chat_completion
 
+_MAX_ACTION_ITEMS = 8
+
 _HEURISTIC_RULES: list[tuple[IntentType, tuple[str, ...], str]] = [
     (IntentType.RESCHEDULE_EVENT, ("reschedule", "move meeting", "another time"), "Check available slots and propose alternatives."),
     (IntentType.BOOK_EVENT, ("book", "schedule", "set up meeting", "appointment"), "Create a draft calendar event from caller details."),
@@ -187,7 +189,7 @@ class SecretaryAIAgent:
             reply=reply,
             requires_human=requires_human,
             transfer_reason=transfer_reason,
-            action_items=action_items[:8],
+            action_items=action_items[:_MAX_ACTION_ITEMS],
             extracted_fields=extracted_fields,
             model=self.settings.openai_model,
         )

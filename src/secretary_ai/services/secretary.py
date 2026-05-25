@@ -78,6 +78,13 @@ from secretary_ai.core.locales import (
 
 logger = logging.getLogger(__name__)
 
+MAX_ACTION_ITEMS = 8
+
+_RE_QUOTED = re.compile(r"['\"\u201c\u201d]([^'\"\u201c\u201d]{2,180})['\"\u201c\u201d]")
+_RE_LOCATION = re.compile(r"\b(?:in|near|around)\s+([A-Za-z][A-Za-z\s]{1,40})")
+_RE_TIME_AMPM = re.compile(r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b")
+_RE_NON_ALPHANUM = re.compile(r"[^\w: ]+")
+
 
 class SecretaryService:
     """Main orchestrator: OpenAI reasoning + Telegram MTProto call provider."""
@@ -286,7 +293,7 @@ class SecretaryService:
         has_meta = any(marker in lower for marker in meta_markers)
 
         if has_meta:
-            quoted = re.findall(r"['\"“”]([^'\"“”]{2,180})['\"“”]", text)
+            quoted = _RE_QUOTED.findall(text)
             if quoted:
                 candidate = quoted[-1].strip()
                 if candidate:
@@ -603,7 +610,7 @@ class SecretaryService:
             if processed_status:
                 action_items.append(f"calendar_processed:{processed_status}")
 
-            analysis.action_items = action_items[:8]
+            analysis.action_items = action_items[:MAX_ACTION_ITEMS]
             self.memory.add_short_term_turn(call_id=call_id, transcript=transcript, reply=analysis.reply)
             self.memory.append_long_term(
                 "live_turn_template",
@@ -678,7 +685,7 @@ class SecretaryService:
         if not str(analysis.reply or "").strip():
             analysis.reply = "Could you repeat that in one short sentence?"
             analysis.action_items = list(analysis.action_items) + ["empty_reply_fallback"]
-            analysis.action_items = analysis.action_items[:8]
+            analysis.action_items = analysis.action_items[:MAX_ACTION_ITEMS]
 
         response = await self._build_live_response(
             call_id=call_id,
@@ -891,7 +898,7 @@ class SecretaryService:
         Returns ``(remaining_payload, location)`` where *location* may be
         empty if no pattern matched.
         """
-        m = re.search(r"\b(?:in|near|around)\s+([A-Za-z][A-Za-z\s]{1,40})", text)
+        m = _RE_LOCATION.search(text)
         if not m:
             return text, ""
         location = m.group(1).strip()
@@ -1084,7 +1091,7 @@ class SecretaryService:
         if not destination:
             analysis.reply = "Calculating route now. Please share the destination address or place name."
             analysis.action_items = list(analysis.action_items) + ["route_lookup_missing_destination"]
-            analysis.action_items = analysis.action_items[:8]
+            analysis.action_items = analysis.action_items[:MAX_ACTION_ITEMS]
             analysis.extracted_fields = {**extracted, "mode": mode}
             return analysis
         if not origin:
@@ -1092,7 +1099,7 @@ class SecretaryService:
 
         analysis.reply = "Calculating route now."
         analysis.action_items = list(analysis.action_items) + ["route_lookup_started"]
-        analysis.action_items = analysis.action_items[:8]
+        analysis.action_items = analysis.action_items[:MAX_ACTION_ITEMS]
 
         route_response = await self.map_route(
             MapRouteRequest(
@@ -1128,7 +1135,7 @@ class SecretaryService:
             )
             analysis.action_items = list(analysis.action_items) + ["route_lookup_failed"]
 
-        analysis.action_items = analysis.action_items[:8]
+        analysis.action_items = analysis.action_items[:MAX_ACTION_ITEMS]
         analysis.extracted_fields = {**extracted, **{k: v for k, v in route_fields.items() if v is not None}}
         return analysis
 
@@ -1917,7 +1924,7 @@ class SecretaryService:
         text = normalize_text(transcript, lowercase=True)
         if not text:
             return None
-        match = re.search(r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b", text)
+        match = _RE_TIME_AMPM.search(text)
         if not match:
             return None
         hour = int(match.group(1))
@@ -1977,7 +1984,7 @@ class SecretaryService:
             speak_response=speak_response,
         )
         response.action_items = list(response.action_items) + [f"calendar_queue:{queued_id}"]
-        response.action_items = response.action_items[:8]
+        response.action_items = response.action_items[:MAX_ACTION_ITEMS]
 
         self._reminder_flow_state[call_id] = {
             **state,
@@ -2190,7 +2197,7 @@ class SecretaryService:
         result.action_items = list(result.action_items) + [f"calendar_checked:{busy_count}"]
         if queued_id:
             result.action_items.append(f"calendar_queue:{queued_id}")
-        result.action_items = result.action_items[:8]
+        result.action_items = result.action_items[:MAX_ACTION_ITEMS]
 
         self._reminder_flow_state[call_id] = {
             "awaiting_result": False,
