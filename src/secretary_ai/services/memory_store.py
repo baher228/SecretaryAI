@@ -5,6 +5,7 @@ from typing import Any
 import re
 
 from secretary_ai.core.config import Settings
+from secretary_ai.core.text_utils import normalize_text
 
 
 class MemoryStore:
@@ -110,7 +111,7 @@ class MemoryStore:
         }
 
     def add_user_fact_if_requested(self, call_id: str, transcript: str) -> dict[str, Any] | None:
-        text = " ".join((transcript or "").split()).strip()
+        text = normalize_text(transcript)
         lower = text.lower()
         if not text:
             return None
@@ -135,7 +136,7 @@ class MemoryStore:
         return record
 
     def retrieve_user_fact(self, query: str, limit: int = 3) -> list[dict[str, Any]]:
-        query_text = " ".join((query or "").split()).strip().lower()
+        query_text = normalize_text(query, lowercase=True)
         if not query_text:
             return []
 

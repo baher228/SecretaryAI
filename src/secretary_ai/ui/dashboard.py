@@ -194,9 +194,11 @@ DASHBOARD_HTML = """<!doctype html>
     <div class="nav-container">
       <div class="nav-tabs">
         <button class="tab-btn active" onclick="switchTab('overview', this)">Status</button>
+        <button class="tab-btn" onclick="switchTab('history', this)">History</button>
         <button class="tab-btn" onclick="switchTab('voice', this)">Voice</button>
         <button class="tab-btn" onclick="switchTab('bookings', this)">Bookings</button>
         <button class="tab-btn" onclick="switchTab('contacts', this)">Contacts</button>
+        <button class="tab-btn" onclick="switchTab('settings', this)">Settings</button>
         <button class="tab-btn" onclick="switchTab('lab', this)">API Lab</button>
       </div>
     </div>
@@ -267,6 +269,38 @@ DASHBOARD_HTML = """<!doctype html>
             <button class="secondary" onclick="clearDebugLog()" style="font-size: 0.78rem; padding: 6px 10px;">Clear</button>
           </div>
           <div class="log-box" id="debug-log" style="max-height: 400px;">Waiting for events...</div>
+        </div>
+      </div>
+
+      <!-- HISTORY TAB -->
+      <div id="history" class="tab-content">
+        <div class="panel">
+          <h2>Call History</h2>
+          <p class="subtitle">Full log of all calls with duration, direction, and transcript previews.</p>
+          <div style="display:flex;gap:8px;margin-bottom:14px;">
+            <select id="history-filter-dir" style="background:rgba(255,255,255,0.06);border:1px solid var(--line);color:var(--ink);padding:8px 12px;border-radius:8px;font-size:0.85rem;">
+              <option value="all">All Directions</option>
+              <option value="inbound">Inbound</option>
+              <option value="outbound">Outbound</option>
+            </select>
+            <select id="history-filter-status" style="background:rgba(255,255,255,0.06);border:1px solid var(--line);color:var(--ink);padding:8px 12px;border-radius:8px;font-size:0.85rem;">
+              <option value="all">All Statuses</option>
+              <option value="active">Active</option>
+              <option value="ended">Ended</option>
+              <option value="discarded">Discarded</option>
+            </select>
+            <button class="secondary" onclick="loadCallHistory()" style="font-size:0.82rem;padding:6px 14px;">Refresh</button>
+          </div>
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr><th>Call ID</th><th>User</th><th>Direction</th><th>Status</th><th>Duration</th><th>Transcript</th><th>Time</th></tr>
+              </thead>
+              <tbody id="history-body">
+                <tr><td colspan="7" style="text-align:center;color:var(--muted);"><span class="loader"></span> Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -373,6 +407,31 @@ DASHBOARD_HTML = """<!doctype html>
             <div id="contacts-grid" class="cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;"></div>
           </div>
         </section>
+      </div>
+
+      <!-- SETTINGS TAB -->
+      <div id="settings" class="tab-content">
+        <div class="panel">
+          <h2>Configuration Overview</h2>
+          <p class="subtitle">Current runtime configuration. To change settings, update .env and restart the service.</p>
+          <div id="settings-grid" class="stats-grid">
+            <div class="loader"></div>
+          </div>
+        </div>
+        <div class="panel">
+          <h2>Reminders</h2>
+          <p class="subtitle">Scheduled reminders. Cancel upcoming ones if needed.</p>
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr><th>Event</th><th>Remind At</th><th>Status</th><th>Actions</th></tr>
+              </thead>
+              <tbody id="reminders-body">
+                <tr><td colspan="4" style="text-align:center;color:var(--muted);"><span class="loader"></span> Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <!-- API LAB TAB -->
@@ -865,13 +924,134 @@ DASHBOARD_HTML = """<!doctype html>
         loadContacts();
       }
 
+      // --- Call History ---
+      async function loadCallHistory() {
+        const tbody = document.getElementById("history-body");
+        const dirFilter = document.getElementById("history-filter-dir").value;
+        const statusFilter = document.getElementById("history-filter-status").value;
+        try {
+          const r = await fetchJson("/api/v1/calls", { method: "GET" }, 5000);
+          let calls = Array.isArray(r.body) ? r.body : [];
+          calls = calls.slice().reverse();
+          if (dirFilter !== "all") calls = calls.filter(c => (c.direction || "").toLowerCase() === dirFilter);
+          if (statusFilter !== "all") calls = calls.filter(c => (c.status || "").toLowerCase() === statusFilter);
+          if (calls.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px;">No calls match the filter.</td></tr>';
+            return;
+          }
+          tbody.innerHTML = calls.map(c => {
+            const st = (c.status || "unknown").toLowerCase();
+            let cls = "pill-ended";
+            if (st === "active") cls = "pill-active";
+            else if (st === "completed") cls = "pill-completed";
+            const dir = (c.direction || "-").charAt(0).toUpperCase() + (c.direction || "-").slice(1);
+            const dirIcon = dir === "Inbound" ? "&#8592;" : dir === "Outbound" ? "&#8594;" : "";
+            const user = esc(c.target_user || c.source_user || "-");
+            const ts = c.updated_at ? new Date(c.updated_at).toLocaleString() : "-";
+            let duration = "-";
+            if (c.connected_at && c.updated_at && st !== "active") {
+              const secs = Math.round((new Date(c.updated_at) - new Date(c.connected_at)) / 1000);
+              if (secs > 0) {
+                const m = Math.floor(secs / 60), s = secs % 60;
+                duration = m > 0 ? m + "m " + s + "s" : s + "s";
+              }
+            } else if (st === "active" && c.connected_at) {
+              duration = '<span class="pill pill-active">live</span>';
+            }
+            const transcripts = c.transcripts || [];
+            const lastMsg = transcripts.length > 0 ? esc((transcripts[transcripts.length - 1].text || "").slice(0, 60)) : "<em style='color:var(--muted)'>none</em>";
+            return `<tr>
+              <td style="font-family:'JetBrains Mono',monospace;color:var(--primary-2);font-size:0.82rem;">${esc(c.call_id || "-")}</td>
+              <td>${user}</td>
+              <td>${dirIcon} ${dir}</td>
+              <td><span class="pill ${cls}">${st}</span></td>
+              <td>${duration}</td>
+              <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${lastMsg}</td>
+              <td style="font-size:0.8rem;color:var(--muted);">${ts}</td>
+            </tr>`;
+          }).join("");
+        } catch (e) {
+          tbody.innerHTML = '<tr><td colspan="7" style="color:var(--err);">Failed: ' + e + '</td></tr>';
+        }
+      }
+
+      // --- Settings ---
+      async function loadSettings() {
+        const grid = document.getElementById("settings-grid");
+        try {
+          const r = await fetchJson("/api/v1/health", { method: "GET" }, 5000);
+          if (!r.ok) { grid.innerHTML = '<p style="color:var(--err);">Failed to load settings.</p>'; return; }
+          const h = r.body;
+          const items = [
+            { title: "Language", value: h.language || "-" },
+            { title: "LLM Model", value: (h.openai?.model) || "-" },
+            { title: "Gemini Live Model", value: (h.gemini_live?.model) || "-" },
+            { title: "Gemini Voice", value: (h.gemini_live?.voice) || "-" },
+            { title: "TTS Provider", value: (h.tts?.provider) || "-" },
+            { title: "TTS Enabled", value: h.tts?.enabled ? "Yes" : "No" },
+            { title: "STT Provider", value: (h.stt?.provider) || "-" },
+            { title: "Wake Word Prefix", value: (h.wake_word?.prefix) || "-" },
+            { title: "Calendar", value: h.calendar?.ready ? "Connected" : "Not connected" },
+          ];
+          grid.innerHTML = items.map(i => `
+            <div class="stat-card">
+              <span class="stat-title">${esc(i.title)}</span>
+              <span class="stat-value">${esc(String(i.value))}</span>
+            </div>
+          `).join("");
+        } catch (e) {
+          grid.innerHTML = '<p style="color:var(--err);">Error: ' + e + '</p>';
+        }
+      }
+
+      async function loadReminders() {
+        const tbody = document.getElementById("reminders-body");
+        try {
+          const r = await fetchJson("/api/v1/reminders", { method: "GET" }, 5000);
+          const reminders = Array.isArray(r.body) ? r.body : [];
+          if (reminders.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px;">No reminders.</td></tr>';
+            return;
+          }
+          tbody.innerHTML = reminders.map(rem => {
+            const st = (rem.status || "unknown").toLowerCase();
+            let cls = "pill-ended";
+            if (st === "scheduled") cls = "pill-active";
+            else if (st === "sent") cls = "pill-completed";
+            const summary = esc(rem.summary || rem.event_id || "-");
+            const at = rem.remind_at ? new Date(rem.remind_at).toLocaleString() : "-";
+            const cancelBtn = st === "scheduled"
+              ? `<button onclick="cancelReminder('${esc(rem.event_id)}')" style="font-size:0.75rem;padding:3px 8px;color:var(--err);">Cancel</button>`
+              : "-";
+            return `<tr>
+              <td>${summary}</td>
+              <td style="font-size:0.85rem;">${at}</td>
+              <td><span class="pill ${cls}">${st}</span></td>
+              <td>${cancelBtn}</td>
+            </tr>`;
+          }).join("");
+        } catch (e) {
+          tbody.innerHTML = '<tr><td colspan="4" style="color:var(--err);">Failed: ' + e + '</td></tr>';
+        }
+      }
+
+      async function cancelReminder(eventId) {
+        if (!confirm("Cancel this reminder?")) return;
+        await fetchJson(`/api/v1/reminders/${encodeURIComponent(eventId)}`, { method: "DELETE" }, 5000);
+        loadReminders();
+      }
+
       refreshDashboard();
       loadInitialDebugLog();
       connectDebugWs();
       loadWakeWordActions();
       loadVoiceConfig();
       loadContacts();
+      loadCallHistory();
+      loadSettings();
+      loadReminders();
       setInterval(refreshDashboard, 5000);
+      setInterval(loadCallHistory, 10000);
     </script>
   </body>
 </html>

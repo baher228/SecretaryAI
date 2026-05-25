@@ -10,6 +10,8 @@ from time import monotonic
 from typing import Any
 
 from secretary_ai.core.config import Settings
+from secretary_ai.core.datetime_utils import humanize_iso_datetime, parse_event_start, parse_iso
+from secretary_ai.core.text_utils import normalize_text
 from secretary_ai.domain.models import (
     AgentLiveRespondResponse,
     AgentAnalyzeResponse,
@@ -266,7 +268,7 @@ class SecretaryService:
 
     @staticmethod
     def _normalize_chat_reply(reply: str) -> str:
-        text = " ".join((reply or "").split()).strip()
+        text = normalize_text(reply)
         if not text:
             return ""
 
@@ -1528,12 +1530,17 @@ class SecretaryService:
             await asyncio.sleep(scan_seconds)
 
     async def _calendar_worker_loop(self) -> None:
-        poll_seconds = max(0.5, float(self.settings.calendar_worker_poll_seconds))
+        fast_poll = max(0.5, float(self.settings.calendar_worker_poll_seconds))
+        idle_poll = min(max(fast_poll * 5, 15.0), 30.0)
         batch_size = max(1, int(self.settings.calendar_worker_batch_size))
 
         while True:
+            had_work = False
             try:
                 queue_result = await self.calendar.process_queue(max_items=batch_size)
+                processed = (queue_result or {}).get("results")
+                if isinstance(processed, list) and len(processed) > 0:
+                    had_work = True
                 await self._maybe_schedule_reminders_from_queue_result(queue_result)
 
                 refresh_interval = max(20.0, float(self.settings.calendar_refresh_interval_seconds))
@@ -1553,7 +1560,7 @@ class SecretaryService:
                 raise
             except Exception:
                 logger.warning("Calendar worker loop iteration failed", exc_info=True)
-            await asyncio.sleep(poll_seconds)
+            await asyncio.sleep(fast_poll if had_work else idle_poll)
 
     def _load_reminder_state(self) -> dict[str, dict[str, Any]]:
         try:
@@ -1793,20 +1800,7 @@ class SecretaryService:
             return True
         return source == "calendar_reminder"
 
-    @staticmethod
-    def _parse_event_start(event: dict[str, Any]) -> datetime | None:
-        raw = str(event.get("start") or "").strip()
-        if not raw:
-            return None
-        if len(raw) == 10 and raw.count("-") == 2:
-            raw = f"{raw}T09:00:00+00:00"
-        try:
-            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-            if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=timezone.utc)
-            return parsed.astimezone(timezone.utc)
-        except Exception:
-            return None
+    _parse_event_start = staticmethod(parse_event_start)
 
     def _cleanup_generated_audio_files_if_needed(self) -> None:
         if not self.settings.audio_cleanup_enabled:
@@ -1920,7 +1914,7 @@ class SecretaryService:
 
     @staticmethod
     def _extract_time_phrase(transcript: str) -> str | None:
-        text = " ".join((transcript or "").split()).strip().lower()
+        text = normalize_text(transcript, lowercase=True)
         if not text:
             return None
         match = re.search(r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b", text)
@@ -1955,7 +1949,7 @@ class SecretaryService:
         if (datetime.now(timezone.utc) - completed_at).total_seconds() > 15 * 60:
             return None
 
-        lower = " ".join((transcript or "").split()).strip().lower()
+        lower = normalize_text(transcript, lowercase=True)
         if "tomorrow" in lower:
             day_hint = "tomorrow"
         else:
@@ -2034,35 +2028,18 @@ class SecretaryService:
             return f"I could not schedule it yet: {detail}"
         return "I could not schedule it yet. Please repeat with exact date and time."
 
-    @staticmethod
-    def _humanize_iso_datetime(value: str) -> str:
-        if not value:
-            return ""
-        try:
-            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-            if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=timezone.utc)
-            local = parsed.astimezone()
-            day = local.strftime("%A")
-            now = datetime.now(local.tzinfo).date()
-            if local.date() == now:
-                day = "today"
-            elif local.date() == (now + timedelta(days=1)):
-                day = "tomorrow"
-            return f"{day} at {local.strftime('%I:%M %p').lstrip('0')}"
-        except Exception:
-            return ""
+    _humanize_iso_datetime = staticmethod(humanize_iso_datetime)
 
     @staticmethod
     def _looks_like_background_announcement(transcript: str) -> bool:
-        text = " ".join((transcript or "").split()).strip().lower()
+        text = normalize_text(transcript, lowercase=True)
         if not text:
             return False
         return any(m in text for m in SecretaryService._BACKGROUND_MARKERS)
 
     @staticmethod
     def _should_ignore_live_snippet(transcript: str) -> bool:
-        text = " ".join((transcript or "").split()).strip().lower()
+        text = normalize_text(transcript, lowercase=True)
         if not text:
             return True
 
@@ -2110,7 +2087,7 @@ class SecretaryService:
 
     @staticmethod
     def _is_low_quality_snippet(text: str) -> bool:
-        normalized = " ".join((text or "").split()).strip()
+        normalized = normalize_text(text)
         if len(normalized) < 4:
             return True
         words = [w for w in re.split(r"\s+", normalized) if w]
@@ -2127,7 +2104,7 @@ class SecretaryService:
         transcript: str,
         speak_response: bool,
     ) -> AgentLiveRespondResponse:
-        normalized = " ".join((transcript or "").split()).strip().lower()
+        normalized = normalize_text(transcript, lowercase=True)
         fingerprint = hashlib.sha1(normalized.encode("utf-8", "ignore")).hexdigest()[:16]
         existing = self._reminder_flow_state.get(call_id, {})
 
@@ -2274,7 +2251,7 @@ class SecretaryService:
             tmp = path.with_suffix(path.suffix + ".tmp")
             tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
             tmp.replace(path)
-            self.template_matcher = LiveTemplateMatcher(self.settings)
+            self.template_matcher.reload()
             self.memory.append_long_term(
                 "predictive_template_update",
                 {
@@ -2316,8 +2293,8 @@ class SecretaryService:
 
     @staticmethod
     def _extract_new_text(previous: str, current: str) -> str:
-        prev = " ".join((previous or "").split()).strip()
-        cur = " ".join((current or "").split()).strip()
+        prev = normalize_text(previous)
+        cur = normalize_text(current)
         if not cur:
             return ""
         if not prev:
@@ -2336,7 +2313,7 @@ class SecretaryService:
 
     @staticmethod
     def _infer_route_points(transcript: str) -> tuple[str, str]:
-        text = " ".join((transcript or "").split()).strip()
+        text = normalize_text(transcript)
         if not text:
             return "", ""
 
@@ -2365,14 +2342,6 @@ class SecretaryService:
     def _now_iso() -> str:
         return datetime.now(timezone.utc).isoformat()
 
-    @staticmethod
-    def _parse_iso(value: str) -> datetime | None:
-        try:
-            parsed = datetime.fromisoformat(value)
-        except Exception:
-            return None
-        if parsed.tzinfo is None:
-            return parsed.replace(tzinfo=timezone.utc)
-        return parsed.astimezone(timezone.utc)
+    _parse_iso = staticmethod(parse_iso)
 
 

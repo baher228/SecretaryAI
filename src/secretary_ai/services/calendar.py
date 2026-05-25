@@ -7,6 +7,8 @@ import re
 from typing import Any
 
 from secretary_ai.core.config import Settings
+from secretary_ai.core.datetime_utils import parse_iso as _shared_parse_iso
+from secretary_ai.core.text_utils import normalize_text
 from secretary_ai.core.locales import (
     CALENDAR_CREATE_KEYWORDS,
     CALENDAR_DATETIME_FORMAT,
@@ -569,8 +571,7 @@ class CalendarService:
         return when_local.astimezone(timezone.utc)
 
     def _mutation_signature(self, text: str, start: datetime | None) -> str:
-        normalized = " ".join((text or "").lower().split())
-        normalized = re.sub(r"[^\w: ]+", "", normalized)
+        normalized = re.sub(r"[^\w: ]+", "", normalize_text(text, lowercase=True))
         if start is not None:
             rounded = start.replace(second=0, microsecond=0).isoformat()
             return f"{normalized}|{rounded}"
@@ -640,15 +641,7 @@ class CalendarService:
         time_label = local_value.strftime(time_fmt).lstrip("0") if "%I" in time_fmt else local_value.strftime(time_fmt)
         return t(CALENDAR_DATETIME_FORMAT, lang).format(day=day_label, time=time_label)
 
-    @staticmethod
-    def _parse_iso_datetime(value: str) -> datetime | None:
-        try:
-            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-            if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=timezone.utc)
-            return parsed.astimezone(timezone.utc)
-        except Exception:
-            return None
+    _parse_iso_datetime = staticmethod(_shared_parse_iso)
 
     def _get_service(self):
         if self._service is not None:

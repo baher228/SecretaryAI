@@ -5,6 +5,7 @@ from typing import Any
 
 from secretary_ai.core.config import Settings
 from secretary_ai.core.locales import get_templates
+from secretary_ai.core.text_utils import normalize_text
 
 
 _DEFAULT_TEMPLATES = [
@@ -249,10 +250,15 @@ class LiveTemplateMatcher:
         self._locale_defaults = get_templates(self.settings.language)
         self.templates = self._load_templates()
 
+    def reload(self) -> None:
+        """Re-read templates from disk without re-instantiating the matcher."""
+        self._locale_defaults = get_templates(self.settings.language)
+        self.templates = self._load_templates()
+
     def match(self, transcript: str) -> dict[str, Any] | None:
         if not self.settings.agent_live_template_enabled:
             return None
-        text = " ".join((transcript or "").split()).strip().lower()
+        text = normalize_text(transcript, lowercase=True)
         if not text:
             return None
 
