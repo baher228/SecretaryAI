@@ -3,7 +3,8 @@ from secretary_ai.services.calendar import CalendarService
 
 
 def test_extract_datetime_from_text_parses_common_time() -> None:
-    service = CalendarService(Settings(calendar_enabled=True))
+    # Use UTC timezone so the parsed time doesn't get shifted.
+    service = CalendarService(Settings(calendar_enabled=True, calendar_timezone="UTC"))
     parsed = service._extract_datetime_from_text("schedule meeting tomorrow at 3:30 pm")
     assert parsed is not None
     assert parsed.hour == 15
@@ -11,7 +12,7 @@ def test_extract_datetime_from_text_parses_common_time() -> None:
 
 
 def test_extract_datetime_from_text_parses_dot_time_without_ampm() -> None:
-    service = CalendarService(Settings(calendar_enabled=True))
+    service = CalendarService(Settings(calendar_enabled=True, calendar_timezone="UTC"))
     parsed = service._extract_datetime_from_text("set a reminder today at 11.35")
     assert parsed is not None
     assert parsed.hour == 11

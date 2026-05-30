@@ -3,16 +3,20 @@ from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
 import hashlib
 import json
+import logging
 from pathlib import Path
 import re
 from time import monotonic
 from typing import Any
 
 from secretary_ai.core.config import Settings
+from secretary_ai.core.datetime_utils import humanize_iso_datetime, parse_event_start, parse_iso
+from secretary_ai.core.text_utils import normalize_text
 from secretary_ai.domain.models import (
     AgentLiveRespondResponse,
     AgentAnalyzeResponse,
     AgentReplyResponse,
+    IntentType,
     ArchitectureOverview,
     CalendarCacheResponse,
     CalendarProcessResponse,
@@ -52,8 +56,11 @@ from secretary_ai.services.telegram_calls import TelegramCallService
 from secretary_ai.services.tts import TTSEngine
 from secretary_ai.services.maps import MapService
 from secretary_ai.services.booking import BookingService
+from secretary_ai.services.contacts import ContactBook
+from secretary_ai.services.wake_word import WakeWordEngine, WakeWordMatch
 from secretary_ai.services.gemini_live import GeminiLiveSession
-from secretary_ai.services.zai_client import extract_message, zai_chat_completion
+from secretary_ai.services.stt import STTEngine
+from secretary_ai.services.openai_client import close_client, extract_message, openai_chat_completion
 from secretary_ai.core.locales import (
     CHAT_RETRY_PROMPT,
     CHAT_SYSTEM_PROMPT,
@@ -69,9 +76,18 @@ from secretary_ai.core.locales import (
     t,
 )
 
+logger = logging.getLogger(__name__)
+
+MAX_ACTION_ITEMS = 8
+
+_RE_QUOTED = re.compile(r"['\"\u201c\u201d]([^'\"\u201c\u201d]{2,180})['\"\u201c\u201d]")
+_RE_LOCATION = re.compile(r"\b(?:in|near|around)\s+([A-Za-z][A-Za-z\s]{1,40})")
+_RE_TIME_AMPM = re.compile(r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b")
+_RE_NON_ALPHANUM = re.compile(r"[^\w: ]+")
+
 
 class SecretaryService:
-    """Main orchestrator: Z.AI reasoning + Telegram MTProto call provider."""
+    """Main orchestrator: OpenAI reasoning + Telegram MTProto call provider."""
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
@@ -84,6 +100,9 @@ class SecretaryService:
         self.tts = TTSEngine(settings)
         self.maps = MapService(settings)
         self.booking = BookingService(settings)
+        self.wake_word = WakeWordEngine(settings)
+        self.contacts = ContactBook(settings)
+        self.stt = STTEngine(settings)
         self.live_sessions: dict[str, dict[str, Any]] = {}
         self._auto_live_task: asyncio.Task | None = None
         self._calendar_worker_task: asyncio.Task | None = None
@@ -97,6 +116,8 @@ class SecretaryService:
 
     async def startup(self) -> None:
         await self.telegram.start()
+        await self.tts.prewarm()
+        await self._precache_template_audio()
         await self.calendar.refresh_cache()
         self.memory.prune_short_term(max_age_hours=24)
         self.memory.set_mid_term_upcoming(self.calendar.cache_snapshot(limit=50).get("events", []))
@@ -106,84 +127,114 @@ class SecretaryService:
         if self.settings.calendar_worker_enabled:
             self._calendar_worker_task = asyncio.create_task(self._calendar_worker_loop())
 
+    async def _precache_template_audio(self) -> None:
+        """Pre-synthesize common template replies so the first call is instant."""
+        lang = self.settings.language
+        phrases = {
+            "reminder_ack": t(REMINDER_ACK, lang),
+            "reminder_result_available": t(REMINDER_RESULT_FREE, lang),
+            "reminder_result_busy": t(REMINDER_RESULT_BUSY, lang),
+            "reminder_result_partial": t(REMINDER_RESULT_PARTIAL, lang),
+        }
+        for key, text in phrases.items():
+            if key in self._template_audio_cache:
+                continue
+            try:
+                path, status = await self.tts.synthesize(text, call_id=f"template-{key}")
+                if path and status in {"generated", "cached"}:
+                    self._template_audio_cache[key] = path
+            except Exception:
+                logger.debug("Failed to pre-cache template %s", key)
+
     async def shutdown(self) -> None:
         await self._stop_auto_live_task()
         await self._stop_calendar_worker_task()
         await self._stop_all_live_sessions()
         await self.telegram.stop()
+        await close_client()
 
     def architecture_overview(self) -> ArchitectureOverview:
         return ArchitectureOverview(
             name="Secretary AI",
             mode="telegram_mtproto_mvp",
             components=[
-                "API Layer (FastAPI routes)",
+                "API Layer (FastAPI routes + WebSocket live agent)",
                 "Telegram MTProto (Telethon user session)",
                 "Telegram Calls Engine (py-tgcalls private calls)",
                 "AI Orchestrator (intent + response + actions)",
                 "Gemini Live Bridge (audio-to-audio via Gemini 3.1 Flash Live)",
                 "Greeting Cache (instant playback of cached Gemini greeting)",
+                "TTS Engine (Silero Russian-native + Edge TTS fallback)",
+                "Wake Word Engine (configurable trigger phrases → action routing)",
+                "Booking Search (Tavily-powered: restaurants, hotels, events, travel)",
+                "Contact Book (caller names, preferences, greeting personalization)",
+                "Call Summary Notifications (post-call transcript via Telegram)",
+                "Calendar (Google Calendar OAuth 2.0, queue + planner + reminders)",
+                "Three-tier Memory (short-term, mid-term, long-term JSONL)",
+                "Live Debug Logger (JSONL with 10 MB rotation + WebSocket stream)",
                 "Secretary Orchestrator (this service)",
-                "Z.AI Reasoning Endpoint (text chat)",
-                "Storage Layer (in-memory MVP)",
+                "OpenAI/Pydantic Gateway (text chat + agent reasoning)",
             ],
             notes=(
-                "Experimental hackathon stack using a real Telegram user account session. "
-                "Designed for easy provider swap to Twilio/others later."
+                "Production-ready Telegram voice secretary. Uses a real Telegram "
+                "user account session. Designed for easy provider swap to "
+                "Twilio/others later."
             ),
         )
 
     async def check_model_connection(self, prompt: str) -> ModelCheckResponse:
-        if not self.settings.zai_api_key:
+        if not self.settings.openai_api_key:
             return ModelCheckResponse(
-                model=self.settings.zai_model,
+                model=self.settings.openai_model,
                 connected=False,
-                detail="Missing ZAI_API_KEY in environment.",
+                detail="Missing OPENAI_API_KEY in environment.",
             )
         payload = {
-            "model": self.settings.zai_model,
+            "model": self.settings.openai_model,
             "messages": [
                 {"role": "system", "content": t(MODEL_CHECK_PROMPT, self.settings.language)},
                 {"role": "user", "content": prompt},
             ],
             "temperature": 0.1,
-            "max_tokens": 100,
+            "max_completion_tokens": 100,
         }
-        result = await zai_chat_completion(self.settings, payload)
+        result = await openai_chat_completion(self.settings, payload)
         if result.get("error"):
             return ModelCheckResponse(
-                model=self.settings.zai_model,
+                provider="openai",
+                model=self.settings.openai_model,
                 connected=False,
                 detail=result["error"],
                 output=result.get("raw"),
             )
         message = extract_message(result["data"])
         return ModelCheckResponse(
-            model=self.settings.zai_model,
+            provider="openai",
+            model=self.settings.openai_model,
             connected=True,
-            detail="Connected to Z.AI GLM successfully.",
+            detail="Connected to OpenAI successfully.",
             output=message.get("content"),
         )
 
     async def chat_direct(self, payload: ChatRequest) -> ChatResponse:
-        """Direct conversational chat with Z.AI - no call context, plain text reply."""
-        chat_model = self.settings.zai_chat_model or self.settings.zai_model
+        """Direct conversational chat via OpenAI - no call context, plain text reply."""
+        chat_model = self.settings.openai_chat_model or self.settings.openai_model
         system_prompt = t(CHAT_SYSTEM_PROMPT, self.settings.language)
         messages: list[dict] = [{"role": "system", "content": system_prompt}]
         for msg in payload.history[-20:]:
             messages.append({"role": msg.role, "content": msg.content})
         messages.append({"role": "user", "content": payload.message})
 
-        if not self.settings.zai_api_key:
-            reply = "ZAI_API_KEY is not configured. Please add it to your .env file."
+        if not self.settings.openai_api_key:
+            reply = "OPENAI_API_KEY is not configured. Please add it to your .env file."
         else:
             api_payload = {
                 "model": chat_model,
                 "messages": messages,
                 "temperature": self.settings.chat_temperature,
-                "max_tokens": self.settings.chat_max_tokens,
+                "max_completion_tokens": self.settings.chat_max_tokens,
             }
-            result = await zai_chat_completion(self.settings, api_payload)
+            result = await openai_chat_completion(self.settings, api_payload)
             if result.get("error"):
                 reply = f"AI error: {result['error']}"
             else:
@@ -201,9 +252,9 @@ class SecretaryService:
                         "model": chat_model,
                         "messages": retry_messages,
                         "temperature": 0.1,
-                        "max_tokens": max(18, min(48, int(self.settings.chat_max_tokens))),
+                        "max_completion_tokens": max(18, min(48, int(self.settings.chat_max_tokens))),
                     }
-                    retry_result = await zai_chat_completion(self.settings, retry_payload)
+                    retry_result = await openai_chat_completion(self.settings, retry_payload)
                     if not retry_result.get("error"):
                         retry_msg = extract_message(retry_result["data"])
                         reply = self._extract_text_from_content(retry_msg.get("content"))
@@ -224,7 +275,7 @@ class SecretaryService:
 
     @staticmethod
     def _normalize_chat_reply(reply: str) -> str:
-        text = " ".join((reply or "").split()).strip()
+        text = normalize_text(reply)
         if not text:
             return ""
 
@@ -242,7 +293,7 @@ class SecretaryService:
         has_meta = any(marker in lower for marker in meta_markers)
 
         if has_meta:
-            quoted = re.findall(r"['\"“”]([^'\"“”]{2,180})['\"“”]", text)
+            quoted = _RE_QUOTED.findall(text)
             if quoted:
                 candidate = quoted[-1].strip()
                 if candidate:
@@ -449,6 +500,20 @@ class SecretaryService:
                 speak_response=speak_response,
             )
 
+        # --- Wake-word detection ---
+        wake_match = self.wake_word.detect(transcript)
+        if wake_match is not None:
+            self.debug.log(call_id, "wake_word_detected", wake_match.to_dict())
+            wake_response = await self._handle_wake_word_action(
+                call_id=call_id,
+                transcript=transcript,
+                wake_match=wake_match,
+                context=context,
+                speak_response=speak_response,
+            )
+            if wake_response is not None:
+                return wake_response
+
         calendar_turn = await self.calendar.quick_reply_or_enqueue(
             call_id=call_id,
             transcript=transcript,
@@ -503,7 +568,7 @@ class SecretaryService:
             analysis = AgentAnalyzeResponse(
                 call_id=call_id,
                 reply=selected_reply,
-                model=self.settings.zai_model,
+                model=self.settings.openai_model,
             )
             action_items: list[str] = []
 
@@ -521,13 +586,31 @@ class SecretaryService:
                     if bool(queued.get("queued")):
                         action_items.append(f"calendar_queue:{queued.get('task_id')}")
 
+                booking_action = str(template_hit.get("booking_search") or "").strip()
+                if booking_action:
+                    # Reuse earlier wake_match to avoid redundant regex work.
+                    booking_payload = wake_match.payload if wake_match else ""
+                    booking_result = await self._handle_booking_search(
+                        call_id=call_id,
+                        action=booking_action,
+                        search_payload=booking_payload,
+                    )
+                    if booking_result:
+                        analysis.reply = str(booking_result.get("voice_summary") or analysis.reply)
+                        action_items.append(f"booking_search:{booking_action}")
+                        analysis.extracted_fields = {
+                            **dict(analysis.extracted_fields or {}),
+                            "booking_category": str(booking_result.get("category") or ""),
+                            "booking_results_count": len(booking_result.get("results") or []),
+                        }
+
             if bool(calendar_turn.get("queued")):
                 action_items.append(f"calendar_queue:{calendar_turn.get('task_id')}")
             processed_status = str(calendar_turn.get("processed_status") or "").strip()
             if processed_status:
                 action_items.append(f"calendar_processed:{processed_status}")
 
-            analysis.action_items = action_items[:8]
+            analysis.action_items = action_items[:MAX_ACTION_ITEMS]
             self.memory.add_short_term_turn(call_id=call_id, transcript=transcript, reply=analysis.reply)
             self.memory.append_long_term(
                 "live_turn_template",
@@ -543,21 +626,24 @@ class SecretaryService:
 
             if template_id:
                 self._mark_template_emitted(call_id, template_id, transcript)
-                if template_id in self._template_audio_cache:
+                is_booking_template = bool(
+                    template_hit and str(template_hit.get("booking_search") or "").strip()
+                )
+                if not is_booking_template and template_id in self._template_audio_cache:
                     tts_audio_path = self._template_audio_cache[template_id]
                     tts_status = "cached"
                 else:
                     tts_audio_path, tts_status = await self.tts.synthesize(analysis.reply, call_id=f"template-{template_id}")
-                    if tts_audio_path:
+                    if tts_audio_path and not is_booking_template:
                         self._template_audio_cache[template_id] = tts_audio_path
 
-                call_audio_status = "not_streamed"
+                call_audio_status: str | None = None
                 if speak_response and tts_audio_path:
                     stream_result = await self.telegram.stream_audio_out(call_id, tts_audio_path)
                     call_audio_status = str(stream_result.get("status"))
                     self._apply_live_tts_pause(call_id, call_audio_status)
 
-                response = AgentLiveRespondResponse(
+                return AgentLiveRespondResponse(
                     call_id=call_id,
                     transcript=transcript,
                     reply=analysis.reply,
@@ -572,7 +658,6 @@ class SecretaryService:
                     tts_status=tts_status,
                     call_audio_status=call_audio_status,
                 )
-                return response
         else:
             try:
                 analysis = await asyncio.wait_for(
@@ -586,7 +671,7 @@ class SecretaryService:
                 analysis = AgentAnalyzeResponse(
                     call_id=call_id,
                     reply=timeout_reply,
-                    model=self.settings.zai_model,
+                    model=self.settings.openai_model,
                     action_items=["latency_fallback_suppressed" if not timeout_reply else "latency_fallback"],
                 )
 
@@ -600,21 +685,58 @@ class SecretaryService:
         if not str(analysis.reply or "").strip():
             analysis.reply = "Could you repeat that in one short sentence?"
             analysis.action_items = list(analysis.action_items) + ["empty_reply_fallback"]
-            analysis.action_items = analysis.action_items[:8]
+            analysis.action_items = analysis.action_items[:MAX_ACTION_ITEMS]
 
-        tts_audio_path: str | None = None
-        tts_status: str | None = None
-        call_audio_status: str | None = None
-        if speak_response:
-            tts_audio_path, tts_status = await self.tts.synthesize(analysis.reply, call_id=call_id)
-            if tts_audio_path:
-                stream_result = await self.telegram.stream_audio_out(call_id, tts_audio_path)
-                call_audio_status = str(stream_result.get("status"))
-                self._apply_live_tts_pause(call_id, call_audio_status)
-            else:
-                call_audio_status = "not_streamed"
+        response = await self._build_live_response(
+            call_id=call_id,
+            transcript=transcript,
+            analysis=analysis,
+            speak_response=speak_response,
+        )
 
-        response = AgentLiveRespondResponse(
+        self._fire_booking_sidecar(analysis)
+        self.memory.add_short_term_turn(call_id=call_id, transcript=transcript, reply=response.reply)
+        self.memory.append_long_term(
+            "live_turn",
+            {
+                "call_id": call_id,
+                "transcript": transcript,
+                "reply": response.reply,
+                "intent": response.intent.value,
+                "confidence": response.confidence,
+            },
+        )
+        return response
+
+    async def _speak_and_stream(
+        self,
+        call_id: str,
+        text: str,
+        speak: bool,
+    ) -> tuple[str | None, str | None, str | None]:
+        """Synthesize TTS and stream to call. Returns (audio_path, tts_status, call_audio_status)."""
+        if not speak or not text:
+            return None, None, None
+        tts_audio_path, tts_status = await self.tts.synthesize(text, call_id=call_id)
+        if not tts_audio_path:
+            return None, tts_status, "not_streamed"
+        stream_result = await self.telegram.stream_audio_out(call_id, tts_audio_path)
+        call_audio_status = str(stream_result.get("status"))
+        self._apply_live_tts_pause(call_id, call_audio_status)
+        return tts_audio_path, tts_status, call_audio_status
+
+    async def _build_live_response(
+        self,
+        call_id: str,
+        transcript: str,
+        analysis: AgentAnalyzeResponse,
+        speak_response: bool,
+    ) -> AgentLiveRespondResponse:
+        """Build a live response with optional TTS."""
+        tts_audio_path, tts_status, call_audio_status = await self._speak_and_stream(
+            call_id, analysis.reply, speak_response,
+        )
+        return AgentLiveRespondResponse(
             call_id=call_id,
             transcript=transcript,
             reply=analysis.reply,
@@ -629,29 +751,25 @@ class SecretaryService:
             tts_status=tts_status,
             call_audio_status=call_audio_status,
         )
-        
-        # Async process bookings
-        raw_intent = analysis.intent.value
-        if raw_intent == "search_booking":
-            location = analysis.extracted_fields.get("location", "London")
-            booking_type = analysis.extracted_fields.get("topic", "restaurants")
-            if "hotel" in booking_type:
-                asyncio.create_task(self.booking.search_hotels(location, "2026-05-01", "2026-05-05"))
-            else:
-                asyncio.create_task(self.booking.search_restaurants(location))
 
-        self.memory.add_short_term_turn(call_id=call_id, transcript=transcript, reply=response.reply)
-        self.memory.append_long_term(
-            "live_turn",
-            {
-                "call_id": call_id,
-                "transcript": transcript,
-                "reply": response.reply,
-                "intent": response.intent.value,
-                "confidence": response.confidence,
-            },
-        )
-        return response
+    def _fire_booking_sidecar(self, analysis: AgentAnalyzeResponse) -> None:
+        """Fire-and-forget booking search if intent matches."""
+        if analysis.intent.value != "search_booking":
+            return
+        fields = analysis.extracted_fields or {}
+        location = str(fields.get("location") or "London")
+        booking_type = str(fields.get("topic") or "restaurants")
+
+        async def _safe_booking() -> None:
+            try:
+                if "hotel" in booking_type:
+                    await self.booking.search_hotels(location)
+                else:
+                    await self.booking.search_restaurants(location)
+            except Exception:
+                logger.debug("Background booking search failed", exc_info=True)
+
+        asyncio.create_task(_safe_booking())
 
     async def analyze_agent_turn(
         self,
@@ -660,7 +778,8 @@ class SecretaryService:
         context: dict[str, Any],
     ) -> AgentAnalyzeResponse:
         self.telegram.append_transcript(call_id, transcript, metadata=context)
-        self.memory.add_short_term_turn(call_id=call_id, transcript=transcript)
+        # NOTE: short_term memory is written by the caller (live_agent_respond)
+        # with the reply attached, avoiding duplicate writes.
         live_mode = str((context or {}).get("source") or "") == "telegram_live_loop"
         if live_mode:
             analysis = await self.ai.analyze_turn_live(call_id=call_id, transcript=transcript, context=context)
@@ -678,6 +797,162 @@ class SecretaryService:
                 call["handoff_reason"] = analysis.transfer_reason
 
         return analysis
+
+    async def _handle_wake_word_action(
+        self,
+        call_id: str,
+        transcript: str,
+        wake_match: WakeWordMatch,
+        context: dict[str, Any],
+        speak_response: bool,
+    ) -> AgentLiveRespondResponse | None:
+        """Route a wake-word match to the correct action handler.
+
+        Returns an ``AgentLiveRespondResponse`` if handled, else ``None``
+        (lets the normal template/LLM flow proceed).
+        """
+        action = wake_match.action
+        payload = wake_match.payload
+
+        # Booking search actions
+        if action in ("find_restaurant", "find_hotel", "find_event", "find_travel", "plan_evening"):
+            booking_result = await self._handle_booking_search(
+                call_id=call_id,
+                action=action,
+                search_payload=payload,
+            )
+            voice = str(booking_result.get("voice_summary") or "Searching now, one moment.")
+            return await self._fast_fallback_response(
+                call_id=call_id,
+                snippet=transcript,
+                reply=voice,
+                action_item=f"wake_word_booking:{action}",
+                speak_response=speak_response,
+            )
+
+        # Calendar scheduling
+        if action == "schedule":
+            calendar_turn = await self.calendar.quick_reply_or_enqueue(
+                call_id=call_id,
+                transcript=transcript,
+                context={**context, "source": "wake_word_schedule"},
+            )
+            reply = str(calendar_turn.get("reply") or "I'll schedule that for you.")
+            return await self._fast_fallback_response(
+                call_id=call_id,
+                snippet=transcript,
+                reply=reply,
+                action_item=f"wake_word_schedule:queued={calendar_turn.get('queued')}",
+                speak_response=speak_response,
+            )
+
+        # Reminder
+        if action == "remind":
+            return await self._handle_reminder_flow(
+                call_id=call_id,
+                transcript=transcript,
+                speak_response=speak_response,
+            )
+
+        # Directions
+        if action == "directions":
+            analysis = AgentAnalyzeResponse(
+                call_id=call_id,
+                reply="Calculating route now.",
+                model=self.settings.openai_model,
+                intent=IntentType.PLAN_ROUTE,
+                extracted_fields={"destination": payload} if payload else {},
+            )
+            analysis = await self._resolve_route_intent(
+                call_id=call_id,
+                transcript=transcript,
+                context=context,
+                analysis=analysis,
+            )
+            return await self._fast_fallback_response(
+                call_id=call_id,
+                snippet=transcript,
+                reply=analysis.reply,
+                action_item="wake_word_directions",
+                speak_response=speak_response,
+            )
+
+        # Memory store (remember)
+        if action == "remember":
+            fact_record = self.memory.add_user_fact_if_requested(call_id=call_id, transcript=transcript)
+            if fact_record:
+                return await self._fast_fallback_response(
+                    call_id=call_id,
+                    snippet=transcript,
+                    reply=f"Got it. I wrote it down: {fact_record.get('fact')}",
+                    action_item="wake_word_remember",
+                    speak_response=speak_response,
+                )
+
+        return None
+
+    @staticmethod
+    def _extract_location_from_payload(text: str) -> tuple[str, str]:
+        """Parse 'in <location>' or 'near <location>' from payload text.
+
+        Returns ``(remaining_payload, location)`` where *location* may be
+        empty if no pattern matched.
+        """
+        m = _RE_LOCATION.search(text)
+        if not m:
+            return text, ""
+        location = m.group(1).strip()
+        remaining = (text[: m.start()] + text[m.end() :]).strip()
+        return remaining, location
+
+    async def _handle_booking_search(
+        self,
+        call_id: str,
+        action: str,
+        search_payload: str = "",
+    ) -> dict[str, Any]:
+        """Execute a booking search and log the result."""
+        try:
+            remaining, location = self._extract_location_from_payload(search_payload)
+            extracted: dict[str, Any] = {}
+            if location:
+                extracted["location"] = location
+            result = await self.booking.search_by_action(
+                action=action,
+                payload=remaining,
+                extracted=extracted if extracted else None,
+            )
+            self.debug.log(
+                call_id,
+                "booking_search_result",
+                {
+                    "action": action,
+                    "category": result.get("category"),
+                    "results_count": len(result.get("results") or []),
+                    "voice_summary": str(result.get("voice_summary") or "")[:200],
+                },
+            )
+            self.memory.append_long_term(
+                "booking_search",
+                {
+                    "call_id": call_id,
+                    "action": action,
+                    "category": result.get("category"),
+                    "results_count": len(result.get("results") or []),
+                },
+            )
+            return result
+        except Exception as exc:
+            self.debug.log(
+                call_id,
+                "booking_search_error",
+                {"action": action, "error": f"{type(exc).__name__}: {exc}"},
+            )
+            return {
+                "category": action,
+                "results": [],
+                "voice_summary": "I had trouble searching right now. Please try again.",
+            }
 
     async def get_call(self, call_id: str) -> dict[str, Any] | None:
         return self.telegram.get_call(call_id)
@@ -768,19 +1043,26 @@ class SecretaryService:
             destination=payload.destination,
             mode=payload.mode,
         )
+        _s = self._opt_str
+        eta_raw = route.get("eta_minutes")
         return MapRouteResponse(
             call_id=payload.call_id,
             status=str(route.get("status") or "error"),
-            detail=str(route.get("detail")) if route.get("detail") is not None else None,
-            origin=str(route.get("origin")) if route.get("origin") is not None else payload.origin,
-            destination=str(route.get("destination")) if route.get("destination") is not None else payload.destination,
-            mode=str(route.get("mode")) if route.get("mode") is not None else payload.mode,
-            eta_text=str(route.get("eta_text")) if route.get("eta_text") is not None else None,
-            eta_minutes=int(route.get("eta_minutes")) if route.get("eta_minutes") is not None else None,
-            distance_text=str(route.get("distance_text")) if route.get("distance_text") is not None else None,
-            map_url=str(route.get("map_url")) if route.get("map_url") is not None else None,
-            route_details=str(route.get("details")) if route.get("details") is not None else None,
+            detail=_s(route, "detail"),
+            origin=_s(route, "origin") or payload.origin,
+            destination=_s(route, "destination") or payload.destination,
+            mode=_s(route, "mode") or payload.mode,
+            eta_text=_s(route, "eta_text"),
+            eta_minutes=int(eta_raw) if eta_raw is not None else None,
+            distance_text=_s(route, "distance_text"),
+            map_url=_s(route, "map_url"),
+            route_details=_s(route, "details"),
         )
+
+    @staticmethod
+    def _opt_str(d: dict[str, Any], key: str) -> str | None:
+        v = d.get(key)
+        return str(v) if v is not None else None
 
     async def _resolve_route_intent(
         self,
@@ -809,7 +1091,7 @@ class SecretaryService:
         if not destination:
             analysis.reply = "Calculating route now. Please share the destination address or place name."
             analysis.action_items = list(analysis.action_items) + ["route_lookup_missing_destination"]
-            analysis.action_items = analysis.action_items[:8]
+            analysis.action_items = analysis.action_items[:MAX_ACTION_ITEMS]
             analysis.extracted_fields = {**extracted, "mode": mode}
             return analysis
         if not origin:
@@ -817,7 +1099,7 @@ class SecretaryService:
 
         analysis.reply = "Calculating route now."
         analysis.action_items = list(analysis.action_items) + ["route_lookup_started"]
-        analysis.action_items = analysis.action_items[:8]
+        analysis.action_items = analysis.action_items[:MAX_ACTION_ITEMS]
 
         route_response = await self.map_route(
             MapRouteRequest(
@@ -853,7 +1135,7 @@ class SecretaryService:
             )
             analysis.action_items = list(analysis.action_items) + ["route_lookup_failed"]
 
-        analysis.action_items = analysis.action_items[:8]
+        analysis.action_items = analysis.action_items[:MAX_ACTION_ITEMS]
         analysis.extracted_fields = {**extracted, **{k: v for k, v in route_fields.items() if v is not None}}
         return analysis
 
@@ -934,6 +1216,11 @@ class SecretaryService:
         self._reminder_flow_state.pop(call_id, None)
         self.memory.clear_short_term_call(call_id)
 
+        # Track call in contacts for personalization.
+        caller_id = str(call.get("target_user") or call.get("chat_id") or "")
+        if caller_id:
+            self.contacts.record_call(caller_id)
+
         call["live_agent"] = {
             "running": True,
             "started_at": session["started_at"],
@@ -982,17 +1269,23 @@ class SecretaryService:
             except Exception:
                 pass
 
+        started_mono = session.get("started_monotonic")
+        duration_seconds = round(monotonic() - started_mono, 1) if started_mono else None
+
         call = self.telegram.get_call(call_id)
         if call is not None:
             live = call.setdefault("live_agent", {})
             live["running"] = False
             live["stopped_at"] = self._now_iso()
+            if duration_seconds is not None:
+                live["duration_seconds"] = duration_seconds
 
+        self.debug.log(call_id, "live_stop", {"duration_seconds": duration_seconds})
         self.live_sessions.pop(call_id, None)
         return TelegramLiveAgentResponse(
             call_id=call_id,
             status="stopped",
-            detail="Telegram live agent loop stopped.",
+            detail=f"Telegram live agent loop stopped. Duration: {duration_seconds}s." if duration_seconds else "Telegram live agent loop stopped.",
             recording_path=str(session.get("recording_path") or ""),
             stt_status=str(session.get("last_stt_status") or "unknown"),
             speak_response=bool(session.get("speak_response", True)),
@@ -1008,7 +1301,9 @@ class SecretaryService:
                 detail="No active Telegram live agent loop for this call.",
             )
         responses_sent = int(session.get("responses_sent") or 0)
-        detail = f"Telegram live agent loop status fetched. responses_sent={responses_sent}."
+        started_mono = session.get("started_monotonic")
+        duration = round(monotonic() - started_mono, 1) if started_mono else 0
+        detail = f"responses_sent={responses_sent}, duration={duration}s."
         return TelegramLiveAgentStatusResponse(
             call_id=call_id,
             running=bool(session.get("running")),
@@ -1045,6 +1340,11 @@ class SecretaryService:
         async def audio_out_callback(wav_path: str) -> dict[str, Any]:
             return await self.telegram.stream_audio_out(call_id, wav_path)
 
+        # Build personalized caller hint from contact book.
+        call_record = self.telegram.get_call(call_id) or {}
+        caller_id = str(call_record.get("target_user") or call_record.get("chat_id") or "")
+        caller_hint = self.contacts.greeting_for(caller_id) if caller_id else None
+
         try:
             await gemini.run(
                 recording_path=recording_path,
@@ -1052,6 +1352,7 @@ class SecretaryService:
                 stop_check=stop_check,
                 debug_log=debug_log,
                 greeting_played=greeting_played,
+                caller_hint=caller_hint,
             )
         except asyncio.CancelledError:
             raise
@@ -1062,10 +1363,86 @@ class SecretaryService:
                 {"error": exc.__class__.__name__, "detail": str(exc)[:300]},
             )
         finally:
-            s = self.live_sessions.get(call_id)
+            s = self.live_sessions.pop(call_id, None)
+            started_at = ""
+            started_mono = 0.0
             if s is not None:
                 s["running"] = False
                 s["last_stt_status"] = "gemini_live_ended"
+                started_at = s.get("started_at", "")
+                started_mono = s.get("started_monotonic", 0.0)
+
+            # Build transcript from gemini session before it's garbage collected
+            transcript_in = list(gemini.transcript_in)
+            transcript_out = list(gemini.transcript_out)
+            duration_s = monotonic() - started_mono if started_mono else 0.0
+
+            # Get caller info from the Telegram call record
+            call_record = self.telegram.get_call(call_id) or {}
+            caller = call_record.get("target_user") or call_record.get("chat_id") or "Unknown"
+
+            # Free per-call ephemeral state
+            self.ai.clear_call(call_id)
+            self._template_reply_state.pop(call_id, None)
+            self._reminder_flow_state.pop(call_id, None)
+
+            async def _safe_summary() -> None:
+                try:
+                    await self._send_call_summary(
+                        call_id=call_id,
+                        transcript_in=transcript_in,
+                        transcript_out=transcript_out,
+                        caller=str(caller),
+                        duration_s=duration_s,
+                        started_at=started_at,
+                    )
+                except Exception:
+                    logger.debug("Call summary send failed for %s", call_id, exc_info=True)
+
+            asyncio.create_task(_safe_summary())
+
+    async def _send_call_summary(
+        self,
+        call_id: str,
+        transcript_in: list[str],
+        transcript_out: list[str],
+        caller: str,
+        duration_s: float,
+        started_at: str,
+    ) -> None:
+        """Generate and send a call summary notification via Telegram."""
+        if not self.settings.call_summary_enabled:
+            return
+        target = self.settings.call_summary_target or self.settings.reminder_target_user
+        if not target:
+            return
+
+        if not transcript_in and not transcript_out:
+            return
+
+        # Reconstruct conversation by alternating caller/secretary turns.
+        # Gemini Live transcripts naturally alternate: caller speaks, then
+        # the model responds, so zip-longest is the correct interleaving.
+        lines: list[str] = []
+        max_entries = max(len(transcript_in), len(transcript_out))
+        for i in range(min(max_entries, 30)):
+            if i < len(transcript_in) and transcript_in[i]:
+                lines.append(f"Caller: {transcript_in[i][:200]}")
+            if i < len(transcript_out) and transcript_out[i]:
+                lines.append(f"Secretary: {transcript_out[i][:200]}")
+
+        transcript_text = "\n".join(lines) if lines else "(no transcript captured)"
+        duration_min = round(duration_s / 60, 1) if duration_s > 0 else "?"
+
+        summary = (
+            f"📋 **Call Summary**\n"
+            f"Caller: {caller}\n"
+            f"Duration: {duration_min} min\n"
+            f"Time: {started_at}\n\n"
+            f"**Transcript:**\n{transcript_text}"
+        )
+
+        await self.telegram.send_message(target, summary)
 
     async def _stop_all_live_sessions(self) -> None:
         call_ids = list(self.live_sessions.keys())
@@ -1073,6 +1450,7 @@ class SecretaryService:
             try:
                 await self.stop_telegram_live_agent(call_id)
             except Exception:
+                logger.debug("Error stopping live session %s", call_id, exc_info=True)
                 continue
 
     async def _stop_auto_live_task(self) -> None:
@@ -1088,8 +1466,10 @@ class SecretaryService:
         task.cancel()
         try:
             await task
-        except (asyncio.CancelledError, Exception):
+        except asyncio.CancelledError:
             pass
+        except Exception:
+            logger.debug("Task cancellation error", exc_info=True)
         return None
 
     async def _auto_attach_live_loop(self) -> None:
@@ -1152,17 +1532,22 @@ class SecretaryService:
             except asyncio.CancelledError:
                 raise
             except Exception:
-                pass
+                logger.warning("Auto-attach loop iteration failed", exc_info=True)
 
             await asyncio.sleep(scan_seconds)
 
     async def _calendar_worker_loop(self) -> None:
-        poll_seconds = max(0.5, float(self.settings.calendar_worker_poll_seconds))
+        fast_poll = max(0.5, float(self.settings.calendar_worker_poll_seconds))
+        idle_poll = min(max(fast_poll * 5, 15.0), 30.0)
         batch_size = max(1, int(self.settings.calendar_worker_batch_size))
 
         while True:
+            had_work = False
             try:
                 queue_result = await self.calendar.process_queue(max_items=batch_size)
+                processed = (queue_result or {}).get("results")
+                if isinstance(processed, list) and len(processed) > 0:
+                    had_work = True
                 await self._maybe_schedule_reminders_from_queue_result(queue_result)
 
                 refresh_interval = max(20.0, float(self.settings.calendar_refresh_interval_seconds))
@@ -1181,8 +1566,8 @@ class SecretaryService:
             except asyncio.CancelledError:
                 raise
             except Exception:
-                pass
-            await asyncio.sleep(poll_seconds)
+                logger.warning("Calendar worker loop iteration failed", exc_info=True)
+            await asyncio.sleep(fast_poll if had_work else idle_poll)
 
     def _load_reminder_state(self) -> dict[str, dict[str, Any]]:
         try:
@@ -1191,18 +1576,20 @@ class SecretaryService:
                 if isinstance(raw, dict):
                     return {str(k): v for k, v in raw.items() if isinstance(v, dict)}
         except Exception:
-            pass
+            logger.warning("Failed to load reminder state from %s", self._reminder_state_path, exc_info=True)
         return {}
 
     def _persist_reminder_state(self) -> None:
         try:
             self._reminder_state_path.parent.mkdir(parents=True, exist_ok=True)
-            self._reminder_state_path.write_text(
+            tmp = self._reminder_state_path.with_suffix(self._reminder_state_path.suffix + ".tmp")
+            tmp.write_text(
                 json.dumps(self._reminder_state, ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
+            tmp.replace(self._reminder_state_path)
         except Exception:
-            pass
+            logger.warning("Failed to persist reminder state", exc_info=True)
 
     async def _maybe_schedule_reminders_from_queue_result(self, queue_result: dict[str, Any]) -> None:
         if not self.settings.reminder_enabled:
@@ -1336,11 +1723,7 @@ class SecretaryService:
         lead_minutes = max(1, int(self.settings.reminder_lead_minutes))
         remind_at = start_dt - timedelta(minutes=lead_minutes)
         summary = str(event.get("summary") or "your event").strip() or "your event"
-        start_local = start_dt.astimezone()
-        reminder_text = (
-            f"Reminder: {summary} starts in {lead_minutes} minutes at "
-            f"{start_local.strftime('%H:%M')}."
-        )
+        reminder_text = self._format_reminder_text(summary, start_dt, lead_minutes)
         existing = self._reminder_state.get(event_id)
         if existing:
             existing_start = self._parse_iso(str(existing.get("start_iso") or ""))
@@ -1373,9 +1756,12 @@ class SecretaryService:
 
     def _build_reminder_text_from_state(self, state: dict[str, Any]) -> str:
         summary = str(state.get("summary") or "your event").strip() or "your event"
-        start_iso = str(state.get("start_iso") or "").strip()
         lead_minutes = max(1, int(self.settings.reminder_lead_minutes))
-        start_dt = self._parse_iso(start_iso)
+        start_dt = self._parse_iso(str(state.get("start_iso") or "").strip())
+        return self._format_reminder_text(summary, start_dt, lead_minutes)
+
+    @staticmethod
+    def _format_reminder_text(summary: str, start_dt: datetime | None, lead_minutes: int) -> str:
         if start_dt is not None:
             start_local = start_dt.astimezone()
             return (
@@ -1383,6 +1769,23 @@ class SecretaryService:
                 f"{start_local.strftime('%H:%M')}."
             )
         return f"Reminder: {summary} starts in {lead_minutes} minutes."
+
+    def list_reminders(self, status_filter: str | None = None) -> list[dict[str, Any]]:
+        """Return all reminders, optionally filtered by status."""
+        reminders = list(self._reminder_state.values())
+        if status_filter:
+            reminders = [r for r in reminders if r.get("status") == status_filter]
+        reminders.sort(key=lambda r: r.get("remind_at", ""), reverse=True)
+        return reminders
+
+    def cancel_reminder(self, event_id: str) -> bool:
+        """Cancel a scheduled reminder. Returns True if found and cancelled."""
+        state = self._reminder_state.get(event_id)
+        if state is None:
+            return False
+        state["status"] = "cancelled"
+        self._persist_reminder_state()
+        return True
 
     def _resolve_reminder_target_user(self, call_id: str) -> str | None:
         call = self.telegram.get_call(call_id) if call_id else None
@@ -1404,20 +1807,7 @@ class SecretaryService:
             return True
         return source == "calendar_reminder"
 
-    @staticmethod
-    def _parse_event_start(event: dict[str, Any]) -> datetime | None:
-        raw = str(event.get("start") or "").strip()
-        if not raw:
-            return None
-        if len(raw) == 10 and raw.count("-") == 2:
-            raw = f"{raw}T09:00:00+00:00"
-        try:
-            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-            if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=timezone.utc)
-            return parsed.astimezone(timezone.utc)
-        except Exception:
-            return None
+    _parse_event_start = staticmethod(parse_event_start)
 
     def _cleanup_generated_audio_files_if_needed(self) -> None:
         if not self.settings.audio_cleanup_enabled:
@@ -1531,10 +1921,10 @@ class SecretaryService:
 
     @staticmethod
     def _extract_time_phrase(transcript: str) -> str | None:
-        text = " ".join((transcript or "").split()).strip().lower()
+        text = normalize_text(transcript, lowercase=True)
         if not text:
             return None
-        match = re.search(r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b", text)
+        match = _RE_TIME_AMPM.search(text)
         if not match:
             return None
         hour = int(match.group(1))
@@ -1566,7 +1956,7 @@ class SecretaryService:
         if (datetime.now(timezone.utc) - completed_at).total_seconds() > 15 * 60:
             return None
 
-        lower = " ".join((transcript or "").split()).strip().lower()
+        lower = normalize_text(transcript, lowercase=True)
         if "tomorrow" in lower:
             day_hint = "tomorrow"
         else:
@@ -1594,7 +1984,7 @@ class SecretaryService:
             speak_response=speak_response,
         )
         response.action_items = list(response.action_items) + [f"calendar_queue:{queued_id}"]
-        response.action_items = response.action_items[:8]
+        response.action_items = response.action_items[:MAX_ACTION_ITEMS]
 
         self._reminder_flow_state[call_id] = {
             **state,
@@ -1645,35 +2035,18 @@ class SecretaryService:
             return f"I could not schedule it yet: {detail}"
         return "I could not schedule it yet. Please repeat with exact date and time."
 
-    @staticmethod
-    def _humanize_iso_datetime(value: str) -> str:
-        if not value:
-            return ""
-        try:
-            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-            if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=timezone.utc)
-            local = parsed.astimezone()
-            day = local.strftime("%A")
-            now = datetime.now(local.tzinfo).date()
-            if local.date() == now:
-                day = "today"
-            elif local.date() == (now + timedelta(days=1)):
-                day = "tomorrow"
-            return f"{day} at {local.strftime('%I:%M %p').lstrip('0')}"
-        except Exception:
-            return ""
+    _humanize_iso_datetime = staticmethod(humanize_iso_datetime)
 
     @staticmethod
     def _looks_like_background_announcement(transcript: str) -> bool:
-        text = " ".join((transcript or "").split()).strip().lower()
+        text = normalize_text(transcript, lowercase=True)
         if not text:
             return False
         return any(m in text for m in SecretaryService._BACKGROUND_MARKERS)
 
     @staticmethod
     def _should_ignore_live_snippet(transcript: str) -> bool:
-        text = " ".join((transcript or "").split()).strip().lower()
+        text = normalize_text(transcript, lowercase=True)
         if not text:
             return True
 
@@ -1721,7 +2094,7 @@ class SecretaryService:
 
     @staticmethod
     def _is_low_quality_snippet(text: str) -> bool:
-        normalized = " ".join((text or "").split()).strip()
+        normalized = normalize_text(text)
         if len(normalized) < 4:
             return True
         words = [w for w in re.split(r"\s+", normalized) if w]
@@ -1738,7 +2111,7 @@ class SecretaryService:
         transcript: str,
         speak_response: bool,
     ) -> AgentLiveRespondResponse:
-        normalized = " ".join((transcript or "").split()).strip().lower()
+        normalized = normalize_text(transcript, lowercase=True)
         fingerprint = hashlib.sha1(normalized.encode("utf-8", "ignore")).hexdigest()[:16]
         existing = self._reminder_flow_state.get(call_id, {})
 
@@ -1824,7 +2197,7 @@ class SecretaryService:
         result.action_items = list(result.action_items) + [f"calendar_checked:{busy_count}"]
         if queued_id:
             result.action_items.append(f"calendar_queue:{queued_id}")
-        result.action_items = result.action_items[:8]
+        result.action_items = result.action_items[:MAX_ACTION_ITEMS]
 
         self._reminder_flow_state[call_id] = {
             "awaiting_result": False,
@@ -1882,8 +2255,10 @@ class SecretaryService:
             if not replaced:
                 data.append(dynamic_item)
 
-            path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-            self.template_matcher = LiveTemplateMatcher(self.settings)
+            tmp = path.with_suffix(path.suffix + ".tmp")
+            tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+            tmp.replace(path)
+            self.template_matcher.reload()
             self.memory.append_long_term(
                 "predictive_template_update",
                 {
@@ -1904,40 +2279,20 @@ class SecretaryService:
         action_item: str,
         speak_response: bool,
     ) -> AgentLiveRespondResponse:
-        tts_audio_path: str | None = None
-        tts_status: str | None = None
-        call_audio_status: str | None = None
-
-        if speak_response:
-            tts_audio_path, tts_status = await self.tts.synthesize(reply, call_id=call_id)
-            self.debug.log(
-                call_id,
-                "fallback_tts",
-                {"tts_status": tts_status, "has_audio": bool(tts_audio_path), "reply": reply[:120]},
-            )
-            if tts_audio_path:
-                stream_result = await self.telegram.stream_audio_out(call_id, tts_audio_path)
-                call_audio_status = str(stream_result.get("status"))
-                self._apply_live_tts_pause(call_id, call_audio_status)
-                self.debug.log(
-                    call_id,
-                    "fallback_audio_out",
-                    {"audio_path": tts_audio_path, "status": call_audio_status, "detail": stream_result.get("detail")},
-                )
-            else:
-                call_audio_status = "not_streamed"
-
+        tts_audio_path, tts_status, call_audio_status = await self._speak_and_stream(
+            call_id, reply, speak_response,
+        )
         return AgentLiveRespondResponse(
             call_id=call_id,
             transcript=snippet,
             reply=reply,
-            intent=AgentAnalyzeResponse(call_id=call_id, reply=reply, model=self.settings.zai_model).intent,
+            intent=IntentType.UNKNOWN,
             confidence=0.2,
             requires_human=False,
             transfer_reason=None,
             action_items=[action_item],
             extracted_fields={},
-            model=self.settings.zai_model,
+            model=self.settings.openai_model,
             tts_audio_path=tts_audio_path,
             tts_status=tts_status,
             call_audio_status=call_audio_status,
@@ -1945,8 +2300,8 @@ class SecretaryService:
 
     @staticmethod
     def _extract_new_text(previous: str, current: str) -> str:
-        prev = " ".join((previous or "").split()).strip()
-        cur = " ".join((current or "").split()).strip()
+        prev = normalize_text(previous)
+        cur = normalize_text(current)
         if not cur:
             return ""
         if not prev:
@@ -1965,7 +2320,7 @@ class SecretaryService:
 
     @staticmethod
     def _infer_route_points(transcript: str) -> tuple[str, str]:
-        text = " ".join((transcript or "").split()).strip()
+        text = normalize_text(transcript)
         if not text:
             return "", ""
 
@@ -1994,14 +2349,6 @@ class SecretaryService:
     def _now_iso() -> str:
         return datetime.now(timezone.utc).isoformat()
 
-    @staticmethod
-    def _parse_iso(value: str) -> datetime | None:
-        try:
-            parsed = datetime.fromisoformat(value)
-        except Exception:
-            return None
-        if parsed.tzinfo is None:
-            return parsed.replace(tzinfo=timezone.utc)
-        return parsed.astimezone(timezone.utc)
+    _parse_iso = staticmethod(parse_iso)
 
 

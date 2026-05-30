@@ -1,7 +1,12 @@
+import asyncio
+import json
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect, status
+from fastapi.responses import HTMLResponse, RedirectResponse
+from pydantic import BaseModel as _BaseModel
 
 from secretary_ai.domain.models import (
     AgentLiveRespondRequest,
@@ -11,6 +16,8 @@ from secretary_ai.domain.models import (
     AgentReplyRequest,
     AgentReplyResponse,
     ArchitectureOverview,
+    BookingSearchRequest,
+    BookingSearchResponse,
     CalendarCacheResponse,
     CalendarProcessResponse,
     CalendarQueueRequest,
@@ -41,6 +48,7 @@ from secretary_ai.domain.models import (
     TelegramLiveAgentStatusResponse,
     TelegramAuthStatusResponse,
 )
+from secretary_ai import APP_VERSION
 from secretary_ai.services.secretary import SecretaryService
 
 router = APIRouter()
@@ -70,14 +78,109 @@ async def health(
     secretary: SecretaryService = Depends(get_secretary),
 ) -> dict[str, Any]:
     s = secretary.settings
+    tg_ready, tg_detail = secretary.telegram.readiness()
+    cal_ready, cal_detail = secretary.calendar.readiness()
     return {
         "status": "ok",
+        "version": APP_VERSION,
         "mode": "telegram_mtproto_mvp",
+        "language": s.language,
+        "openai": {
+            "configured": bool(s.openai_api_key),
+            "model": s.openai_model,
+        },
         "gemini_live": {
             "enabled": bool(s.gemini_live_enabled and s.gemini_api_key),
             "model": s.gemini_live_model,
+            "voice": s.gemini_live_voice,
+        },
+        "telegram": {
+            "ready": tg_ready,
+            "detail": tg_detail,
+            "active_calls": len(secretary.live_sessions),
+        },
+        "calendar": {
+            "ready": cal_ready,
+            "detail": cal_detail,
+        },
+        "tts": {
+            "enabled": s.tts_enabled,
+            "provider": s.tts_provider,
+        },
+        "stt": {
+            "enabled": s.stt_enabled,
+            "provider": s.stt_provider,
+        },
+        "wake_word": {
+            "enabled": s.wake_word_enabled,
+            "prefix": s.wake_word_prefix,
         },
     }
+
+
+@router.get("/version")
+async def version() -> dict[str, str]:
+    return {"version": APP_VERSION, "name": "Secretary AI"}
+
+
+@router.get("/debug/logs")
+async def debug_logs(
+    lines: int = Query(50, ge=1, le=500),
+    secretary: SecretaryService = Depends(get_secretary),
+) -> list[dict[str, Any]]:
+    """Tail the live debug JSONL log file."""
+    log_path = Path(secretary.settings.telegram_live_debug_log_path)
+    if not log_path.exists():
+        return []
+    try:
+        raw_lines = log_path.read_text(encoding="utf-8").strip().splitlines()
+        tail = raw_lines[-lines:]
+        result = []
+        for line in tail:
+            try:
+                result.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+        return result
+    except Exception:
+        return []
+
+
+@router.websocket("/debug/ws")
+async def debug_ws(
+    websocket: WebSocket,
+) -> None:
+    """Stream live debug log entries over WebSocket."""
+    await websocket.accept()
+    secretary: SecretaryService = websocket.app.state.secretary
+    log_path = Path(secretary.settings.telegram_live_debug_log_path)
+    last_size = log_path.stat().st_size if log_path.exists() else 0
+
+    try:
+        while True:
+            await asyncio.sleep(1.0)
+            if not log_path.exists():
+                last_size = 0
+                continue
+            current_size = log_path.stat().st_size
+            if current_size == last_size:
+                continue
+            if current_size < last_size:
+                last_size = 0
+            with log_path.open("rb") as f:
+                f.seek(last_size)
+                new_data = f.read().decode("utf-8", errors="replace")
+            last_size = current_size
+            for line in new_data.strip().splitlines():
+                try:
+                    entry = json.loads(line)
+                    await websocket.send_json(entry)
+                except (json.JSONDecodeError, Exception):
+                    continue
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
 
 
 @router.get("/architecture", response_model=ArchitectureOverview)
@@ -298,6 +401,317 @@ async def calendar_refresh(
     secretary: SecretaryService = Depends(get_secretary),
 ) -> dict:
     return await secretary.calendar_refresh(days=days, max_results=max_results)
+
+
+# --- Booking search endpoints ---
+
+
+@router.post("/booking/search", response_model=BookingSearchResponse)
+async def booking_search(
+    payload: BookingSearchRequest,
+    secretary: SecretaryService = Depends(get_secretary),
+) -> BookingSearchResponse:
+    """Search for restaurants, hotels, events, or travel options."""
+    result = await secretary.booking.search_by_action(
+        action=payload.booking_type,
+        payload=str(payload.query_params.get("preferences", "")),
+        extracted={**payload.query_params, "location": payload.location},
+    )
+    return BookingSearchResponse(
+        call_id=payload.call_id,
+        status="ok",
+        results=result.get("results") or [],
+        voice_summary=result.get("voice_summary"),
+        category=result.get("category"),
+    )
+
+
+@router.get("/booking/last-results")
+async def booking_last_results(
+    secretary: SecretaryService = Depends(get_secretary),
+) -> dict:
+    """Return the most recent booking search results."""
+    return secretary.booking.last_results
+
+
+# --- Wake word endpoints ---
+
+
+@router.get("/wake-word/actions")
+async def wake_word_actions(
+    secretary: SecretaryService = Depends(get_secretary),
+) -> list[dict]:
+    """List all registered wake-word actions and their trigger phrases."""
+    return secretary.wake_word.list_actions()
+
+
+class WakeWordDetectRequest(_BaseModel):
+    transcript: str
+
+
+@router.post("/wake-word/detect")
+async def wake_word_detect(
+    body: WakeWordDetectRequest | None = None,
+    transcript: str = Query(None, description="Text to scan for wake-word triggers"),
+    secretary: SecretaryService = Depends(get_secretary),
+) -> dict:
+    """Test wake-word detection against a transcript (JSON body or query param)."""
+    text = (body.transcript if body else None) or transcript or ""
+    match = secretary.wake_word.detect(text)
+    if match is None:
+        return {"detected": False}
+    return {"detected": True, **match.to_dict()}
+
+
+# ---------------------------------------------------------------------------
+# Voice / TTS settings
+# ---------------------------------------------------------------------------
+
+@router.get("/voice/providers")
+async def voice_providers(
+    secretary: SecretaryService = Depends(get_secretary),
+) -> dict[str, Any]:
+    """List available TTS providers and current configuration."""
+    from secretary_ai.core.locales import SILERO_VOICES
+    from secretary_ai.services.tts import TTSEngine
+
+    s = secretary.settings
+    return {
+        "current_provider": s.tts_provider,
+        "available_providers": TTSEngine.available_providers(),
+        "edge_tts": {
+            "voice": s.tts_voice,
+            "rate": s.tts_rate,
+            "volume": s.tts_volume,
+        },
+        "silero": {
+            "model_id": s.tts_silero_model_id,
+            "speaker": s.tts_silero_speaker,
+            "sample_rate": s.tts_silero_sample_rate,
+            "device": s.tts_silero_device,
+            "available_voices": SILERO_VOICES,
+        },
+    }
+
+
+@router.get("/voice/silero/voices")
+async def silero_voices() -> dict[str, list[dict[str, str]]]:
+    """List all available Silero voice speakers by language."""
+    from secretary_ai.core.locales import SILERO_VOICES
+
+    return SILERO_VOICES
+
+
+@router.get("/calendar/oauth/authorize")
+async def calendar_oauth_authorize(
+    secretary: SecretaryService = Depends(get_secretary),
+) -> RedirectResponse:
+    """Redirect the user to Google's OAuth consent screen."""
+    url = secretary.calendar.get_oauth_authorize_url()
+    if url is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set in .env",
+        )
+    return RedirectResponse(url)
+
+
+@router.get("/calendar/oauth/callback")
+async def calendar_oauth_callback(
+    code: str | None = Query(default=None),
+    error: str | None = Query(default=None),
+    state: str | None = Query(default=None),
+    secretary: SecretaryService = Depends(get_secretary),
+) -> HTMLResponse:
+    """Handle the OAuth callback from Google and store the token."""
+    if error or not code:
+        detail = error or "No authorization code received."
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Google authorization failed: {detail}",
+        )
+    result = await asyncio.to_thread(secretary.calendar.handle_oauth_callback, code, state)
+    if result.get("status") == "ok":
+        html = (
+            "<html><body style='font-family:sans-serif;text-align:center;padding:60px'>"
+            "<h1>&#10003; Google Calendar Connected</h1>"
+            "<p>You can close this tab and return to Secretary AI.</p>"
+            "</body></html>"
+        )
+        return HTMLResponse(content=html)
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=result.get("detail", "OAuth callback failed."),
+    )
+
+
+@router.get("/calendar/oauth/status")
+async def calendar_oauth_status(
+    secretary: SecretaryService = Depends(get_secretary),
+) -> dict:
+    """Check whether a valid OAuth token is stored."""
+    ready, detail = secretary.calendar.readiness()
+    return {"connected": ready, "detail": detail}
+
+
+# ─── Contacts ─────────────────────────────────────────────────────
+
+
+@router.get("/contacts")
+async def list_contacts(
+    secretary: SecretaryService = Depends(get_secretary),
+) -> list[dict]:
+    """Return all contacts sorted by most recently called."""
+    return secretary.contacts.list_all()
+
+
+@router.get("/contacts/{caller_id}")
+async def get_contact(
+    caller_id: str,
+    secretary: SecretaryService = Depends(get_secretary),
+) -> dict:
+    """Return a single contact by caller ID."""
+    contact = secretary.contacts.get(caller_id)
+    if contact is None:
+        raise HTTPException(status_code=404, detail="Contact not found.")
+    return contact
+
+
+class ContactUpsertRequest(_BaseModel):
+    name: str | None = None
+    language: str | None = None
+    notes: str | None = None
+
+
+@router.put("/contacts/{caller_id}")
+async def upsert_contact(
+    caller_id: str,
+    body: ContactUpsertRequest,
+    secretary: SecretaryService = Depends(get_secretary),
+) -> dict:
+    """Create or update a contact."""
+    return secretary.contacts.upsert(
+        caller_id,
+        name=body.name,
+        language=body.language,
+        notes=body.notes,
+    )
+
+
+@router.delete("/contacts/{caller_id}")
+async def delete_contact(
+    caller_id: str,
+    secretary: SecretaryService = Depends(get_secretary),
+) -> dict:
+    """Delete a contact."""
+    deleted = secretary.contacts.delete(caller_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Contact not found.")
+    return {"deleted": True, "caller_id": caller_id}
+
+
+class TranscribeRequest(_BaseModel):
+    audio_path: str
+
+
+@router.post("/stt/transcribe")
+async def transcribe_audio(
+    body: TranscribeRequest,
+    secretary: SecretaryService = Depends(get_secretary),
+) -> dict:
+    """Transcribe an audio file using the STT engine (faster-whisper)."""
+    text, stt_status = await secretary.stt.transcribe(body.audio_path)
+    return {"text": text, "status": stt_status}
+
+
+@router.get("/reminders")
+async def list_reminders(
+    status: str | None = Query(None, description="Filter by status (scheduled, sent, cancelled)"),
+    secretary: SecretaryService = Depends(get_secretary),
+) -> list[dict]:
+    """List all reminders, optionally filtered by status."""
+    return secretary.list_reminders(status_filter=status)
+
+
+@router.delete("/reminders/{event_id}")
+async def cancel_reminder(
+    event_id: str,
+    secretary: SecretaryService = Depends(get_secretary),
+) -> dict:
+    """Cancel a scheduled reminder."""
+    cancelled = secretary.cancel_reminder(event_id)
+    if not cancelled:
+        raise HTTPException(status_code=404, detail="Reminder not found.")
+    return {"cancelled": True, "event_id": event_id}
+
+
+@router.get("/settings")
+async def settings_overview(
+    secretary: SecretaryService = Depends(get_secretary),
+) -> dict[str, Any]:
+    """Return non-secret runtime configuration for the settings dashboard."""
+    s = secretary.settings
+    return {
+        "general": {
+            "app_name": s.app_name,
+            "environment": s.environment,
+            "language": s.language,
+            "timezone": s.timezone,
+        },
+        "llm": {
+            "model": s.openai_model,
+            "chat_model": s.openai_chat_model or s.openai_model,
+            "base_url": s.openai_base_url,
+            "timeout_seconds": s.openai_timeout_seconds,
+            "configured": bool(s.openai_api_key),
+        },
+        "gemini_live": {
+            "enabled": bool(s.gemini_live_enabled and s.gemini_api_key),
+            "model": s.gemini_live_model,
+            "voice": s.gemini_live_voice,
+        },
+        "telegram": {
+            "auto_answer_inbound": s.telegram_auto_answer_inbound,
+            "auto_start_live_agent": s.telegram_auto_start_live_agent,
+            "auto_greet_on_connect": s.assistant_auto_greet_on_connect,
+        },
+        "tts": {
+            "enabled": s.tts_enabled,
+            "provider": s.tts_provider,
+            "voice": s.tts_voice,
+            "silero_speaker": s.tts_silero_speaker if s.tts_provider == "silero" else None,
+        },
+        "stt": {
+            "enabled": s.stt_enabled,
+            "provider": s.stt_provider,
+            "model": s.stt_model,
+            "language": s.stt_language,
+        },
+        "calendar": {
+            "enabled": s.calendar_enabled,
+            "timezone": s.calendar_timezone,
+            "worker_enabled": s.calendar_worker_enabled,
+            "worker_poll_seconds": s.calendar_worker_poll_seconds,
+            "refresh_interval_seconds": s.calendar_refresh_interval_seconds,
+        },
+        "reminders": {
+            "enabled": s.reminder_enabled,
+            "lead_minutes": s.reminder_lead_minutes,
+            "scan_horizon_hours": s.reminder_scan_horizon_hours,
+        },
+        "wake_word": {
+            "enabled": s.wake_word_enabled,
+            "prefix": s.wake_word_prefix,
+            "require_prefix": s.wake_word_require_prefix,
+        },
+        "booking": {
+            "default_location": s.booking_default_location,
+            "max_results": s.booking_max_results,
+        },
+        "call_summary": {
+            "enabled": s.call_summary_enabled,
+        },
+    }
 
 
 @router.get("/calls")

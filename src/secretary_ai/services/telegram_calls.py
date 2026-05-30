@@ -1,10 +1,15 @@
 import asyncio
+import logging
+from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
 import shutil
+import time
 from typing import Any
 
 from secretary_ai.core.config import Settings
+
+logger = logging.getLogger(__name__)
 
 try:
     from pytgcalls import PyTgCalls, filters
@@ -36,8 +41,8 @@ class TelegramCallService:
         self._lock = asyncio.Lock()
 
         self.calls: dict[str, dict[str, Any]] = {}
-        self.call_events: list[dict[str, Any]] = []
-        self.pending_phone_hashes: dict[str, str] = {}
+        self.call_events: deque[dict[str, Any]] = deque(maxlen=2000)
+        self.pending_phone_hashes: dict[str, tuple[str, float]] = {}  # phone -> (hash, timestamp)
 
     async def start(self) -> None:
         async with self._lock:
@@ -110,6 +115,21 @@ class TelegramCallService:
             "session_path": self.settings.telegram_session_path,
         }
 
+    async def send_message(self, target_user: str, text: str) -> bool:
+        """Send a text message to a user via Telegram. Returns True on success."""
+        try:
+            await self._ensure_connected()
+            if self._client is None:
+                return False
+            chat_id = await self._resolve_chat_id(target_user)
+            if chat_id is None:
+                return False
+            await self._client.send_message(chat_id, text)
+            return True
+        except Exception:
+            logger.warning("Failed to send Telegram message to %s", target_user, exc_info=True)
+            return False
+
     async def send_code(self, phone_number: str) -> dict[str, Any]:
         ready, detail = self.readiness()
         if not ready:
@@ -124,7 +144,7 @@ class TelegramCallService:
         assert self._client is not None
         result = await self._client.send_code_request(phone_number)
         code_hash = result.phone_code_hash
-        self.pending_phone_hashes[phone_number] = code_hash
+        self.pending_phone_hashes[phone_number] = (code_hash, time.monotonic())
         return {
             "status": "code_sent",
             "phone_number": phone_number,
@@ -150,7 +170,8 @@ class TelegramCallService:
             if password and not code:
                 await self._client.sign_in(password=password)
             else:
-                selected_hash = phone_code_hash or self.pending_phone_hashes.get(phone_number)
+                stored = self.pending_phone_hashes.get(phone_number)
+                selected_hash = phone_code_hash or (stored[0] if stored else None)
                 if not selected_hash:
                     return {
                         "status": "missing_code_hash",
@@ -184,6 +205,7 @@ class TelegramCallService:
         if await self._client.is_user_authorized():
             await self._ensure_calls_started()
             self.pending_phone_hashes.pop(phone_number, None)
+            self._prune_pending_hashes()
             return {
                 "status": "authorized",
                 "authorized": True,
@@ -386,7 +408,9 @@ class TelegramCallService:
         return sorted(self.calls.values(), key=lambda call: call.get("updated_at", ""), reverse=True)
 
     def list_events(self, limit: int = 50) -> list[dict[str, Any]]:
-        return self.call_events[-limit:]
+        if limit >= len(self.call_events):
+            return list(self.call_events)
+        return list(self.call_events)[-limit:]
 
     def append_transcript(
         self,
@@ -411,6 +435,9 @@ class TelegramCallService:
             "timestamp": self._now_iso(),
         }
         transcripts.append(entry)
+        # Keep at most 200 transcript entries per call to bound memory.
+        if len(transcripts) > 200:
+            del transcripts[: len(transcripts) - 200]
         self._upsert_call(call_id, {"updated_at": self._now_iso()})
         self._append_event(call_id, "transcript_received", {"chars": len(transcript)})
         return call
@@ -486,16 +513,16 @@ class TelegramCallService:
             status = "ended"
             event = "left_call"
 
-        self._upsert_call(
-            call_id,
-            {
-                "call_id": call_id,
-                "chat_id": chat_id,
-                "direction": "inbound",
-                "status": status,
-                "updated_at": self._now_iso(),
-            },
-        )
+        updates: dict[str, Any] = {
+            "call_id": call_id,
+            "chat_id": chat_id,
+            "status": status,
+            "updated_at": self._now_iso(),
+        }
+        # Only set direction if the call doesn't already exist (preserves outbound).
+        if call_id not in self.calls:
+            updates["direction"] = "inbound"
+        self._upsert_call(call_id, updates)
         self._append_event(call_id, event, {"status": str(update.status)})
 
         should_auto_answer = (
@@ -577,6 +604,28 @@ class TelegramCallService:
     def _upsert_call(self, call_id: str, updates: dict[str, Any]) -> None:
         existing = self.calls.get(call_id, {})
         self.calls[call_id] = {**existing, **updates}
+        self._prune_calls()
+
+    def _prune_calls(self, keep: int = 200) -> None:
+        """Evict oldest finished calls when the dict grows too large."""
+        if len(self.calls) <= keep:
+            return
+        terminal = ("ended", "discarded", "failed")
+        finished = [
+            (cid, c) for cid, c in self.calls.items()
+            if str(c.get("status", "")).lower() in terminal
+        ]
+        finished.sort(key=lambda x: x[1].get("updated_at", ""))
+        to_remove = len(self.calls) - keep
+        for cid, _ in finished[:to_remove]:
+            del self.calls[cid]
+
+    def _prune_pending_hashes(self, max_age: float = 600.0) -> None:
+        """Remove phone hashes older than max_age seconds (default 10 min)."""
+        now = time.monotonic()
+        stale = [k for k, (_, ts) in self.pending_phone_hashes.items() if now - ts > max_age]
+        for k in stale:
+            del self.pending_phone_hashes[k]
 
     def _append_event(self, call_id: str, event_type: str, payload: dict[str, Any]) -> None:
         evt = {
@@ -586,8 +635,6 @@ class TelegramCallService:
             "timestamp": self._now_iso(),
         }
         self.call_events.append(evt)
-        if len(self.call_events) > 2000:
-            self.call_events = self.call_events[-1000:]
 
     def _normalize_optional_audio_path(self, audio_path: str | None) -> str | None:
         if not audio_path:
