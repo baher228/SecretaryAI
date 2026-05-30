@@ -568,3 +568,14 @@
 {"ts": "2026-04-30T10:24:01.713848+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_audio_played", "data": {"idx": 2, "bytes": 74880, "status": "streaming_out"}}
 {"ts": "2026-04-30T10:24:03.554174+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_turn_complete", "data": {"turns": 1}}
 {"ts": "2026-04-30T10:24:03.610667+00:00", "call_id": "tg-5523073095", "stage": "gemini_greeting_cached", "data": {"path": ".telegram/cache/gemini_greeting_ru_d2485ad4.wav", "bytes": 318728}}
+{"ts": "2026-04-30T10:40:27.576363+00:00", "call_id": "tg-5523073095", "stage": "live_start", "data": {"recording_path": "/app/.telegram/audio/recordings/tg-5523073095-20260430T104027558025Z.wav", "speak_response": true, "context": {"source": "outbound_auto_start"}, "mode": "gemini_live", "greeting_played": false}}
+{"ts": "2026-04-30T10:40:27.880394+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_connected", "data": {"model": "gemini-3.1-flash-live-preview"}}
+{"ts": "2026-04-30T10:40:27.884689+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_initial_prompt_sent", "data": {"prompt": "Телефонный звонок только что подключён. Тепло поприветствуй звонящего и спроси, чем можешь помочь.", "greeting_played": false}}
+{"ts": "2026-04-30T10:40:28.496829+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": "Здравствуйте! Это"}}
+{"ts": "2026-04-30T10:40:29.476757+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": " приёмная."}}
+{"ts": "2026-04-30T10:40:29.981912+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": " Чем"}}
+{"ts": "2026-04-30T10:40:30.280271+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": " могу"}}
+{"ts": "2026-04-30T10:40:30.673308+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_output_transcript", "data": {"text": " помочь?"}}
+{"ts": "2026-04-30T10:40:32.350574+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_turn_complete", "data": {"turns": 1}}
+{"ts": "2026-04-30T10:40:32.440404+00:00", "call_id": "tg-5523073095", "stage": "gemini_greeting_cached", "data": {"path": ".telegram/cache/gemini_greeting_ru_d2485ad4.wav", "bytes": 345608}}
+{"ts": "2026-04-30T10:40:32.879602+00:00", "call_id": "tg-5523073095", "stage": "gemini_live_audio_played", "data": {"idx": 0, "bytes": 172804, "status": "streaming_out"}}

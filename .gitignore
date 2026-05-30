@@ -21,6 +21,8 @@ dist/
 .telegram/*.session-journal
 # Local Google service account credential
 .telegram/service_account.json
+.telegram/cache
+.telegram/memory
 .telegram/cache/live_reply_templates.json
 .telegram/cache/calendar_events.json
 .telegram/cache/calendar_queue.json
