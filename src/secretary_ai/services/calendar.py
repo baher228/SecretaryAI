@@ -1,13 +1,14 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
 import json
+import logging
 from pathlib import Path
 import re
 from typing import Any
 
-import httpx
-
 from secretary_ai.core.config import Settings
+from secretary_ai.core.datetime_utils import parse_iso as _shared_parse_iso
+from secretary_ai.core.text_utils import normalize_text
 from secretary_ai.core.locales import (
     CALENDAR_CREATE_KEYWORDS,
     CALENDAR_DATETIME_FORMAT,
@@ -38,12 +39,24 @@ from secretary_ai.core.locales import (
 
 try:
     from google.oauth2 import service_account
+    from google.oauth2.credentials import Credentials as OAuthCredentials
+    from google_auth_oauthlib.flow import Flow as OAuthFlow
     from googleapiclient.discovery import build
     from googleapiclient.errors import HttpError
 except Exception:  # pragma: no cover - optional dependency
     service_account = None  # type: ignore[assignment]
+    OAuthCredentials = None  # type: ignore[assignment]
+    OAuthFlow = None  # type: ignore[assignment]
     build = None  # type: ignore[assignment]
     HttpError = Exception  # type: ignore[assignment]
+
+logger = logging.getLogger(__name__)
+
+_RE_AMPM = re.compile(r"\b(\d{1,2})(?:(?::|\.)(\d{2}))?\s*(am|pm)\b")
+_RE_24H = re.compile(r"\b(\d{1,2})[:.](\d{2})\b")
+_RE_NON_ALPHANUM = re.compile(r"[^\w: ]+")
+
+CALENDAR_SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
 
 class CalendarService:
@@ -57,6 +70,7 @@ class CalendarService:
         self.settings = settings
         self._lock = asyncio.Lock()
         self._service: Any = None
+        self._pending_oauth_states: dict[str, float] = {}
 
         self.cache_path = Path(self.settings.calendar_cache_path)
         self.queue_path = Path(self.settings.calendar_queue_path)
@@ -74,20 +88,45 @@ class CalendarService:
         if not self.settings.calendar_enabled:
             return False, "Calendar integration is disabled by config."
 
+        if build is None:
+            return False, "Google Calendar dependencies are not installed in this environment."
+
+        # OAuth token takes priority over service account.
+        if self._has_oauth_token():
+            if not self.settings.calendar_id:
+                return False, "OAuth token found but CALENDAR_ID is not set in .env."
+            return True, "Google Calendar integration is configured (OAuth)."
+
         if not self.settings.calendar_service_account_json or not self.settings.calendar_id:
+            if self.settings.google_client_id:
+                return (
+                    False,
+                    "OAuth not yet authorized. Visit /api/v1/calendar/oauth/authorize to connect.",
+                )
             return (
                 False,
                 "Calendar provider credentials not configured; running in cache-only mode.",
             )
 
-        if service_account is None or build is None:
+        if service_account is None:
             return False, "Google Calendar dependencies are not installed in this environment."
 
         path = Path(self.settings.calendar_service_account_json)
         if not path.exists():
             return False, f"Service account file not found: {path}"
 
-        return True, "Google Calendar integration is configured."
+        return True, "Google Calendar integration is configured (service account)."
+
+    def _has_oauth_token(self) -> bool:
+        """Cheap check: token file exists and is parseable JSON with a refresh_token."""
+        token_path = Path(self.settings.google_oauth_token_path)
+        if not token_path.is_file():
+            return False
+        try:
+            data = json.loads(token_path.read_text(encoding="utf-8"))
+            return bool(data.get("refresh_token"))
+        except Exception:
+            return False
 
     async def refresh_cache(self, days: int = 7, max_results: int = 30) -> dict[str, Any]:
         if not self.settings.calendar_enabled:
@@ -236,9 +275,18 @@ class CalendarService:
                     "result": apply_result,
                 })
 
+            self._prune_queue()
             self._persist_queue()
 
         return {"status": "ok", "processed": processed, "results": results}
+
+    def _prune_queue(self, keep_done: int = 50) -> None:
+        """Remove old completed/failed items from the queue to prevent unbounded growth."""
+        finished = [i for i, item in enumerate(self.queue) if item.get("status") in ("done", "failed")]
+        if len(finished) <= keep_done:
+            return
+        remove_indices = set(finished[: len(finished) - keep_done])
+        self.queue = [item for i, item in enumerate(self.queue) if i not in remove_indices]
 
     def _enqueue_task(self, call_id: str, transcript: str, context: dict[str, Any]) -> dict[str, Any]:
         task_id = f"cal-{int(datetime.now(timezone.utc).timestamp() * 1000)}-{len(self.queue)+1}"
@@ -255,20 +303,20 @@ class CalendarService:
         return task
 
     async def _plan_action(self, task: dict[str, Any]) -> dict[str, Any]:
-        if self.settings.zai_api_key:
+        if self.settings.openai_api_key:
             llm_plan = await self._plan_action_llm(task)
             if llm_plan:
                 return llm_plan
         return self._plan_action_heuristic(task)
 
     async def _plan_action_llm(self, task: dict[str, Any]) -> dict[str, Any]:
-        model = self.settings.calendar_smart_model or self.settings.zai_model
-        base_url = self.settings.zai_base_url.rstrip("/")
-        url = f"{base_url}/chat/completions"
+        from secretary_ai.services.openai_client import openai_chat_completion, extract_message
+
+        model = self.settings.calendar_smart_model or self.settings.openai_model
         payload = {
             "model": model,
             "temperature": 0.1,
-            "max_tokens": self.settings.calendar_planner_max_tokens,
+            "max_completion_tokens": self.settings.calendar_planner_max_tokens,
             "messages": [
                 {
                     "role": "system",
@@ -286,42 +334,30 @@ class CalendarService:
                 },
             ],
         }
-        headers = {
-            "Authorization": f"Bearer {self.settings.zai_api_key}",
-            "Content-Type": "application/json",
-            "Accept-Language": "en-US,en",
-        }
-
-        try:
-            async with httpx.AsyncClient(timeout=self.settings.zai_timeout_seconds) as client:
-                response = await client.post(url, headers=headers, json=payload)
-            if response.status_code >= 300:
-                return {}
-            data = response.json()
-            choices = data.get("choices") or []
-            if not choices:
-                return {}
-            message = choices[0].get("message") or {}
-            raw = str(message.get("content") or "").strip()
-            if not raw:
-                return {}
-            parsed = self._try_parse_json(raw)
-            if not parsed:
-                return {}
-            action = str(parsed.get("action") or "none").strip().lower()
-            if action not in {"create", "delete", "none"}:
-                action = "none"
-            return {
-                "action": action,
-                "title": parsed.get("title"),
-                "start_iso": parsed.get("start_iso"),
-                "end_iso": parsed.get("end_iso"),
-                "event_id": parsed.get("event_id"),
-                "reason": parsed.get("reason") or "planned_by_llm",
-                "planner_model": model,
-            }
-        except Exception:
+        result = await openai_chat_completion(self.settings, payload)
+        if result.get("error"):
+            logger.warning("Calendar planner LLM error: %s", result["error"])
             return {}
+
+        message = extract_message(result["data"])
+        raw = str(message.get("content") or "").strip()
+        if not raw:
+            return {}
+        parsed = self._try_parse_json(raw)
+        if not parsed:
+            return {}
+        action = str(parsed.get("action") or "none").strip().lower()
+        if action not in {"create", "delete", "none"}:
+            action = "none"
+        return {
+            "action": action,
+            "title": parsed.get("title"),
+            "start_iso": parsed.get("start_iso"),
+            "end_iso": parsed.get("end_iso"),
+            "event_id": parsed.get("event_id"),
+            "reason": parsed.get("reason") or "planned_by_llm",
+            "planner_model": model,
+        }
 
     def _plan_action_heuristic(self, task: dict[str, Any]) -> dict[str, Any]:
         text = str(task.get("transcript") or "").strip()
@@ -494,7 +530,15 @@ class CalendarService:
     def _extract_datetime_from_text(self, text: str) -> datetime | None:
         lang = self.settings.language
         lower = (text or "").lower()
-        base = datetime.now(timezone.utc)
+
+        # Use the user's configured timezone so "today 3pm" means 3pm local.
+        try:
+            from zoneinfo import ZoneInfo
+            user_tz = ZoneInfo(self.settings.calendar_timezone)
+        except Exception:
+            user_tz = timezone.utc
+        base_local = datetime.now(user_tz)
+
         day_offset = 1
         today_kw = CALENDAR_TODAY_KEYWORDS.get(lang, ()) + CALENDAR_TODAY_KEYWORDS.get("en", ())
         tomorrow_kw = CALENDAR_TOMORROW_KEYWORDS.get(lang, ()) + CALENDAR_TOMORROW_KEYWORDS.get("en", ())
@@ -504,7 +548,7 @@ class CalendarService:
             day_offset = 1
 
         lower = lower.replace("a.m.", "am").replace("p.m.", "pm")
-        match_ampm = re.search(r"\b(\d{1,2})(?:(?::|\.)(\d{2}))?\s*(am|pm)\b", lower)
+        match_ampm = _RE_AMPM.search(lower)
         hour: int
         minute: int
         if match_ampm:
@@ -516,7 +560,7 @@ class CalendarService:
             if ampm == "pm":
                 hour += 12
         else:
-            match_24h = re.search(r"\b(\d{1,2})[:.](\d{2})\b", lower)
+            match_24h = _RE_24H.search(lower)
             if not match_24h:
                 return None
             hour = int(match_24h.group(1))
@@ -525,12 +569,13 @@ class CalendarService:
         if hour >= 24 or minute >= 60:
             return None
 
-        when = base + timedelta(days=day_offset)
-        return when.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        when_local = (base_local + timedelta(days=day_offset)).replace(
+            hour=hour, minute=minute, second=0, microsecond=0,
+        )
+        return when_local.astimezone(timezone.utc)
 
     def _mutation_signature(self, text: str, start: datetime | None) -> str:
-        normalized = " ".join((text or "").lower().split())
-        normalized = re.sub(r"[^\w: ]+", "", normalized)
+        normalized = _RE_NON_ALPHANUM.sub("", normalize_text(text, lowercase=True))
         if start is not None:
             rounded = start.replace(second=0, microsecond=0).isoformat()
             return f"{normalized}|{rounded}"
@@ -550,6 +595,15 @@ class CalendarService:
             "signature": signature,
             "at": datetime.now(timezone.utc).isoformat(),
         }
+        # Prevent unbounded growth — evict entries older than 5 minutes.
+        if len(self._last_mutation_by_call) > 100:
+            now = datetime.now(timezone.utc)
+            stale = [
+                k for k, v in self._last_mutation_by_call.items()
+                if (now - (self._parse_iso_datetime(str(v.get("at") or "")) or now)).total_seconds() > 300
+            ]
+            for k in stale:
+                del self._last_mutation_by_call[k]
 
     def _build_mutation_reply(self, text: str, start: datetime | None, duplicate: bool) -> str:
         lang = self.settings.language
@@ -572,40 +626,154 @@ class CalendarService:
 
     def _human_datetime_phrase(self, value: datetime) -> str:
         lang = self.settings.language
-        now = datetime.now(timezone.utc)
-        today = now.date()
-        utc_value = value.astimezone(timezone.utc)
-        date_value = utc_value.date()
+        try:
+            from zoneinfo import ZoneInfo
+            user_tz = ZoneInfo(self.settings.calendar_timezone)
+        except Exception:
+            user_tz = timezone.utc
+        local_now = datetime.now(user_tz)
+        today = local_now.date()
+        local_value = value.astimezone(user_tz)
+        date_value = local_value.date()
         weekday_names = WEEKDAY_NAMES.get(lang, WEEKDAY_NAMES["en"])
-        day_label = weekday_names[utc_value.weekday()]
+        day_label = weekday_names[local_value.weekday()]
         if date_value == today:
             day_label = t(CALENDAR_DAY_TODAY, lang)
         elif date_value == (today + timedelta(days=1)):
             day_label = t(CALENDAR_DAY_TOMORROW, lang)
         time_fmt = t(CALENDAR_TIME_FORMAT, lang)
-        time_label = utc_value.strftime(time_fmt).lstrip("0") if "%I" in time_fmt else utc_value.strftime(time_fmt)
+        time_label = local_value.strftime(time_fmt).lstrip("0") if "%I" in time_fmt else local_value.strftime(time_fmt)
         return t(CALENDAR_DATETIME_FORMAT, lang).format(day=day_label, time=time_label)
 
-    @staticmethod
-    def _parse_iso_datetime(value: str) -> datetime | None:
-        try:
-            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-            if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=timezone.utc)
-            return parsed.astimezone(timezone.utc)
-        except Exception:
-            return None
+    _parse_iso_datetime = staticmethod(_shared_parse_iso)
 
     def _get_service(self):
         if self._service is not None:
             return self._service
-        assert service_account is not None and build is not None
-        creds = service_account.Credentials.from_service_account_file(
-            self.settings.calendar_service_account_json,
-            scopes=["https://www.googleapis.com/auth/calendar"],
-        )
+        assert build is not None
+
+        creds = self._load_oauth_credentials()
+        if creds is None and service_account is not None:
+            sa_path = self.settings.calendar_service_account_json
+            if sa_path and Path(sa_path).exists():
+                creds = service_account.Credentials.from_service_account_file(
+                    sa_path, scopes=CALENDAR_SCOPES,
+                )
+
+        if creds is None:
+            raise RuntimeError(
+                "No calendar credentials available. "
+                "Authorize via /api/v1/calendar/oauth/authorize or configure a service account."
+            )
+
         self._service = build("calendar", "v3", credentials=creds, cache_discovery=False)
         return self._service
+
+    def _load_oauth_credentials(self) -> Any:
+        """Load and refresh OAuth credentials from the stored token file."""
+        token_path = Path(self.settings.google_oauth_token_path)
+        if not token_path.is_file() or OAuthCredentials is None:
+            return None
+        try:
+            token_data = json.loads(token_path.read_text(encoding="utf-8"))
+            expiry = None
+            if token_data.get("expiry"):
+                expiry = datetime.fromisoformat(token_data["expiry"])
+            creds = OAuthCredentials(
+                token=token_data.get("token"),
+                refresh_token=token_data.get("refresh_token"),
+                token_uri=token_data.get("token_uri", "https://oauth2.googleapis.com/token"),
+                client_id=token_data.get("client_id") or self.settings.google_client_id,
+                client_secret=token_data.get("client_secret") or self.settings.google_client_secret,
+                scopes=token_data.get("scopes", CALENDAR_SCOPES),
+                expiry=expiry,
+            )
+            if creds.expired and creds.refresh_token:
+                import google.auth.transport.requests
+                creds.refresh(google.auth.transport.requests.Request())
+                self._save_oauth_credentials(creds)
+            return creds
+        except Exception:
+            return None
+
+    def _save_oauth_credentials(self, creds: Any) -> None:
+        token_path = Path(self.settings.google_oauth_token_path)
+        token_path.parent.mkdir(parents=True, exist_ok=True)
+        token_data = {
+            "token": creds.token,
+            "refresh_token": creds.refresh_token,
+            "token_uri": creds.token_uri,
+            "client_id": creds.client_id,
+            "client_secret": creds.client_secret,
+            "scopes": list(creds.scopes or CALENDAR_SCOPES),
+            "expiry": creds.expiry.isoformat() if creds.expiry else None,
+        }
+        token_path.write_text(json.dumps(token_data, indent=2), encoding="utf-8")
+
+    def get_oauth_authorize_url(self) -> str | None:
+        """Build the Google OAuth authorization URL for the user to visit."""
+        if not self.settings.google_client_id or not self.settings.google_client_secret:
+            return None
+        if OAuthFlow is None:
+            return None
+        flow = OAuthFlow.from_client_config(
+            {
+                "web": {
+                    "client_id": self.settings.google_client_id,
+                    "client_secret": self.settings.google_client_secret,
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                }
+            },
+            scopes=CALENDAR_SCOPES,
+            redirect_uri=self.settings.google_oauth_redirect_uri,
+        )
+        url, state = flow.authorization_url(
+            access_type="offline",
+            include_granted_scopes="true",
+            prompt="consent",
+        )
+        now = datetime.now(timezone.utc).timestamp()
+        # Expire stale entries.
+        self._pending_oauth_states = {
+            k: v for k, v in self._pending_oauth_states.items() if now - v < 600
+        }
+        self._pending_oauth_states[state] = now
+        return url
+
+    def handle_oauth_callback(self, code: str, state: str | None = None) -> dict[str, Any]:
+        """Exchange the authorization code for tokens and persist them."""
+        if not state or state not in self._pending_oauth_states:
+            return {"status": "error", "detail": "Invalid OAuth state — possible CSRF."}
+        elapsed = datetime.now(timezone.utc).timestamp() - self._pending_oauth_states[state]
+        self._pending_oauth_states.pop(state, None)
+        if elapsed > 600:
+            return {"status": "error", "detail": "OAuth flow expired. Please start again."}
+        if not self.settings.google_client_id or not self.settings.google_client_secret:
+            return {"status": "error", "detail": "OAuth client credentials not configured."}
+        if OAuthFlow is None:
+            return {"status": "error", "detail": "google-auth-oauthlib not installed."}
+        flow = OAuthFlow.from_client_config(
+            {
+                "web": {
+                    "client_id": self.settings.google_client_id,
+                    "client_secret": self.settings.google_client_secret,
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                }
+            },
+            scopes=CALENDAR_SCOPES,
+            redirect_uri=self.settings.google_oauth_redirect_uri,
+        )
+        try:
+            flow.fetch_token(code=code)
+        except Exception as exc:
+            return {"status": "error", "detail": f"Token exchange failed: {exc}"}
+        creds = flow.credentials
+        self._save_oauth_credentials(creds)
+        # Reset cached service so next call uses new credentials.
+        self._service = None
+        return {"status": "ok", "detail": "Google Calendar connected successfully."}
 
     def _list_events_sync(self, days: int, max_results: int) -> list[dict[str, Any]]:
         now = datetime.now(timezone.utc)
@@ -626,7 +794,7 @@ class CalendarService:
                 .execute()
             )
             return [self._event_to_dict(e) for e in resp.get("items", [])]
-        except HttpError as exc:
+        except (HttpError, RuntimeError) as exc:
             return [{"error": str(exc)}]
 
     def _create_event_sync(self, title: str, start_iso: str, end_iso: str) -> dict[str, Any]:
@@ -639,7 +807,7 @@ class CalendarService:
             svc = self._get_service()
             ev = svc.events().insert(calendarId=self.settings.calendar_id, body=body).execute()
             return self._event_to_dict(ev)
-        except HttpError as exc:
+        except (HttpError, RuntimeError) as exc:
             return {"error": str(exc)}
 
     def _delete_event_sync(self, event_id: str) -> dict[str, Any]:
@@ -647,7 +815,7 @@ class CalendarService:
             svc = self._get_service()
             svc.events().delete(calendarId=self.settings.calendar_id, eventId=event_id).execute()
             return {"id": event_id, "status": "deleted"}
-        except HttpError as exc:
+        except (HttpError, RuntimeError) as exc:
             return {"error": str(exc)}
 
     def _upsert_cache_event(self, event: dict[str, Any]) -> None:
@@ -717,11 +885,15 @@ class CalendarService:
 
     def _persist_cache(self) -> None:
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)
-        self.cache_path.write_text(json.dumps(self.cache, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp = self.cache_path.with_suffix(self.cache_path.suffix + ".tmp")
+        tmp.write_text(json.dumps(self.cache, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(self.cache_path)
 
     def _persist_queue(self) -> None:
         self.queue_path.parent.mkdir(parents=True, exist_ok=True)
-        self.queue_path.write_text(json.dumps(self.queue, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp = self.queue_path.with_suffix(self.queue_path.suffix + ".tmp")
+        tmp.write_text(json.dumps(self.queue, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(self.queue_path)
 
     @staticmethod
     def _now_iso() -> str:

@@ -2,7 +2,7 @@
 
 Connects to Google's Gemini 3.1 Flash Live API and streams call audio
 (from the py-tgcalls recording file) directly to Gemini, receiving
-spoken audio responses back.  This replaces the STT -> Z.AI -> TTS
+spoken audio responses back.  This replaces the STT -> LLM -> TTS
 pipeline with a single native audio-to-audio model.
 """
 
@@ -12,6 +12,7 @@ import array
 import asyncio
 import hashlib
 import wave
+from collections import deque
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
@@ -91,8 +92,8 @@ class GeminiLiveSession:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.audio_out_queue: asyncio.Queue[bytes] = asyncio.Queue()
-        self.transcript_in: list[str] = []
-        self.transcript_out: list[str] = []
+        self.transcript_in: deque[str] = deque(maxlen=MAX_TRANSCRIPT_ENTRIES)
+        self.transcript_out: deque[str] = deque(maxlen=MAX_TRANSCRIPT_ENTRIES)
         self._running = False
         self._first_turn_complete = asyncio.Event()
 
@@ -119,10 +120,12 @@ class GeminiLiveSession:
             api_key=self.settings.gemini_api_key,
         )
 
-    def _live_config(self) -> Any:
+    def _live_config(self, caller_hint: str | None = None) -> Any:
         from secretary_ai.core.locales import GEMINI_LIVE_SYSTEM_PROMPT, t
 
         system_prompt = t(GEMINI_LIVE_SYSTEM_PROMPT, self.settings.language)
+        if caller_hint:
+            system_prompt += f"\n{caller_hint}"
         return types.LiveConnectConfig(
             responseModalities=[types.Modality.AUDIO],
             systemInstruction=system_prompt,
@@ -148,6 +151,7 @@ class GeminiLiveSession:
         stop_check: StopCheck,
         debug_log: DebugLog,
         greeting_played: bool = False,
+        caller_hint: str | None = None,
     ) -> None:
         """Main entry point: bridges call audio <-> Gemini Live.
 
@@ -165,6 +169,9 @@ class GeminiLiveSession:
         greeting_played:
             If True, a cached greeting was already played before Gemini
             connected.  The initial prompt tells Gemini not to greet again.
+        caller_hint:
+            Optional hint about the caller (e.g. name) to inject into the
+            system instruction for personalized greetings.
         """
         if not _GENAI_AVAILABLE:
             debug_log("gemini_live_unavailable", {"reason": "google-genai not installed"})
@@ -179,7 +186,7 @@ class GeminiLiveSession:
         try:
             async with client.aio.live.connect(
                 model=self.settings.gemini_live_model,
-                config=self._live_config(),
+                config=self._live_config(caller_hint=caller_hint),
             ) as session:
                 debug_log("gemini_live_connected", {"model": self.settings.gemini_live_model})
 
@@ -275,10 +282,24 @@ class GeminiLiveSession:
         stop_check: StopCheck,
         debug_log: DebugLog,
     ) -> None:
-        """Read new audio from the recording WAV file and send to Gemini."""
-        read_offset = 0
-        src_rate: int | None = None
+        """Decode the recording file with ffmpeg and stream PCM to Gemini.
+
+        py-tgcalls records to a WAV container using MP3 (libmp3lame) or
+        FLAC codec — Python's ``wave`` module can only read raw PCM.
+        We use ffmpeg with ``-ss`` to seek past already-decoded content
+        so each invocation only decodes the *new* portion — O(n) total
+        instead of the naive O(n²) approach of re-decoding everything.
+        """
+        decoded_seconds = 0.0
         chunks_sent = 0
+        last_file_size = 0
+
+        # Wait for the greeting turn to finish before forwarding caller
+        # audio — otherwise Gemini interrupts its own greeting mid-sentence.
+        try:
+            await asyncio.wait_for(self._first_turn_complete.wait(), timeout=15.0)
+        except asyncio.TimeoutError:
+            debug_log("gemini_live_send_wait_timeout", {})
 
         while not stop_check():
             if not recording_path.exists():
@@ -286,53 +307,58 @@ class GeminiLiveSession:
                 continue
 
             file_size = recording_path.stat().st_size
-            if file_size <= WAV_HEADER_SIZE:
-                await asyncio.sleep(POLL_WAIT_HEADER)
-                continue
-
-            if src_rate is None:
-                try:
-                    with wave.open(str(recording_path), "rb") as wf:
-                        src_rate = wf.getframerate()
-                        read_offset = WAV_HEADER_SIZE
-                    debug_log("gemini_live_wav_header", {"src_rate": src_rate})
-                except Exception:
-                    await asyncio.sleep(POLL_WAIT_FILE)
-                    continue
-
-            readable = file_size - read_offset
-            if readable < 0:
-                debug_log(
-                    "gemini_live_file_shrunk",
-                    {"file_size": file_size, "read_offset": read_offset},
-                )
-                read_offset = WAV_HEADER_SIZE
-                readable = file_size - read_offset
-            if readable < MIN_SEND_BYTES:
+            if file_size <= WAV_HEADER_SIZE or file_size == last_file_size:
                 await asyncio.sleep(POLL_WAIT_DATA)
                 continue
 
+            if file_size < last_file_size:
+                debug_log(
+                    "gemini_live_file_shrunk",
+                    {"file_size": file_size, "last_file_size": last_file_size,
+                     "decoded_seconds": decoded_seconds},
+                )
+                decoded_seconds = 0.0
+
+            last_file_size = file_size
+
+            cmd = ["ffmpeg", "-v", "error"]
+            if decoded_seconds > 0:
+                cmd += ["-ss", f"{decoded_seconds:.3f}"]
+            cmd += [
+                "-i", str(recording_path),
+                "-f", "s16le", "-ar", str(SEND_SAMPLE_RATE), "-ac", "1",
+                "pipe:1",
+            ]
+
             try:
-                raw = await asyncio.to_thread(self._read_bytes, recording_path, read_offset, readable)
+                proc = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                stdout, stderr = await proc.communicate()
             except Exception:
-                await asyncio.sleep(POLL_WAIT_HEADER)
+                await asyncio.sleep(POLL_SEND_ERROR)
                 continue
 
-            read_offset += len(raw)
-
-            pcm_16k = _resample_pcm16(raw, src_rate, SEND_SAMPLE_RATE)
-            if not pcm_16k:
+            if not stdout or len(stdout) < MIN_SEND_BYTES:
+                await asyncio.sleep(POLL_WAIT_DATA)
                 continue
+
+            decoded_seconds += len(stdout) / (SEND_SAMPLE_RATE * 2)
+
+            if chunks_sent == 0:
+                debug_log("gemini_live_send_started", {"pcm_bytes": len(stdout)})
 
             try:
                 await session.send_realtime_input(
-                    audio=types.Blob(data=pcm_16k, mimeType=SEND_AUDIO_MIME),
+                    audio=types.Blob(data=stdout, mimeType=SEND_AUDIO_MIME),
                 )
                 chunks_sent += 1
                 if chunks_sent == 1 or chunks_sent % LOG_EVERY_N_CHUNKS == 0:
                     debug_log(
                         "gemini_live_audio_sent",
-                        {"chunks": chunks_sent, "offset": read_offset},
+                        {"chunks": chunks_sent, "decoded_s": f"{decoded_seconds:.1f}"},
                     )
             except Exception as exc:
                 debug_log(
@@ -402,15 +428,11 @@ class GeminiLiveSession:
         input_tx = getattr(server_content, "input_transcription", None)
         if input_tx and getattr(input_tx, "text", None):
             self.transcript_in.append(input_tx.text)
-            if len(self.transcript_in) > MAX_TRANSCRIPT_ENTRIES:
-                self.transcript_in = self.transcript_in[-MAX_TRANSCRIPT_ENTRIES:]
             debug_log("gemini_live_input_transcript", {"text": input_tx.text[:200]})
 
         output_tx = getattr(server_content, "output_transcription", None)
         if output_tx and getattr(output_tx, "text", None):
             self.transcript_out.append(output_tx.text)
-            if len(self.transcript_out) > MAX_TRANSCRIPT_ENTRIES:
-                self.transcript_out = self.transcript_out[-MAX_TRANSCRIPT_ENTRIES:]
             debug_log("gemini_live_output_transcript", {"text": output_tx.text[:200]})
 
     # ------------------------------------------------------------------
@@ -486,6 +508,8 @@ class GeminiLiveSession:
         """Write accumulated PCM chunks as a single WAV and play it."""
         pcm_data = b"".join(chunks)
         pcm_48k = _resample_pcm16(pcm_data, RECEIVE_SAMPLE_RATE, PLAYBACK_SAMPLE_RATE)
+        # Pad 300 ms of silence so py-tgcalls ffmpeg fully drains the tail.
+        pcm_48k += b"\x00" * (2 * PLAYBACK_SAMPLE_RATE * 300 // 1000)
 
         wav_path = out_dir / f"gemini_{call_prefix}_{response_idx}.wav"
         try:
@@ -503,17 +527,33 @@ class GeminiLiveSession:
         try:
             result = await audio_out_callback(str(wav_path))
             status = result.get("status") if isinstance(result, dict) else str(result)
-            debug_log(
-                "gemini_live_audio_played",
-                {"idx": response_idx, "bytes": len(pcm_data), "status": status},
-            )
+            detail = result.get("detail", "") if isinstance(result, dict) else ""
+            log_data: dict[str, object] = {
+                "idx": response_idx, "bytes": len(pcm_data), "status": status,
+            }
+            if detail:
+                log_data["detail"] = str(detail)[:300]
+            debug_log("gemini_live_audio_played", log_data)
         except Exception as exc:
             debug_log(
                 "gemini_live_play_error",
                 {"error": exc.__class__.__name__, "detail": str(exc)[:200]},
             )
         finally:
-            wav_path.unlink(missing_ok=True)
+            # Defer WAV cleanup — py-tgcalls play() spawns ffmpeg in the
+            # background, so the file must remain readable until playback
+            # finishes.  Estimate duration from PCM size + 5s safety margin.
+            audio_seconds = len(pcm_48k) / (PLAYBACK_SAMPLE_RATE * 2)  # 16-bit mono
+            delay = audio_seconds + 5.0
+
+            async def _deferred_unlink(p: Path, d: float) -> None:
+                try:
+                    await asyncio.sleep(d)
+                    p.unlink(missing_ok=True)
+                except Exception:
+                    pass  # Best-effort cleanup; file will be reaped later.
+
+            asyncio.get_running_loop().create_task(_deferred_unlink(wav_path, delay))
 
     # ------------------------------------------------------------------
     # Helpers
@@ -546,8 +586,4 @@ class GeminiLiveSession:
         data = getattr(response, "data", None)
         return [data] if isinstance(data, bytes) else []
 
-    @staticmethod
-    def _read_bytes(path: Path, offset: int, count: int) -> bytes:
-        with open(path, "rb") as fh:
-            fh.seek(offset)
-            return fh.read(count)
+

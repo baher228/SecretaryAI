@@ -1,4 +1,3 @@
-import httpx
 from secretary_ai.core.config import Settings
 
 TAVILY_URL = "https://api.tavily.com/search"
@@ -29,8 +28,10 @@ async def tavily_search(
         body["include_domains"] = include_domains
 
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.post(TAVILY_URL, json=body)
+        from secretary_ai.services.openai_client import _get_client
+
+        client = _get_client()
+        resp = await client.post(TAVILY_URL, json=body, timeout=15.0)
         if resp.status_code != 200:
             return [{"error": f"Tavily {resp.status_code}: {resp.text[:200]}"}]
         data = resp.json()

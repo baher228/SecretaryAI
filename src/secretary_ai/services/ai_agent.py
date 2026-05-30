@@ -12,7 +12,9 @@ from secretary_ai.core.locales import (
     t_dict,
 )
 from secretary_ai.domain.models import AgentAnalyzeResponse, IntentType
-from secretary_ai.services.zai_client import extract_message, zai_chat_completion
+from secretary_ai.services.openai_client import extract_message, openai_chat_completion
+
+_MAX_ACTION_ITEMS = 8
 
 _HEURISTIC_RULES: list[tuple[IntentType, tuple[str, ...], str]] = [
     (IntentType.RESCHEDULE_EVENT, ("reschedule", "move meeting", "another time"), "Check available slots and propose alternatives."),
@@ -27,6 +29,9 @@ _HEURISTIC_RULES: list[tuple[IntentType, tuple[str, ...], str]] = [
 
 class SecretaryAIAgent:
     """LLM-driven secretary brain with structured intent/action extraction."""
+
+    _MAX_HISTORY_PER_CALL = 40
+    _MAX_CALLS_TRACKED = 200
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
@@ -72,6 +77,17 @@ class SecretaryAIAgent:
             live_mode=True,
         )
 
+    def clear_call(self, call_id: str) -> None:
+        """Remove history for a finished call to free memory."""
+        self.histories.pop(call_id, None)
+
+    def _trim_histories(self) -> None:
+        """Evict oldest call histories if tracking too many calls."""
+        if len(self.histories) > self._MAX_CALLS_TRACKED:
+            excess = len(self.histories) - self._MAX_CALLS_TRACKED
+            for key in list(self.histories)[:excess]:
+                del self.histories[key]
+
     async def _analyze_with_profile(
         self,
         call_id: str,
@@ -83,11 +99,11 @@ class SecretaryAIAgent:
         temperature: float,
         live_mode: bool,
     ) -> AgentAnalyzeResponse:
-        if not self.settings.zai_api_key:
+        if not self.settings.openai_api_key:
             return self._heuristic_response(call_id, transcript, context)
 
         payload = {
-            "model": self.settings.zai_model,
+            "model": self.settings.openai_model,
             "messages": self._build_messages(
                 call_id=call_id,
                 transcript=transcript,
@@ -97,9 +113,9 @@ class SecretaryAIAgent:
                 live_mode=live_mode,
             ),
             "temperature": temperature,
-            "max_tokens": max_tokens,
+            "max_completion_tokens": max_tokens,
         }
-        result = await zai_chat_completion(self.settings, payload)
+        result = await openai_chat_completion(self.settings, payload)
         if result.get("error"):
             return self._heuristic_response(call_id, transcript, context)
 
@@ -111,6 +127,9 @@ class SecretaryAIAgent:
 
         response = self._normalize_response(call_id=call_id, parsed=parsed)
         history.append({"role": "assistant", "content": response.reply})
+        if len(history) > self._MAX_HISTORY_PER_CALL:
+            del history[: len(history) - self._MAX_HISTORY_PER_CALL]
+        self._trim_histories()
         return response
 
     def _build_messages(
@@ -170,9 +189,9 @@ class SecretaryAIAgent:
             reply=reply,
             requires_human=requires_human,
             transfer_reason=transfer_reason,
-            action_items=action_items[:8],
+            action_items=action_items[:_MAX_ACTION_ITEMS],
             extracted_fields=extracted_fields,
-            model=self.settings.zai_model,
+            model=self.settings.openai_model,
         )
 
     def _heuristic_response(
@@ -195,7 +214,7 @@ class SecretaryAIAgent:
         if context:
             extracted["context_keys"] = sorted(context.keys())
 
-        return AgentAnalyzeResponse(
+        response = AgentAnalyzeResponse(
             call_id=call_id,
             intent=intent,
             confidence=0.45,
@@ -204,8 +223,15 @@ class SecretaryAIAgent:
             transfer_reason=t(TRANSFER_REASON_DEFAULT, self.settings.language) if intent == IntentType.TRANSFER_HUMAN else None,
             action_items=action_items,
             extracted_fields=extracted,
-            model=self.settings.zai_model,
+            model=self.settings.openai_model,
         )
+        history = self.histories.get(call_id)
+        if history is not None:
+            history.append({"role": "assistant", "content": response.reply})
+            if len(history) > self._MAX_HISTORY_PER_CALL:
+                del history[: len(history) - self._MAX_HISTORY_PER_CALL]
+        self._trim_histories()
+        return response
 
     @staticmethod
     def _fallback_reply_from_intent(intent: str, lang: str = "en") -> str:
@@ -226,8 +252,6 @@ class SecretaryAIAgent:
         if requires_human and not reason:
             reason = t(TRANSFER_REASON_DEFAULT, lang)
         return reason
-
-
 
     @staticmethod
     def _try_parse_json(raw: str) -> dict[str, Any]:

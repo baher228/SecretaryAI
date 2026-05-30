@@ -9,7 +9,7 @@ from secretary_ai.services.secretary import SecretaryService
 
 def test_calendar_reminder_flow_without_stt_triggers_call_to_fixed_user(tmp_path: Path) -> None:
     settings = Settings(
-        zai_api_key=None,
+        openai_api_key=None,
         calendar_enabled=True,
         calendar_id=None,
         calendar_service_account_json=None,

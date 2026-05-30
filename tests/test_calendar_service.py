@@ -108,6 +108,7 @@ def test_process_queue_applies_cache_only_create_when_provider_unavailable(tmp_p
     queue = tmp_path / "calendar_queue.json"
     service = CalendarService(
         Settings(
+            openai_api_key=None,
             calendar_enabled=True,
             calendar_cache_path=str(cache),
             calendar_queue_path=str(queue),

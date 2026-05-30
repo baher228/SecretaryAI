@@ -5,6 +5,7 @@ from typing import Any
 import re
 
 from secretary_ai.core.config import Settings
+from secretary_ai.core.text_utils import normalize_text
 
 
 class MemoryStore:
@@ -28,6 +29,12 @@ class MemoryStore:
         self.short_term: dict[str, Any] = self._load_json(self.short_path, default={"calls": {}})
         self.mid_term: dict[str, Any] = self._load_json(self.mid_path, default={"upcoming": [], "updated_at": None})
 
+        self._fact_cache: list[dict[str, Any]] = []
+        self._fact_cache_size: int = 0
+        self._long_term_write_count: int = 0
+
+    _MAX_LONG_TERM_BYTES = 20 * 1024 * 1024  # 20 MB
+
     def append_long_term(self, record_type: str, payload: dict[str, Any]) -> None:
         row = {
             "ts": datetime.now(timezone.utc).isoformat(),
@@ -36,6 +43,9 @@ class MemoryStore:
         }
         with self.long_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
+        self._long_term_write_count += 1
+        if self._long_term_write_count % 500 == 0:
+            self._rotate_long_term_if_needed()
 
     def add_short_term_turn(self, call_id: str, transcript: str, reply: str | None = None) -> None:
         calls = self.short_term.setdefault("calls", {})
@@ -47,7 +57,6 @@ class MemoryStore:
         }
         turns = call.setdefault("turns", [])
         turns.append(turn)
-        # keep short-term bounded
         if len(turns) > 30:
             call["turns"] = turns[-30:]
         call["updated_at"] = datetime.now(timezone.utc).isoformat()
@@ -102,7 +111,7 @@ class MemoryStore:
         }
 
     def add_user_fact_if_requested(self, call_id: str, transcript: str) -> dict[str, Any] | None:
-        text = " ".join((transcript or "").split()).strip()
+        text = normalize_text(transcript)
         lower = text.lower()
         if not text:
             return None
@@ -127,15 +136,40 @@ class MemoryStore:
         return record
 
     def retrieve_user_fact(self, query: str, limit: int = 3) -> list[dict[str, Any]]:
-        query_text = " ".join((query or "").split()).strip().lower()
-        if not query_text or not self.long_path.exists():
+        query_text = normalize_text(query, lowercase=True)
+        if not query_text:
             return []
 
         query_tokens = set(re.findall(r"[a-z0-9]+", query_text))
         if not query_tokens:
             return []
 
+        self._refresh_fact_cache()
+
         matches: list[tuple[int, dict[str, Any]]] = []
+        for record in self._fact_cache:
+            fact = record["fact"]
+            tokens = set(re.findall(r"[a-z0-9]+", fact.lower()))
+            score = len(query_tokens & tokens)
+            if score > 0:
+                matches.append((score, record))
+
+        matches.sort(key=lambda item: item[0], reverse=True)
+        return [item[1] for item in matches[: max(1, limit)]]
+
+    def _refresh_fact_cache(self) -> None:
+        """Reload user facts from long-term log only when the file changes."""
+        if not self.long_path.exists():
+            self._fact_cache = []
+            self._fact_cache_size = 0
+            return
+        try:
+            current_size = self.long_path.stat().st_size
+        except OSError:
+            return
+        if current_size == self._fact_cache_size:
+            return
+        facts: list[dict[str, Any]] = []
         try:
             for line in self.long_path.read_text(encoding="utf-8").splitlines():
                 line = line.strip()
@@ -149,15 +183,27 @@ class MemoryStore:
                     continue
                 payload = row.get("payload") or {}
                 fact = str(payload.get("fact") or "")
-                tokens = set(re.findall(r"[a-z0-9]+", fact.lower()))
-                score = len(query_tokens.intersection(tokens))
-                if score > 0:
-                    matches.append((score, {"fact": fact, "ts": row.get("ts"), "call_id": payload.get("call_id")}))
+                if fact:
+                    facts.append({"fact": fact, "ts": row.get("ts"), "call_id": payload.get("call_id")})
         except Exception:
-            return []
+            return
+        self._fact_cache = facts
+        self._fact_cache_size = current_size
 
-        matches.sort(key=lambda item: item[0], reverse=True)
-        return [item[1] for item in matches[: max(1, limit)]]
+    def _rotate_long_term_if_needed(self) -> None:
+        """Rotate long-term log when it exceeds size limit."""
+        try:
+            if not self.long_path.exists():
+                return
+            if self.long_path.stat().st_size < self._MAX_LONG_TERM_BYTES:
+                return
+            rotated = self.long_path.with_suffix(".jsonl.old")
+            rotated.unlink(missing_ok=True)
+            self.long_path.rename(rotated)
+            self._fact_cache = []
+            self._fact_cache_size = 0
+        except Exception:
+            return
 
     @staticmethod
     def _load_json(path: Path, default: dict[str, Any]) -> dict[str, Any]:
@@ -172,4 +218,6 @@ class MemoryStore:
     @staticmethod
     def _save_json(path: Path, payload: dict[str, Any]) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(path)
