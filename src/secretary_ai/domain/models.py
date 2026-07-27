@@ -96,6 +96,7 @@ class TelegramLiveAgentStatusResponse(BaseModel):
     recording_path: str | None = None
     last_stt_status: str | None = None
     last_transcript: str | None = None
+    latency_metrics: dict[str, Any] = Field(default_factory=dict)
 
 
 class PostCallEventRequest(BaseModel):

@@ -46,8 +46,8 @@ GREETING_CACHE_DIR = Path(".telegram/cache")
 # Sleep intervals (seconds)
 POLL_WAIT_FILE = 0.3
 POLL_WAIT_HEADER = 0.2
-POLL_WAIT_DATA = 0.08
-POLL_SEND_INTERVAL = 0.05
+POLL_WAIT_DATA = 0.04
+POLL_SEND_INTERVAL = 0.02
 POLL_SEND_ERROR = 0.3
 POLL_RECEIVE_ERROR = 0.3
 POLL_PLAY_TIMEOUT = 10.0
@@ -61,6 +61,8 @@ LOG_EVERY_N_CHUNKS = 50
 StopCheck = Callable[[], bool]
 DebugLog = Callable[[str, dict[str, Any]], None]
 AudioOutCallback = Callable[[str], Awaitable[dict[str, Any]]]
+BargeInCallback = Callable[[], Awaitable[None]]
+EventCallback = Callable[[], None]
 
 
 def _resample_pcm16(data: bytes, src_rate: int, dst_rate: int) -> bytes:
@@ -152,6 +154,9 @@ class GeminiLiveSession:
         debug_log: DebugLog,
         greeting_played: bool = False,
         caller_hint: str | None = None,
+        barge_in_callback: BargeInCallback | None = None,
+        on_first_user_speech: EventCallback | None = None,
+        on_first_assistant_audio: EventCallback | None = None,
     ) -> None:
         """Main entry point: bridges call audio <-> Gemini Live.
 
@@ -197,7 +202,13 @@ class GeminiLiveSession:
                         self._send_audio_loop(session, recording_path, stop_check, debug_log)
                     ),
                     asyncio.create_task(
-                        self._receive_audio_loop(session, stop_check, debug_log)
+                        self._receive_audio_loop(
+                            session,
+                            stop_check,
+                            debug_log,
+                            barge_in_callback=barge_in_callback,
+                            on_first_user_speech=on_first_user_speech,
+                        )
                     ),
                     asyncio.create_task(
                         self._play_audio_loop(
@@ -207,6 +218,7 @@ class GeminiLiveSession:
                             stop_check,
                             debug_log,
                             greeting_played=greeting_played,
+                            on_first_assistant_audio=on_first_assistant_audio,
                         )
                     ),
                 ]
@@ -378,6 +390,9 @@ class GeminiLiveSession:
         session: Any,
         stop_check: StopCheck,
         debug_log: DebugLog,
+        *,
+        barge_in_callback: BargeInCallback | None = None,
+        on_first_user_speech: EventCallback | None = None,
     ) -> None:
         """Receive audio/text responses from Gemini and queue them."""
         turns_received = 0
@@ -393,6 +408,8 @@ class GeminiLiveSession:
                     if getattr(server_content, "interrupted", False):
                         while not self.audio_out_queue.empty():
                             self.audio_out_queue.get_nowait()
+                        if barge_in_callback is not None:
+                            await barge_in_callback()
                         debug_log("gemini_live_interrupted", {})
                         continue
 
@@ -400,7 +417,10 @@ class GeminiLiveSession:
                     for chunk in audio_chunks:
                         self.audio_out_queue.put_nowait(chunk)
 
-                    self._record_transcripts(server_content, debug_log)
+                    saw_user_speech = self._record_transcripts(server_content, debug_log)
+                    if saw_user_speech and on_first_user_speech is not None:
+                        on_first_user_speech()
+                        on_first_user_speech = None
 
                     if getattr(server_content, "turn_complete", False):
                         self.audio_out_queue.put_nowait(b"")  # sentinel
@@ -423,17 +443,20 @@ class GeminiLiveSession:
                     return
                 await asyncio.sleep(POLL_RECEIVE_ERROR)
 
-    def _record_transcripts(self, server_content: Any, debug_log: DebugLog) -> None:
+    def _record_transcripts(self, server_content: Any, debug_log: DebugLog) -> bool:
         """Append input/output transcriptions and trim to bounded size."""
+        saw_user_speech = False
         input_tx = getattr(server_content, "input_transcription", None)
         if input_tx and getattr(input_tx, "text", None):
             self.transcript_in.append(input_tx.text)
+            saw_user_speech = True
             debug_log("gemini_live_input_transcript", {"text": input_tx.text[:200]})
 
         output_tx = getattr(server_content, "output_transcription", None)
         if output_tx and getattr(output_tx, "text", None):
             self.transcript_out.append(output_tx.text)
             debug_log("gemini_live_output_transcript", {"text": output_tx.text[:200]})
+        return saw_user_speech
 
     # ------------------------------------------------------------------
     # Play loop: audio queue → WAV → Telegram call
@@ -447,6 +470,7 @@ class GeminiLiveSession:
         stop_check: StopCheck,
         debug_log: DebugLog,
         greeting_played: bool = False,
+        on_first_assistant_audio: EventCallback | None = None,
     ) -> None:
         """Accumulate audio for each Gemini turn, then play once.
 
@@ -487,6 +511,9 @@ class GeminiLiveSession:
                         turn_chunks, out_dir, call_prefix, response_idx,
                         audio_out_callback, debug_log, should_cache,
                     )
+                    if on_first_assistant_audio is not None:
+                        on_first_assistant_audio()
+                        on_first_assistant_audio = None
                     if should_cache:
                         should_cache = False
                     turn_chunks.clear()

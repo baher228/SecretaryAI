@@ -100,3 +100,19 @@ def test_stream_audio_out_includes_underlying_error_message() -> None:
     result = asyncio.run(scenario())
     assert result["status"] == "error"
     assert "ffmpeg" in result["detail"].lower()
+
+
+def test_stop_audio_out_stops_current_stream() -> None:
+    service = build_service()
+    call_id = "tg-222"
+    chat_id = 222
+    service.calls[call_id] = {"call_id": call_id, "chat_id": chat_id, "status": "active"}
+    service._calls = _FakeCalls()
+
+    async def scenario():
+        service._can_place_calls = lambda: asyncio.sleep(0, result=True)  # type: ignore[method-assign]
+        return await service.stop_audio_out(call_id)
+
+    result = asyncio.run(scenario())
+    assert result["status"] == "stopped"
+    assert service._calls.play_calls[-1] == (chat_id, None)

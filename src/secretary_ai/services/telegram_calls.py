@@ -363,6 +363,41 @@ class TelegramCallService:
                 "detail": f"Could not stream outgoing audio: {exc.__class__.__name__}: {detail}",
             }
 
+    async def stop_audio_out(self, call_id: str) -> dict[str, Any]:
+        """Best-effort stop for current outbound stream (for barge-in)."""
+        call = self.calls.get(call_id)
+        if not call:
+            return {"call_id": call_id, "status": "not_found", "detail": "Unknown call_id."}
+        chat_id = call.get("chat_id")
+        if not isinstance(chat_id, int):
+            return {
+                "call_id": call_id,
+                "status": "invalid_call_state",
+                "detail": "Call has no active Telegram chat_id.",
+            }
+        if not await self._can_place_calls():
+            return {
+                "call_id": call_id,
+                "status": "not_authorized",
+                "detail": "Telegram calls client is not ready.",
+            }
+        try:
+            assert self._calls is not None
+            await self._calls.play(chat_id)
+            self._append_event(call_id, "audio_out_stopped", {})
+            return {
+                "call_id": call_id,
+                "status": "stopped",
+                "detail": "Stopped current outgoing audio stream.",
+            }
+        except Exception as exc:
+            detail = str(exc) or "no message"
+            return {
+                "call_id": call_id,
+                "status": "error",
+                "detail": f"Could not stop outgoing audio: {exc.__class__.__name__}: {detail}",
+            }
+
     async def stream_audio_in(self, call_id: str, output_path: str) -> dict[str, Any]:
         call = self.calls.get(call_id)
         if not call:

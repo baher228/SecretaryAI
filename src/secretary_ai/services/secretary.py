@@ -51,6 +51,7 @@ from secretary_ai.services.ai_agent import SecretaryAIAgent
 from secretary_ai.services.calendar import CalendarService
 from secretary_ai.services.live_debug import LiveDebugLogger
 from secretary_ai.services.live_templates import LiveTemplateMatcher
+from secretary_ai.services.latency import LatencyTracker
 from secretary_ai.services.memory_store import MemoryStore
 from secretary_ai.services.telegram_calls import TelegramCallService
 from secretary_ai.services.tts import TTSEngine
@@ -103,6 +104,7 @@ class SecretaryService:
         self.wake_word = WakeWordEngine(settings)
         self.contacts = ContactBook(settings)
         self.stt = STTEngine(settings)
+        self.latency = LatencyTracker()
         self.live_sessions: dict[str, dict[str, Any]] = {}
         self._auto_live_task: asyncio.Task | None = None
         self._calendar_worker_task: asyncio.Task | None = None
@@ -156,7 +158,7 @@ class SecretaryService:
     def architecture_overview(self) -> ArchitectureOverview:
         return ArchitectureOverview(
             name="Secretary AI",
-            mode="telegram_mtproto_mvp",
+            mode="telegram_realtime",
             components=[
                 "API Layer (FastAPI routes + WebSocket live agent)",
                 "Telegram MTProto (Telethon user session)",
@@ -177,8 +179,8 @@ class SecretaryService:
             ],
             notes=(
                 "Production-ready Telegram voice secretary. Uses a real Telegram "
-                "user account session. Designed for easy provider swap to "
-                "Twilio/others later."
+                "user account session. Designed for transport abstraction while "
+                "keeping Telegram as the primary channel."
             ),
         )
 
@@ -1203,7 +1205,9 @@ class SecretaryService:
             "started_at": self._now_iso(),
             "started_monotonic": monotonic(),
             "mode": "gemini_live",
+            "timeline_id": f"{call_id}:{int(monotonic()*1000)}",
         }
+        self.latency.mark_answered(call_id)
         session["task"] = asyncio.create_task(
             self._telegram_gemini_live_loop(
                 call_id, recording_path, greeting_played=greeting_played,
@@ -1236,6 +1240,7 @@ class SecretaryService:
                 "context": payload.context,
                 "mode": "gemini_live",
                 "greeting_played": greeting_played,
+                "latency": self.latency.metrics(call_id),
             },
         )
 
@@ -1312,6 +1317,7 @@ class SecretaryService:
             recording_path=session.get("recording_path"),
             last_stt_status=session.get("last_stt_status"),
             last_transcript=session.get("last_transcript_delta"),
+            latency_metrics=self.latency.metrics(call_id),
         )
 
     async def _telegram_gemini_live_loop(
@@ -1340,6 +1346,21 @@ class SecretaryService:
         async def audio_out_callback(wav_path: str) -> dict[str, Any]:
             return await self.telegram.stream_audio_out(call_id, wav_path)
 
+        async def barge_in_callback() -> None:
+            self.latency.mark_barge_in(call_id)
+            result = await self.telegram.stop_audio_out(call_id)
+            if result.get("status") in {"stopped", "ok"}:
+                self.latency.mark_interrupt_stop(call_id)
+            self.debug.log(call_id, "barge_in_stop_audio", {"result": result})
+
+        def on_first_user_speech() -> None:
+            self.latency.mark_first_user_speech(call_id)
+            self._log_latency_snapshot(call_id, "latency_first_user_speech")
+
+        def on_first_assistant_audio() -> None:
+            self.latency.mark_first_assistant_audio(call_id)
+            self._log_latency_snapshot(call_id, "latency_first_assistant_audio")
+
         # Build personalized caller hint from contact book.
         call_record = self.telegram.get_call(call_id) or {}
         caller_id = str(call_record.get("target_user") or call_record.get("chat_id") or "")
@@ -1353,6 +1374,9 @@ class SecretaryService:
                 debug_log=debug_log,
                 greeting_played=greeting_played,
                 caller_hint=caller_hint,
+                barge_in_callback=barge_in_callback,
+                on_first_user_speech=on_first_user_speech,
+                on_first_assistant_audio=on_first_assistant_audio,
             )
         except asyncio.CancelledError:
             raise
@@ -1400,6 +1424,15 @@ class SecretaryService:
                     logger.debug("Call summary send failed for %s", call_id, exc_info=True)
 
             asyncio.create_task(_safe_summary())
+
+    def _log_latency_snapshot(self, call_id: str, event: str) -> None:
+        metrics = self.latency.metrics(call_id)
+        self.debug.log(call_id, event, metrics)
+        kpi_ok = metrics.get("kpi_ok") if isinstance(metrics, dict) else None
+        if not isinstance(kpi_ok, dict):
+            return
+        if any(value is False for value in kpi_ok.values()):
+            self.debug.log(call_id, "latency_threshold_miss", metrics)
 
     async def _send_call_summary(
         self,

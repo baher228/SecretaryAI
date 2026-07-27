@@ -165,5 +165,8 @@ def test_start_live_agent_resets_per_call_state_and_uses_fresh_recording(tmp_pat
         assert "tg-1" not in service._reminder_flow_state
         calls = service.memory.short_term.get("calls", {})
         assert "tg-1" not in calls
+        status = await service.telegram_live_agent_status("tg-1")
+        assert status.latency_metrics.get("call_id") == "tg-1"
+        assert status.latency_metrics.get("call_answer_ms") is not None
 
     asyncio.run(run())

@@ -83,7 +83,7 @@ async def health(
     return {
         "status": "ok",
         "version": APP_VERSION,
-        "mode": "telegram_mtproto_mvp",
+        "mode": "telegram_realtime",
         "language": s.language,
         "openai": {
             "configured": bool(s.openai_api_key),
@@ -98,6 +98,7 @@ async def health(
             "ready": tg_ready,
             "detail": tg_detail,
             "active_calls": len(secretary.live_sessions),
+            "text_bot_enabled": bool(secretary.settings.telegram_text_bot_enabled),
         },
         "calendar": {
             "ready": cal_ready,
@@ -144,6 +145,16 @@ async def debug_logs(
         return result
     except Exception:
         return []
+
+
+@router.get("/debug/latency")
+async def debug_latency(
+    call_id: str | None = Query(None),
+    secretary: SecretaryService = Depends(get_secretary),
+) -> dict[str, Any]:
+    if call_id:
+        return {"call_id": call_id, "metrics": secretary.latency.metrics(call_id)}
+    return {"metrics": secretary.latency.all_metrics()}
 
 
 @router.websocket("/debug/ws")

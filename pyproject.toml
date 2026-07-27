@@ -9,6 +9,7 @@ description = "AI-powered phone secretary for call handling, calendar operations
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+  "aiogram>=3.22.0",
   "edge-tts>=7.0.0",
   "faster-whisper>=1.1.1",
   "google-api-python-client>=2.176.0",

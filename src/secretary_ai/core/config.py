@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     telegram_auto_start_live_speak_response: bool = True
     telegram_auto_start_scan_seconds: float = 2.0
     telegram_audio_root: str = ".telegram/audio"
+    telegram_text_bot_enabled: bool = False
+    telegram_text_bot_token: str | None = None
+    telegram_text_bot_allowed_ids: str = ""
     assistant_auto_greet_on_connect: bool = True
     assistant_greeting_message: str | None = None
 
