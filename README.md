@@ -11,6 +11,8 @@ AI-powered phone secretary that handles Telegram voice calls autonomously. Uses 
 - **Auto-answer** — picks up inbound Telegram calls and starts the AI loop
 - **Greeting cache** — caches Gemini's first greeting for instant playback on subsequent calls
 - **Control panel** — web UI for monitoring status, call history, and testing API endpoints
+- **Latency telemetry** — per-call KPIs for answer speed, first response speed, and barge-in stop time
+- **Merged text bot runtime** — optional Telegram text bot runs inside the same FastAPI process
 
 ## Prerequisites
 
@@ -101,6 +103,18 @@ curl -X POST http://127.0.0.1:8000/api/v1/calls/outbound \
 
 The AI live loop starts automatically on the call.
 
+### 5. Optional merged Telegram text bot
+
+Enable these in `.env`:
+
+```env
+TELEGRAM_TEXT_BOT_ENABLED=true
+TELEGRAM_TEXT_BOT_TOKEN=your_bot_token
+TELEGRAM_TEXT_BOT_ALLOWED_IDS=123456789
+```
+
+This keeps voice calls and text notifications in a single runtime.
+
 ## Calendar Integration (Optional)
 
 1. Create a Google Cloud service account with Calendar API access
@@ -129,6 +143,8 @@ The AI can then check availability, schedule meetings, and send reminders.
 | Live | `POST /api/v1/calls/{id}/live/start` | Start AI live loop on a call |
 | Live | `POST /api/v1/calls/{id}/live/stop` | Stop AI live loop |
 | Live | `GET /api/v1/calls/{id}/live/status` | Live loop status |
+| Debug | `GET /api/v1/debug/latency` | List latency KPI metrics |
+| Debug | `GET /api/v1/debug/latency?call_id=...` | Latency KPI for one call |
 | Agent | `POST /api/v1/agent/reply` | Get AI reply for a transcript |
 | Agent | `POST /api/v1/agent/analyze` | Structured intent analysis |
 | Agent | `POST /api/v1/agent/live/respond` | Full live response (AI + play) |
@@ -148,8 +164,10 @@ src/secretary_ai/
 │   ├── secretary.py       # Main orchestrator
 │   ├── gemini_live.py     # Gemini Live audio-to-audio bridge
 │   ├── ai_agent.py        # OpenAI agent reasoning
-│   ├── zai_client.py      # Shared OpenAI-compatible HTTP client
+│   ├── openai_client.py   # Shared OpenAI-compatible HTTP client
 │   ├── telegram_calls.py  # Telegram MTProto call adapter
+│   ├── telegram_text_bot.py # Optional merged Telegram text bot
+│   ├── latency.py         # Per-call latency timeline/KPI tracker
 │   ├── calendar.py        # Google Calendar service
 │   ├── memory_store.py    # Call context memory
 │   ├── maps.py            # Google Maps ETA

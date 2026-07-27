@@ -1,6 +1,6 @@
-1. Initialize the Python backend skeleton and package tooling.
-2. Add Z.AI model connectivity check endpoint.
-3. Implement Twilio inbound/outbound voice MVP flows.
-4. Add voice webhook endpoints for intent gather, voicemail, and status callbacks.
-5. Keep call state in memory and expose retrieval endpoint for testing.
-6. Document Docker + Twilio setup for hackathon execution.
+1. Keep Telegram as the single call/message channel for the current personal-use phase.
+2. Track latency KPIs per call: answer time, first response time, and barge-in stop time.
+3. Prioritize interruption-first behavior (stop assistant speech immediately when user speaks).
+4. Run optional Telegram text bot in the same runtime for notifications and lightweight text commands.
+5. Maintain RU/EN voice quality with concise interruption-aware prompt rules.
+6. Keep deployment defaults production-safe while preserving hot-reload via compose dev profile.

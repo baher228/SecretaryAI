@@ -58,6 +58,12 @@ GOOGLE_MAPS_API_KEY=your_maps_key_here
 docker compose up --build
 ```
 
+For hot-reload development mode:
+
+```bash
+docker compose --profile dev up --build secretary-ai-dev
+```
+
 Wait for the logs to show the server is ready. Then open:
 
 - **Dashboard**: http://127.0.0.1:8000/dashboard
@@ -138,7 +144,25 @@ curl -X POST http://127.0.0.1:8000/api/v1/chat \
   -d '{"message": "What meetings do I have today?", "history": []}'
 ```
 
-## 7. Docker commands
+## 7. Debug latency KPIs
+
+```bash
+# All calls
+curl http://127.0.0.1:8000/api/v1/debug/latency
+
+# One call
+curl "http://127.0.0.1:8000/api/v1/debug/latency?call_id=tg-123"
+```
+
+## 8. Optional merged Telegram text bot
+
+```env
+TELEGRAM_TEXT_BOT_ENABLED=true
+TELEGRAM_TEXT_BOT_TOKEN=your_bot_token
+TELEGRAM_TEXT_BOT_ALLOWED_IDS=123456789
+```
+
+## 9. Docker commands
 
 ```bash
 # View logs
