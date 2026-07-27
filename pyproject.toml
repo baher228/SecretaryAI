@@ -33,6 +33,7 @@ silero = [
   "torch>=2.0.0",
 ]
 dev = [
+  "pytest-asyncio>=0.23.8",
   "pytest>=8.3.0",
   "ruff>=0.6.0",
 ]
