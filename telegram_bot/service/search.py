@@ -2,6 +2,21 @@ import httpx
 from bot.config import TAVILY_API_KEY
 
 TAVILY_URL = "https://api.tavily.com/search"
+_client: httpx.AsyncClient | None = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None or _client.is_closed:
+        _client = httpx.AsyncClient(timeout=30.0)
+    return _client
+
+
+async def close_client() -> None:
+    global _client
+    if _client is not None and not _client.is_closed:
+        await _client.aclose()
+    _client = None
 
 
 async def tavily_search(
@@ -26,8 +41,7 @@ async def tavily_search(
         body["include_domains"] = include_domains
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(TAVILY_URL, json=body)
+        resp = await _get_client().post(TAVILY_URL, json=body)
         if resp.status_code != 200:
             return [{"error": f"Tavily {resp.status_code}: {resp.text[:200]}"}]
         data = resp.json()

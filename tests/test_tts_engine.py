@@ -1,4 +1,5 @@
 import asyncio
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from secretary_ai.core.config import Settings
@@ -7,6 +8,10 @@ from secretary_ai.services.tts import TTSEngine
 
 def test_resolve_edge_voice_supports_polly_alias() -> None:
     assert TTSEngine._resolve_edge_voice("Polly.Joanna") == "en-US-JennyNeural"
+
+
+def test_resolve_edge_voice_matches_app_language() -> None:
+    assert TTSEngine._resolve_edge_voice("Polly.Joanna", "ru") == "ru-RU-DmitryNeural"
 
 
 def test_resolve_edge_voice_defaults_when_empty() -> None:
@@ -72,10 +77,17 @@ def test_silero_model_load_failure_falls_back_to_edge() -> None:
     settings = Settings(tts_enabled=True, tts_provider="silero")
     engine = TTSEngine(settings)
 
-    with patch("secretary_ai.services.tts._get_silero_model", side_effect=RuntimeError("no torch")):
+    with (
+        patch("secretary_ai.services.tts._get_silero_model", side_effect=RuntimeError("no torch")),
+        patch.object(
+            engine,
+            "_synthesize_edge",
+            return_value=("fallback.mp3", "generated"),
+        ) as fallback,
+    ):
         path, status = asyncio.run(engine.synthesize("Привет", "call-6"))
-    # Falls back to Edge TTS which should produce a file
-    assert path is not None
+    fallback.assert_awaited_once_with("Привет", "call-6")
+    assert path == "fallback.mp3"
     assert status == "generated"
 
 
@@ -91,7 +103,9 @@ def test_silero_synthesis_success() -> None:
     engine = TTSEngine(settings)
 
     mock_model = MagicMock()
-    mock_model.save_wav = MagicMock(return_value=None)
+    mock_model.save_wav = MagicMock(
+        side_effect=lambda **kwargs: Path(kwargs["audio_path"]).write_bytes(b"wav")
+    )
 
     async def _fake_get_model(_settings: Settings) -> MagicMock:
         return mock_model
@@ -112,6 +126,14 @@ def test_silero_synthesis_success() -> None:
 def test_available_providers_includes_edge() -> None:
     providers = TTSEngine.available_providers()
     assert "edge_tts" in providers
+
+
+def test_output_path_sanitizes_cross_platform_call_id(tmp_path) -> None:
+    engine = TTSEngine(Settings(telegram_audio_root=str(tmp_path)))
+    path = engine._output_path('../bad:*?"<>|call', "mp3")
+
+    assert path.parent == tmp_path / "generated"
+    assert path.name.startswith("bad_call-")
 
 
 def test_silero_voices_locale_data() -> None:

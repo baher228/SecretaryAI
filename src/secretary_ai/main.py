@@ -8,6 +8,7 @@ from secretary_ai.core.config import get_settings
 from secretary_ai.services.secretary import SecretaryService
 from secretary_ai.services.telegram_text_bot import TelegramTextBotService
 from secretary_ai.ui.dashboard import router as dashboard_router
+from secretary_ai.ui.voice_app import router as voice_app_router
 from secretary_ai import APP_VERSION
 
 logger = logging.getLogger(__name__)
@@ -44,6 +45,7 @@ def create_app() -> FastAPI:
     app.state.secretary = secretary
     app.state.telegram_text_bot = text_bot
     app.include_router(router, prefix="/api/v1")
+    app.include_router(voice_app_router)
     app.include_router(dashboard_router)
     return app
 

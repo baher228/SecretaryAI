@@ -31,12 +31,20 @@ class TelegramTextBotService:
     def __init__(self, settings: Settings, secretary: SecretaryService) -> None:
         self.settings = settings
         self.secretary = secretary
-        self._enabled = bool(settings.telegram_text_bot_enabled and settings.telegram_text_bot_token)
         self._allowed = {
             int(raw.strip())
             for raw in settings.telegram_text_bot_allowed_ids.split(",")
             if raw.strip().isdigit()
         }
+        self._enabled = bool(
+            settings.telegram_text_bot_enabled
+            and settings.telegram_text_bot_token
+            and self._allowed
+        )
+        if settings.telegram_text_bot_enabled and not self._allowed:
+            logger.warning(
+                "Telegram text bot disabled: TELEGRAM_TEXT_BOT_ALLOWED_IDS is empty"
+            )
         self._bot: Bot | None = None
         self._dispatcher: Dispatcher | None = None
         self._task: asyncio.Task | None = None
@@ -114,6 +122,4 @@ class TelegramTextBotService:
     def _is_allowed(self, message: Message) -> bool:
         user = getattr(message, "from_user", None)
         user_id = int(getattr(user, "id", 0) or 0)
-        if not self._allowed:
-            return True
         return user_id in self._allowed

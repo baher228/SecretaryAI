@@ -132,6 +132,10 @@ class Settings(BaseSettings):
     gemini_live_model: str = "gemini-3.1-flash-live-preview"
     gemini_live_voice: str = "Zephyr"
     gemini_live_enabled: bool = True
+    gemini_live_api_version: str = "v1beta"
+
+    # Browser voice app. Required for non-local access.
+    voice_app_access_key: str | None = None
 
     @model_validator(mode="after")
     def _apply_language_defaults(self) -> "Settings":

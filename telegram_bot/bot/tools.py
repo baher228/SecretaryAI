@@ -1,5 +1,4 @@
 import asyncio
-import json
 from datetime import datetime, timedelta
 from sqlalchemy import select, desc
 from db.session import AsyncSessionLocal
@@ -242,6 +241,8 @@ TOOL_SCHEMAS = [
 
 
 async def _list_recent_calls(limit: int = 10, days_back: int = 7):
+    limit = min(max(int(limit), 1), 50)
+    days_back = min(max(int(days_back), 1), 365)
     async with AsyncSessionLocal() as s:
         since = datetime.utcnow() - timedelta(days=days_back)
         q = select(Call).where(Call.started_at >= since).order_by(desc(Call.started_at)).limit(limit)
@@ -282,7 +283,7 @@ async def _create_task(description: str, due_at: str | None = None):
 
 async def _list_tasks(status: str = "open"):
     async with AsyncSessionLocal() as s:
-        q = select(Task).order_by(desc(Task.created_at))
+        q = select(Task).order_by(desc(Task.created_at)).limit(50)
         if status != "all":
             q = q.where(Task.status == status)
         rows = (await s.execute(q)).scalars().all()

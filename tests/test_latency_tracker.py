@@ -18,3 +18,12 @@ def test_latency_tracker_emits_kpi_metrics() -> None:
     assert metrics["barge_in_count"] == 1
     assert metrics["stream_interrupt_count"] == 1
     assert set(metrics["kpi_ok"].keys()) == {"call_answer", "first_response", "barge_in_stop"}
+
+
+def test_latency_tracker_bounds_completed_history() -> None:
+    tracker = LatencyTracker()
+    for index in range(tracker._MAX_TIMELINES + 1):
+        tracker.ensure(f"call-{index}")
+
+    assert len(tracker.all_metrics()) == tracker._MAX_TIMELINES
+    assert tracker.metrics("call-0")["detail"].startswith("No latency")

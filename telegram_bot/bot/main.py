@@ -1,4 +1,6 @@
 import asyncio
+from contextlib import suppress
+from html import escape
 import re
 import time
 import uuid
@@ -9,15 +11,16 @@ from aiogram.types import Message, BotCommand, CallbackQuery, InlineKeyboardMark
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.exceptions import TelegramBadRequest
 
-from bot.config import TELEGRAM_BOT_TOKEN, OWNER_TELEGRAM_ID, ALLOWED_TELEGRAM_IDS
+from bot.config import TELEGRAM_BOT_TOKEN, ALLOWED_TELEGRAM_IDS
 from bot.agent import run_agent
 from bot.files import (
     UPLOAD_DIR, extract_pdf_text, summarize_document,
-    describe_image, transcribe_audio,
+    describe_image, transcribe_audio, close_http_client,
 )
 from bot.tools import _store_context
 from bot.reminders import reminder_loop
 from db.session import init_db
+from service.search import close_client as close_search_client
 
 bot = Bot(token=TELEGRAM_BOT_TOKEN)
 dp = Dispatcher()
@@ -178,6 +181,8 @@ async def handle_text_internal(
         return
     finally:
         typing_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await typing_task
 
     if new_history is not None:
         sessions[incoming_uid] = new_history[-20:]
@@ -200,7 +205,7 @@ async def handle_document(message: Message):
     if not is_allowed(message):
         return
     doc = message.document
-    filename = doc.file_name or "document"
+    filename = Path(doc.file_name or "document").name
     suffix = Path(filename).suffix.lower()
 
     status = await message.answer("📎 <i>Receiving your file…</i>", parse_mode="HTML")
@@ -215,7 +220,7 @@ async def handle_document(message: Message):
         await status.edit_text("📎 <i>Summarizing…</i>", parse_mode="HTML")
         summary = await summarize_document(filename, text)
     elif suffix in (".txt", ".md"):
-        text = local.read_text(errors="ignore")[:20000]
+        text = (await asyncio.to_thread(local.read_text, errors="ignore"))[:20000]
         summary = await summarize_document(filename, text)
     else:
         summary = f"File attached (type: {doc.mime_type or suffix or 'unknown'}). Content not auto-extracted."
@@ -227,7 +232,7 @@ async def handle_document(message: Message):
     )
 
     await status.edit_text(
-        f"📎 <b>{filename}</b>\n\n{summary}\n\n<i>Stored — voice agent will reference it on calls.</i>",
+        f"📎 <b>{escape(filename)}</b>\n\n{escape(summary)}\n\n<i>Stored — voice agent will reference it on calls.</i>",
         parse_mode="HTML",
         reply_markup=build_default_keyboard(),
     )
@@ -255,7 +260,7 @@ async def handle_photo(message: Message):
     await _store_context(kind="file", content=content, file_path=str(local))
 
     await status.edit_text(
-        f"🖼️ {description}\n\n<i>Stored — voice agent will reference it on calls.</i>",
+        f"🖼️ {escape(description)}\n\n<i>Stored — voice agent will reference it on calls.</i>",
         parse_mode="HTML",
         reply_markup=build_default_keyboard(),
     )
@@ -284,7 +289,7 @@ async def handle_voice(message: Message):
         return
 
     await status.edit_text(
-        f"🎙️ <i>You said:</i> {transcript}\n\n<i>Processing…</i>",
+        f"🎙️ <i>You said:</i> {escape(transcript)}\n\n<i>Processing…</i>",
         parse_mode="HTML",
     )
 
@@ -433,10 +438,17 @@ async def main():
         BotCommand(command="calendar", description="Show this week's calendar"),
         BotCommand(command="help", description="What I can do"),
     ])
-    asyncio.create_task(reminder_loop(bot))
+    reminder_task = asyncio.create_task(reminder_loop(bot))
     print("[reminders] Background reminder loop started (1-hour lead time, checks every 60s)")
     print("Bot starting...")
-    await dp.start_polling(bot)
+    try:
+        await dp.start_polling(bot)
+    finally:
+        reminder_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await reminder_task
+        await close_http_client()
+        await close_search_client()
 
 
 if __name__ == "__main__":

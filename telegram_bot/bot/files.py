@@ -1,3 +1,4 @@
+import asyncio
 import base64
 from pathlib import Path
 import httpx
@@ -6,24 +7,42 @@ from openai import AsyncOpenAI
 from bot.config import ZAI_API_KEY, ZAI_BASE_URL
 
 vision_client = AsyncOpenAI(api_key=ZAI_API_KEY, base_url=ZAI_BASE_URL)
+_http_client: httpx.AsyncClient | None = None
 
 UPLOAD_DIR = Path("./data/uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def _get_http_client() -> httpx.AsyncClient:
+    global _http_client
+    if _http_client is None or _http_client.is_closed:
+        _http_client = httpx.AsyncClient(timeout=60.0)
+    return _http_client
+
+
+async def close_http_client() -> None:
+    global _http_client
+    if _http_client is not None and not _http_client.is_closed:
+        await _http_client.aclose()
+    _http_client = None
+
+
 async def extract_pdf_text(file_path: Path, max_chars: int = 20000) -> str:
     """Extract text from a digital PDF. Returns up to max_chars chars."""
     try:
-        reader = PdfReader(str(file_path))
-        parts = []
-        total = 0
-        for page in reader.pages:
-            text = page.extract_text() or ""
-            parts.append(text)
-            total += len(text)
-            if total >= max_chars:
-                break
-        return "\n".join(parts)[:max_chars]
+        def _extract() -> str:
+            reader = PdfReader(str(file_path))
+            parts = []
+            total = 0
+            for page in reader.pages:
+                text = page.extract_text() or ""
+                parts.append(text)
+                total += len(text)
+                if total >= max_chars:
+                    break
+            return "\n".join(parts)[:max_chars]
+
+        return await asyncio.to_thread(_extract)
     except Exception as e:
         return f"[PDF extraction failed: {e}]"
 
@@ -46,8 +65,9 @@ async def summarize_document(filename: str, content: str) -> str:
 
 async def describe_image(file_path: Path) -> str:
     """Use GLM-4.5V to describe/extract from an image. Returns caption or extracted text."""
-    with open(file_path, "rb") as f:
-        b64 = base64.b64encode(f.read()).decode()
+    b64 = await asyncio.to_thread(
+        lambda: base64.b64encode(file_path.read_bytes()).decode()
+    )
 
     suffix = file_path.suffix.lower().lstrip(".")
     mime = {"jpg": "jpeg", "jpeg": "jpeg", "png": "png", "webp": "webp", "gif": "gif"}.get(suffix, "jpeg")
@@ -69,12 +89,16 @@ async def describe_image(file_path: Path) -> str:
 async def transcribe_audio(file_path: Path) -> str:
     """Send audio to Z.AI's audio/transcriptions endpoint. Returns transcribed text."""
     url = f"{ZAI_BASE_URL.rstrip('/')}/audio/transcriptions"
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        with open(file_path, "rb") as f:
-            files = {"file": (file_path.name, f, "audio/ogg")}
-            data = {"model": "whisper-1"}
-            headers = {"Authorization": f"Bearer {ZAI_API_KEY}"}
-            response = await client.post(url, headers=headers, files=files, data=data)
+    audio = await asyncio.to_thread(file_path.read_bytes)
+    files = {"file": (file_path.name, audio, "audio/ogg")}
+    data = {"model": "whisper-1"}
+    headers = {"Authorization": f"Bearer {ZAI_API_KEY}"}
+    response = await _get_http_client().post(
+        url,
+        headers=headers,
+        files=files,
+        data=data,
+    )
 
     if response.status_code != 200:
         return f"[Transcription failed: {response.status_code} {response.text[:200]}]"

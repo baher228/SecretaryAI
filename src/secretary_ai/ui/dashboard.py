@@ -9,26 +9,27 @@ DASHBOARD_HTML = """<!doctype html>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Secretary AI</title>
-    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
       :root {
         --bg: #09090b;
-        --panel: rgba(24, 24, 27, 0.7);
+        --panel: #18181b;
         --ink: #f0fdf4;
-        --muted: #a1a1aa;
-        --line: rgba(255, 255, 255, 0.1);
+        --muted: #b4b4bd;
+        --line: #34343a;
         --primary: #10b981;
         --primary-2: #3b82f6;
         --ok: #22c55e;
         --warn: #eab308;
         --err: #ef4444;
-        --shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-        --glass-border: rgba(255, 255, 255, 0.18);
+        --shadow: 0 6px 8px rgba(0, 0, 0, 0.22);
+        --glass-border: #3f3f46;
+        --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --font-mono: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
       }
       * { box-sizing: border-box; }
       body {
         margin: 0;
-        font-family: "Sora", sans-serif;
+        font-family: var(--font-sans);
         color: var(--ink);
         background: var(--bg);
         min-height: 100vh;
@@ -42,12 +43,11 @@ DASHBOARD_HTML = """<!doctype html>
       }
       .header-area h1 {
         margin: 0 0 10px;
-        font-size: clamp(1.9rem, 2.8vw, 2.6rem);
+        font-size: 2.25rem;
         letter-spacing: -0.03em;
         font-weight: 800;
-        background: linear-gradient(105deg, var(--primary), var(--primary-2));
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+        color: var(--primary);
+        text-wrap: balance;
       }
       .hero-subtitle { margin: 0; color: var(--muted); font-size: 0.95rem; }
 
@@ -56,8 +56,7 @@ DASHBOARD_HTML = """<!doctype html>
         padding: 8px;
         border: 1px solid var(--line);
         border-radius: 999px;
-        background: rgba(24, 24, 27, 0.6);
-        backdrop-filter: blur(10px);
+        background: var(--panel);
       }
       .nav-tabs {
         display: flex; gap: 8px;
@@ -67,15 +66,15 @@ DASHBOARD_HTML = """<!doctype html>
         flex: 1; background: transparent;
         border: 1px solid transparent;
         color: var(--muted);
-        font-family: "Sora", sans-serif; font-size: 0.96rem; font-weight: 600;
-        padding: 12px 16px; cursor: pointer;
-        transition: all 0.18s ease; border-radius: 999px; outline: none;
+        font-family: var(--font-sans); font-size: 0.96rem; font-weight: 600;
+        min-height: 44px; padding: 10px 16px; cursor: pointer;
+        transition: color 0.18s ease-out, background-color 0.18s ease-out, border-color 0.18s ease-out;
+        border-radius: 999px;
       }
       .tab-btn:hover { color: var(--ink); border-color: var(--line); }
       .tab-btn.active {
-        color: #fff; border-color: transparent;
-        background: linear-gradient(135deg, var(--primary), var(--primary-2));
-        box-shadow: 0 8px 20px -10px rgba(16, 185, 129, 0.7);
+        color: #04130e; border-color: var(--primary);
+        background: var(--primary);
       }
 
       .tab-content { display: none; }
@@ -86,8 +85,7 @@ DASHBOARD_HTML = """<!doctype html>
 
       .panel {
         background: var(--panel);
-        backdrop-filter: blur(16px);
-        border-radius: 20px;
+        border-radius: 16px;
         border: 1px solid var(--glass-border);
         box-shadow: var(--shadow);
         padding: 24px;
@@ -122,34 +120,39 @@ DASHBOARD_HTML = """<!doctype html>
 
       .log-box {
         background: #000; color: #34d399;
-        font-family: "JetBrains Mono", monospace; font-size: 0.82rem;
+        font-family: var(--font-mono); font-size: 0.82rem;
         padding: 14px; border-radius: 12px;
         max-height: 300px; overflow-y: auto; white-space: pre-wrap;
         border: 1px solid rgba(52, 211, 153, 0.15);
       }
 
-      input, textarea {
+      input, textarea, select {
         width: 100%; background: rgba(255,255,255,0.06);
         border: 1px solid var(--line); color: var(--ink);
         padding: 10px 12px; border-radius: 10px;
-        font-family: "Sora", sans-serif; margin-bottom: 10px;
-        outline: none; font-size: 0.88rem;
+        font-family: var(--font-sans); margin-bottom: 10px;
+        font-size: 0.88rem;
       }
       textarea {
         min-height: 80px; resize: vertical;
-        font-family: "JetBrains Mono", monospace; font-size: 0.82rem;
+        font-family: var(--font-mono); font-size: 0.82rem;
       }
-      input:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15); }
+      input:focus-visible, textarea:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible {
+        outline: 3px solid rgba(16, 185, 129, 0.5);
+        outline-offset: 2px;
+        border-color: var(--primary);
+      }
 
       button {
-        background: linear-gradient(135deg, var(--primary), var(--primary-2));
-        border: 0; color: #fff; font-weight: 700;
-        padding: 9px 14px; border-radius: 10px; cursor: pointer;
-        font-family: "Sora", sans-serif; font-size: 0.84rem;
-        transition: opacity 0.2s, transform 0.1s;
+        background: var(--primary);
+        border: 1px solid var(--primary); color: #04130e; font-weight: 700;
+        min-height: 44px; padding: 9px 14px; border-radius: 10px; cursor: pointer;
+        font-family: var(--font-sans); font-size: 0.84rem;
+        transition: filter 0.18s ease-out, transform 0.1s ease-out;
       }
-      button:hover { opacity: 0.9; }
+      button:hover { filter: brightness(1.08); }
       button:active { transform: scale(0.97); }
+      button:disabled { cursor: not-allowed; opacity: 0.55; }
       button.secondary { background: rgba(255,255,255,0.08); border: 1px solid var(--line); }
       button.secondary:hover { background: rgba(255,255,255,0.12); }
 
@@ -168,7 +171,7 @@ DASHBOARD_HTML = """<!doctype html>
       code.path {
         background: rgba(255,255,255,0.06); border: 1px solid var(--line);
         color: var(--ink); border-radius: 6px; padding: 3px 8px;
-        font-family: "JetBrains Mono", monospace; font-size: 0.82rem;
+        font-family: var(--font-mono); font-size: 0.82rem;
       }
       .hint { color: var(--muted); font-size: 0.82rem; margin: 0 0 10px; }
 
@@ -183,6 +186,25 @@ DASHBOARD_HTML = """<!doctype html>
         display: inline-block; vertical-align: middle; margin-right: 6px;
       }
       @keyframes spin { to { transform: rotate(360deg); } }
+      @media (max-width: 720px) {
+        .header-area { padding: 24px 18px 16px; }
+        .header-area h1 { font-size: 1.9rem; }
+        .nav-container { margin: 0 12px 18px; border-radius: 14px; overflow-x: auto; }
+        .nav-tabs { width: max-content; min-width: 100%; }
+        .tab-btn { flex: none; }
+        .panel { padding: 18px; }
+        .row > input { flex-basis: 100% !important; }
+        .cards { grid-template-columns: 1fr; }
+        .two-column-grid { grid-template-columns: 1fr !important; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+          scroll-behavior: auto !important;
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
     </style>
   </head>
   <body>
@@ -192,21 +214,21 @@ DASHBOARD_HTML = """<!doctype html>
     </div>
 
     <div class="nav-container">
-      <div class="nav-tabs">
-        <button class="tab-btn active" onclick="switchTab('overview', this)">Status</button>
-        <button class="tab-btn" onclick="switchTab('history', this)">History</button>
-        <button class="tab-btn" onclick="switchTab('voice', this)">Voice</button>
-        <button class="tab-btn" onclick="switchTab('bookings', this)">Bookings</button>
-        <button class="tab-btn" onclick="switchTab('contacts', this)">Contacts</button>
-        <button class="tab-btn" onclick="switchTab('settings', this)">Settings</button>
-        <button class="tab-btn" onclick="switchTab('lab', this)">API Lab</button>
+      <div class="nav-tabs" role="tablist" aria-label="Dashboard sections">
+        <button type="button" role="tab" aria-selected="true" aria-controls="overview" class="tab-btn active" onclick="switchTab('overview', this)">Status</button>
+        <button type="button" role="tab" aria-selected="false" aria-controls="history" class="tab-btn" onclick="switchTab('history', this)">History</button>
+        <button type="button" role="tab" aria-selected="false" aria-controls="voice" class="tab-btn" onclick="switchTab('voice', this)">Voice</button>
+        <button type="button" role="tab" aria-selected="false" aria-controls="bookings" class="tab-btn" onclick="switchTab('bookings', this)">Bookings</button>
+        <button type="button" role="tab" aria-selected="false" aria-controls="contacts" class="tab-btn" onclick="switchTab('contacts', this)">Contacts</button>
+        <button type="button" role="tab" aria-selected="false" aria-controls="settings" class="tab-btn" onclick="switchTab('settings', this)">Settings</button>
+        <button type="button" role="tab" aria-selected="false" aria-controls="lab" class="tab-btn" onclick="switchTab('lab', this)">API Lab</button>
       </div>
     </div>
 
     <div class="wrap">
 
       <!-- STATUS TAB -->
-      <div id="overview" class="tab-content active">
+      <div id="overview" class="tab-content active" role="tabpanel" tabindex="0">
         <div class="stats-grid">
           <div class="stat-card">
             <span class="stat-title">Service</span>
@@ -253,8 +275,8 @@ DASHBOARD_HTML = """<!doctype html>
           <h2>Quick Outbound Call</h2>
           <p class="subtitle">Start a Gemini Live call to a Telegram user.</p>
           <div class="row">
-            <input type="text" id="quick-target" placeholder="@username or user ID" style="flex:1; margin:0;" />
-            <input type="text" id="quick-purpose" placeholder="Purpose (optional)" style="flex:1; margin:0;" />
+            <input type="text" id="quick-target" aria-label="Telegram username or user ID" placeholder="@username or user ID" style="flex:1; margin:0;" />
+            <input type="text" id="quick-purpose" aria-label="Call purpose" placeholder="Purpose (optional)" style="flex:1; margin:0;" />
             <button onclick="startQuickCall()">Call</button>
           </div>
         </div>
@@ -265,25 +287,25 @@ DASHBOARD_HTML = """<!doctype html>
           <div class="row" style="margin-bottom: 8px; gap: 6px;">
             <span id="ws-status" style="font-size: 0.78rem; color: var(--muted);"><span class="status-indicator status-warn"></span>Connecting...</span>
             <div style="flex:1;"></div>
-            <input type="text" id="debug-filter" placeholder="Filter by call_id or stage..." style="width: 260px; margin: 0; font-size: 0.78rem; padding: 6px 10px;" />
+            <input type="text" id="debug-filter" aria-label="Filter debug log" placeholder="Filter by call ID or stage..." style="width: 260px; margin: 0; font-size: 0.78rem; padding: 6px 10px;" />
             <button class="secondary" onclick="clearDebugLog()" style="font-size: 0.78rem; padding: 6px 10px;">Clear</button>
           </div>
-          <div class="log-box" id="debug-log" style="max-height: 400px;">Waiting for events...</div>
+          <div class="log-box" id="debug-log" role="log" aria-live="polite" style="max-height: 400px;">Waiting for events...</div>
         </div>
       </div>
 
       <!-- HISTORY TAB -->
-      <div id="history" class="tab-content">
+      <div id="history" class="tab-content" role="tabpanel" tabindex="0">
         <div class="panel">
           <h2>Call History</h2>
           <p class="subtitle">Full log of all calls with duration, direction, and transcript previews.</p>
-          <div style="display:flex;gap:8px;margin-bottom:14px;">
-            <select id="history-filter-dir" style="background:rgba(255,255,255,0.06);border:1px solid var(--line);color:var(--ink);padding:8px 12px;border-radius:8px;font-size:0.85rem;">
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
+            <select id="history-filter-dir" aria-label="Filter by call direction" style="background:rgba(255,255,255,0.06);border:1px solid var(--line);color:var(--ink);padding:8px 12px;border-radius:8px;font-size:0.85rem;">
               <option value="all">All Directions</option>
               <option value="inbound">Inbound</option>
               <option value="outbound">Outbound</option>
             </select>
-            <select id="history-filter-status" style="background:rgba(255,255,255,0.06);border:1px solid var(--line);color:var(--ink);padding:8px 12px;border-radius:8px;font-size:0.85rem;">
+            <select id="history-filter-status" aria-label="Filter by call status" style="background:rgba(255,255,255,0.06);border:1px solid var(--line);color:var(--ink);padding:8px 12px;border-radius:8px;font-size:0.85rem;">
               <option value="all">All Statuses</option>
               <option value="active">Active</option>
               <option value="ended">Ended</option>
@@ -305,7 +327,7 @@ DASHBOARD_HTML = """<!doctype html>
       </div>
 
       <!-- VOICE TAB -->
-      <div id="voice" class="tab-content">
+      <div id="voice" class="tab-content" role="tabpanel" tabindex="0">
         <div class="panel">
           <h2>Voice Provider</h2>
           <p class="subtitle">Current TTS engine and configuration.</p>
@@ -336,7 +358,7 @@ DASHBOARD_HTML = """<!doctype html>
         <div class="panel">
           <h2>Edge TTS — Microsoft Neural Voices</h2>
           <p class="subtitle">Cloud-based voices. Russian: ru-RU-DmitryNeural (male), ru-RU-SvetlanaNeural (female).</p>
-          <div style="display: grid; gap: 12px; grid-template-columns: 1fr 1fr; margin-top: 12px;">
+          <div class="two-column-grid" style="display: grid; gap: 12px; grid-template-columns: 1fr 1fr; margin-top: 12px;">
             <article class="card">
               <strong>DmitryNeural</strong>
               <p style="color: var(--muted); font-size: 0.82rem; margin: 4px 0 0;">Male · ru-RU · Cloud</p>
@@ -350,14 +372,14 @@ DASHBOARD_HTML = """<!doctype html>
       </div>
 
       <!-- BOOKINGS TAB -->
-      <div id="bookings" class="tab-content">
+      <div id="bookings" class="tab-content" role="tabpanel" tabindex="0">
         <div class="panel">
           <h2>Booking Search</h2>
           <p class="subtitle">Search for restaurants, hotels, events, and travel options.</p>
-          <div style="display: grid; gap: 12px; grid-template-columns: 1fr 1fr; margin-bottom: 14px;">
+          <div class="two-column-grid" style="display: grid; gap: 12px; grid-template-columns: 1fr 1fr; margin-bottom: 14px;">
             <div>
-              <label style="font-size: 0.78rem; color: var(--muted); display: block; margin-bottom: 4px;">Search Type</label>
-              <select id="booking-type" style="width:100%; background: rgba(255,255,255,0.06); border: 1px solid var(--line); color: var(--ink); padding: 10px 12px; border-radius: 10px; font-family: Sora, sans-serif; font-size: 0.88rem;">
+              <label for="booking-type" style="font-size: 0.78rem; color: var(--muted); display: block; margin-bottom: 4px;">Search Type</label>
+              <select id="booking-type" style="width:100%; background: rgba(255,255,255,0.06); border: 1px solid var(--line); color: var(--ink); padding: 10px 12px; border-radius: 10px; font-family: var(--font-sans); font-size: 0.88rem;">
                 <option value="find_restaurant">Restaurants</option>
                 <option value="find_hotel">Hotels</option>
                 <option value="find_event">Events</option>
@@ -366,12 +388,12 @@ DASHBOARD_HTML = """<!doctype html>
               </select>
             </div>
             <div>
-              <label style="font-size: 0.78rem; color: var(--muted); display: block; margin-bottom: 4px;">Location</label>
+              <label for="booking-location" style="font-size: 0.78rem; color: var(--muted); display: block; margin-bottom: 4px;">Location</label>
               <input id="booking-location" placeholder="e.g. London, Paris..." />
             </div>
           </div>
           <div style="margin-bottom: 14px;">
-            <label style="font-size: 0.78rem; color: var(--muted); display: block; margin-bottom: 4px;">Additional Details (optional)</label>
+            <label for="booking-extra" style="font-size: 0.78rem; color: var(--muted); display: block; margin-bottom: 4px;">Additional Details (optional)</label>
             <input id="booking-extra" placeholder="e.g. Italian cuisine, budget-friendly, tonight..." />
           </div>
           <button onclick="runBookingSearch()">Search</button>
@@ -394,14 +416,14 @@ DASHBOARD_HTML = """<!doctype html>
       </div>
 
       <!-- CONTACTS TAB -->
-      <div id="contacts" class="tab-content">
+      <div id="contacts" class="tab-content" role="tabpanel" tabindex="0">
         <section class="layout">
           <div>
             <h2 style="margin-bottom: 14px;">Contact Book</h2>
             <div style="display:flex;gap:8px;margin-bottom:16px;">
-              <input id="contact-id" placeholder="Caller ID (username or phone)" style="flex:1;padding:8px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:0.85rem;" />
-              <input id="contact-name" placeholder="Name" style="flex:1;padding:8px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:0.85rem;" />
-              <input id="contact-lang" placeholder="Language (en/ru)" style="width:100px;padding:8px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:0.85rem;" />
+              <input id="contact-id" aria-label="Caller ID" placeholder="Caller ID (username or phone)" style="flex:1;padding:8px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:0.85rem;" />
+              <input id="contact-name" aria-label="Contact name" placeholder="Name" style="flex:1;padding:8px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:0.85rem;" />
+              <input id="contact-lang" aria-label="Contact language" placeholder="Language (en/ru)" style="width:100px;padding:8px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:0.85rem;" />
               <button onclick="saveContact()" style="padding:8px 16px;font-size:0.82rem;">Save</button>
             </div>
             <div id="contacts-grid" class="cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;"></div>
@@ -410,7 +432,7 @@ DASHBOARD_HTML = """<!doctype html>
       </div>
 
       <!-- SETTINGS TAB -->
-      <div id="settings" class="tab-content">
+      <div id="settings" class="tab-content" role="tabpanel" tabindex="0">
         <div class="panel">
           <h2>Configuration Overview</h2>
           <p class="subtitle">Current runtime configuration. To change settings, update .env and restart the service.</p>
@@ -435,7 +457,7 @@ DASHBOARD_HTML = """<!doctype html>
       </div>
 
       <!-- API LAB TAB -->
-      <div id="lab" class="tab-content">
+      <div id="lab" class="tab-content" role="tabpanel" tabindex="0">
         <section class="layout">
           <div>
             <h2 style="margin-bottom: 14px;">Endpoints</h2>
@@ -453,7 +475,7 @@ DASHBOARD_HTML = """<!doctype html>
               <article class="card">
                 <div class="row"><span class="method post">POST</span><code class="path">/api/v1/telegram/auth/send-code</code></div>
                 <p class="hint">Send login code to your Telegram.</p>
-                <textarea id="payload-send-code">{
+                <textarea id="payload-send-code" aria-label="Send code JSON payload">{
   "phone_number": "+441234567890"
 }</textarea>
                 <button class="secondary" onclick="callPost('/api/v1/telegram/auth/send-code', 'payload-send-code')">Run</button>
@@ -461,7 +483,7 @@ DASHBOARD_HTML = """<!doctype html>
               <article class="card">
                 <div class="row"><span class="method post">POST</span><code class="path">/api/v1/telegram/auth/sign-in</code></div>
                 <p class="hint">Complete sign-in with code and password.</p>
-                <textarea id="payload-signin">{
+                <textarea id="payload-signin" aria-label="Sign in JSON payload">{
   "phone_number": "+441234567890",
   "code": "12345",
   "phone_code_hash": "from_send_code",
@@ -472,7 +494,7 @@ DASHBOARD_HTML = """<!doctype html>
               <article class="card">
                 <div class="row"><span class="method post">POST</span><code class="path">/api/v1/calls/outbound</code></div>
                 <p class="hint">Start outbound Telegram call with Gemini Live.</p>
-                <textarea id="payload-outbound">{
+                <textarea id="payload-outbound" aria-label="Outbound call JSON payload">{
   "target_user": "@username",
   "purpose": "reminder",
   "initial_audio_path": null,
@@ -483,7 +505,7 @@ DASHBOARD_HTML = """<!doctype html>
               <article class="card">
                 <div class="row"><span class="method post">POST</span><code class="path">/api/v1/chat</code></div>
                 <p class="hint">Text chat via OpenAI.</p>
-                <textarea id="payload-chat">{
+                <textarea id="payload-chat" aria-label="Chat JSON payload">{
   "message": "Hello, what can you do?"
 }</textarea>
                 <button class="secondary" onclick="callPost('/api/v1/chat', 'payload-chat')">Run</button>
@@ -491,11 +513,11 @@ DASHBOARD_HTML = """<!doctype html>
               <article class="card">
                 <div class="row"><span class="method post">POST</span><code class="path">/api/v1/calls/{call_id}/live/start</code></div>
                 <p class="hint">Start Gemini Live agent on an active call.</p>
-                <textarea id="payload-live-start">{
+                <textarea id="payload-live-start" aria-label="Live agent JSON payload">{
   "context": {"source": "dashboard"},
   "speak_response": true
 }</textarea>
-                <input type="text" id="live-call-id" placeholder="Call ID, e.g. tg-123456789" />
+                <input type="text" id="live-call-id" aria-label="Live agent call ID" placeholder="Call ID, e.g. tg-123456789" />
                 <div class="row">
                   <button class="secondary" onclick="startTelegramLive()">Start</button>
                   <button class="secondary" onclick="stopTelegramLive()">Stop</button>
@@ -526,7 +548,7 @@ DASHBOARD_HTML = """<!doctype html>
           </div>
           <div class="panel" style="align-self: start; position: sticky; top: 24px;">
             <h2>Response</h2>
-            <div class="log-box" id="output">Ready. Run any endpoint.</div>
+            <div class="log-box" id="output" role="status" aria-live="polite">Ready. Run any endpoint.</div>
           </div>
         </section>
       </div>
@@ -535,13 +557,46 @@ DASHBOARD_HTML = """<!doctype html>
     <script>
       function switchTab(tabId, btn) {
         document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(el => {
+          el.classList.remove('active');
+          el.setAttribute('aria-selected', 'false');
+        });
         document.getElementById(tabId).classList.add('active');
-        if (btn) btn.classList.add('active');
+        if (btn) {
+          btn.classList.add('active');
+          btn.setAttribute('aria-selected', 'true');
+        }
+        if (tabId === "history") loadCallHistory();
       }
 
-      function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-      function safeHref(u) { return /^https?:\/\//i.test(u) ? esc(u) : '#'; }
+      function esc(s) {
+        const d = document.createElement('div');
+        d.textContent = String(s ?? "");
+        return d.innerHTML;
+      }
+      function safeHref(value) {
+        try {
+          const url = new URL(String(value));
+          return ["http:", "https:"].includes(url.protocol) ? esc(url.href) : "#";
+        } catch { return "#"; }
+      }
+      function errorText(error) {
+        return error instanceof Error ? error.message : String(error);
+      }
+      document.querySelector(".nav-tabs").addEventListener("keydown", event => {
+        const tabs = [...document.querySelectorAll(".tab-btn")];
+        const current = tabs.indexOf(document.activeElement);
+        if (current < 0) return;
+        let next = current;
+        if (event.key === "ArrowRight") next = (current + 1) % tabs.length;
+        else if (event.key === "ArrowLeft") next = (current - 1 + tabs.length) % tabs.length;
+        else if (event.key === "Home") next = 0;
+        else if (event.key === "End") next = tabs.length - 1;
+        else return;
+        event.preventDefault();
+        tabs[next].focus();
+        tabs[next].click();
+      });
 
       async function fetchJson(path, init = {}, timeoutMs = 8000) {
         const ctrl = new AbortController();
@@ -616,10 +671,13 @@ DASHBOARD_HTML = """<!doctype html>
       }
 
       function connectCalendar() {
-        window.open("/api/v1/calendar/oauth/authorize", "_blank");
+        window.open("/api/v1/calendar/oauth/authorize", "_blank", "noopener");
       }
 
+      let dashboardRefreshInFlight = false;
       async function refreshDashboard() {
+        if (dashboardRefreshInFlight) return;
+        dashboardRefreshInFlight = true;
         try {
           const [health, auth, calls, cal] = await Promise.all([
             fetchJson("/api/v1/health", { method: "GET" }, 5000),
@@ -665,23 +723,28 @@ DASHBOARD_HTML = """<!doctype html>
               const mode = c.live_agent?.running ? "Gemini Live" : (st === "active" ? "Waiting" : "-");
               const tr = document.createElement("tr");
               tr.innerHTML = `
-                <td style="font-family: 'JetBrains Mono', monospace; color: var(--primary-2); font-size: 0.82rem;">${c.call_id || "-"}</td>
-                <td>${c.target_user || c.source_user || "-"}</td>
-                <td style="color: var(--muted); font-size: 0.85rem;">${mode}</td>
-                <td><span class="pill ${cls}">${st}</span></td>
+                <td style="font-family: var(--font-mono); color: var(--primary-2); font-size: 0.82rem;">${esc(c.call_id || "-")}</td>
+                <td>${esc(c.target_user || c.source_user || "-")}</td>
+                <td style="color: var(--muted); font-size: 0.85rem;">${esc(mode)}</td>
+                <td><span class="pill ${cls}">${esc(st)}</span></td>
               `;
               tbody.appendChild(tr);
             });
           }
           document.getElementById("status-active-calls").textContent = String(activeCount);
-        } catch (e) { console.error("Dashboard refresh failed", e); }
+        } catch (e) {
+          document.getElementById("status-health").innerHTML =
+            '<span class="status-indicator status-err"></span>Unavailable';
+        } finally {
+          dashboardRefreshInFlight = false;
+        }
       }
 
       function updateGeminiStatus(healthBody) {
         const el = document.getElementById("status-model");
         const gl = healthBody?.gemini_live;
         if (gl?.enabled) {
-          el.innerHTML = '<span class="status-indicator status-ok"></span>' + (gl.model || "Enabled");
+          el.innerHTML = '<span class="status-indicator status-ok"></span>' + esc(gl.model || "Enabled");
         } else {
           el.innerHTML = '<span class="status-indicator status-warn"></span>Disabled';
         }
@@ -729,7 +792,7 @@ DASHBOARD_HTML = """<!doctype html>
               voiceText.textContent = r.body.voice_summary;
               voiceBox.style.display = "block";
             }
-            const results = r.body.results || [];
+            const results = Array.isArray(r.body.results) ? r.body.results : [];
             if (results.length === 0) {
               resultsGrid.innerHTML = '<p style="color: var(--muted);">No results found.</p>';
             } else {
@@ -741,15 +804,15 @@ DASHBOARD_HTML = """<!doctype html>
                 return `<article class="card">
                   <div class="row"><strong>${title}</strong> ${score}</div>
                   <p style="color: var(--muted); font-size: 0.82rem; margin: 0 0 8px;">${content}${content.length >= 200 ? "..." : ""}</p>
-                  <a href="${url}" target="_blank" style="color: var(--primary); font-size: 0.82rem; text-decoration: none;">${url}</a>
+                  <a href="${url}" target="_blank" rel="noopener noreferrer" style="color: var(--primary); font-size: 0.82rem; text-decoration: none;">${url}</a>
                 </article>`;
               }).join("");
             }
           } else {
-            resultsGrid.innerHTML = `<p style="color: var(--err);">Error: ${JSON.stringify(r.body)}</p>`;
+            resultsGrid.innerHTML = `<p style="color: var(--err);">Error: ${esc(JSON.stringify(r.body))}</p>`;
           }
         } catch (e) {
-          resultsGrid.innerHTML = `<p style="color: var(--err);">Request failed: ${e}</p>`;
+          resultsGrid.innerHTML = `<p style="color: var(--err);">Request failed: ${esc(errorText(e))}</p>`;
         }
       }
 
@@ -773,7 +836,7 @@ DASHBOARD_HTML = """<!doctype html>
             container.innerHTML = '<p style="color: var(--muted);">No wake-word actions configured.</p>';
           }
         } catch (e) {
-          document.getElementById("wake-word-list").innerHTML = `<p style="color: var(--err);">Failed to load: ${e}</p>`;
+          document.getElementById("wake-word-list").innerHTML = `<p style="color: var(--err);">Failed to load: ${esc(errorText(e))}</p>`;
         }
       }
 
@@ -823,12 +886,18 @@ DASHBOARD_HTML = """<!doctype html>
             sileroGrid.innerHTML = '<p style="color: var(--muted);">Install silero + torch to enable Russian native voices.</p>';
           }
         } catch (e) {
-          console.error("Failed to load voice config", e);
+          document.getElementById("voice-provider").textContent = "Unavailable";
+          document.getElementById("voice-speaker").textContent = "Could not load voice settings";
+          document.getElementById("status-tts").innerHTML =
+            '<span class="status-indicator status-err"></span>Unavailable';
         }
       }
 
       const MAX_LOG_LINES = 200;
       let debugLogLines = [];
+      let debugSocket = null;
+      let debugReconnectTimer = null;
+      let debugReconnectMs = 1000;
 
       function clearDebugLog() {
         debugLogLines = [];
@@ -865,21 +934,32 @@ DASHBOARD_HTML = """<!doctype html>
       }
 
       function connectDebugWs() {
+        if (debugSocket && debugSocket.readyState < WebSocket.CLOSING) return;
         const wsEl = document.getElementById("ws-status");
         const proto = location.protocol === "https:" ? "wss:" : "ws:";
         const ws = new WebSocket(`${proto}//${location.host}/api/v1/debug/ws`);
+        debugSocket = ws;
         ws.onopen = () => {
+          debugReconnectMs = 1000;
           wsEl.innerHTML = '<span class="status-indicator status-ok"></span>Live';
         };
         ws.onmessage = (evt) => {
           try { addDebugEntry(JSON.parse(evt.data)); } catch (e) {}
         };
         ws.onclose = () => {
+          debugSocket = null;
           wsEl.innerHTML = '<span class="status-indicator status-err"></span>Disconnected';
-          setTimeout(connectDebugWs, 3000);
+          if (!document.hidden) {
+            clearTimeout(debugReconnectTimer);
+            debugReconnectTimer = setTimeout(connectDebugWs, debugReconnectMs);
+            debugReconnectMs = Math.min(debugReconnectMs * 2, 30000);
+          }
         };
         ws.onerror = () => ws.close();
       }
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden && !debugSocket) connectDebugWs();
+      });
 
       document.getElementById("debug-filter")?.addEventListener("input", renderDebugLog);
 
@@ -897,15 +977,14 @@ DASHBOARD_HTML = """<!doctype html>
             return;
           }
           grid.innerHTML = r.body.map(c => {
-            const safeId = esc(c.caller_id).replace(/'/g, "\\'");
             return `
             <article class="card" style="padding:14px;">
               <h3 style="margin:0 0 6px 0;font-size:0.95rem;">${esc(c.name || c.caller_id)}</h3>
               <p style="font-size:0.8rem;color:var(--muted);margin:0;">ID: ${esc(c.caller_id)}</p>
               ${c.language ? `<p style="font-size:0.8rem;color:var(--muted);margin:2px 0 0 0;">Language: ${esc(c.language)}</p>` : ""}
-              ${c.call_count ? `<p style="font-size:0.8rem;color:var(--muted);margin:2px 0 0 0;">Calls: ${c.call_count}</p>` : ""}
+              ${c.call_count ? `<p style="font-size:0.8rem;color:var(--muted);margin:2px 0 0 0;">Calls: ${esc(c.call_count)}</p>` : ""}
               ${c.notes ? `<p style="font-size:0.8rem;margin:4px 0 0 0;">${esc(c.notes)}</p>` : ""}
-              <button onclick="deleteContact('${safeId}')" style="margin-top:8px;font-size:0.75rem;padding:3px 10px;color:var(--err);">Delete</button>
+              <button type="button" class="secondary delete-contact" data-caller-id="${esc(c.caller_id)}" style="margin-top:8px;font-size:0.75rem;color:var(--err);">Delete</button>
             </article>`;
           }).join("");
         } catch (e) {
@@ -918,11 +997,15 @@ DASHBOARD_HTML = """<!doctype html>
         const name = document.getElementById("contact-name").value.trim();
         const lang = document.getElementById("contact-lang").value.trim();
         if (!callerId) { alert("Caller ID is required"); return; }
-        await fetchJson(`/api/v1/contacts/${encodeURIComponent(callerId)}`, {
+        const result = await fetchJson(`/api/v1/contacts/${encodeURIComponent(callerId)}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name: name || null, language: lang || null }),
         }, 5000);
+        if (!result.ok) {
+          alert("Contact could not be saved.");
+          return;
+        }
         document.getElementById("contact-id").value = "";
         document.getElementById("contact-name").value = "";
         document.getElementById("contact-lang").value = "";
@@ -930,12 +1013,28 @@ DASHBOARD_HTML = """<!doctype html>
       }
 
       async function deleteContact(callerId) {
-        await fetchJson(`/api/v1/contacts/${encodeURIComponent(callerId)}`, { method: "DELETE" }, 5000);
+        if (!callerId || !confirm("Delete this contact?")) return;
+        const result = await fetchJson(
+          `/api/v1/contacts/${encodeURIComponent(callerId)}`,
+          { method: "DELETE" },
+          5000,
+        );
+        if (!result.ok) {
+          alert("Contact could not be deleted.");
+          return;
+        }
         loadContacts();
       }
+      document.getElementById("contacts-grid").addEventListener("click", event => {
+        const button = event.target.closest(".delete-contact");
+        if (button) deleteContact(button.dataset.callerId || "");
+      });
 
       // --- Call History ---
+      let historyRefreshInFlight = false;
       async function loadCallHistory() {
+        if (historyRefreshInFlight) return;
+        historyRefreshInFlight = true;
         const tbody = document.getElementById("history-body");
         const dirFilter = document.getElementById("history-filter-dir").value;
         const statusFilter = document.getElementById("history-filter-status").value;
@@ -954,7 +1053,8 @@ DASHBOARD_HTML = """<!doctype html>
             let cls = "pill-ended";
             if (st === "active") cls = "pill-active";
             else if (st === "completed") cls = "pill-completed";
-            const dir = (c.direction || "-").charAt(0).toUpperCase() + (c.direction || "-").slice(1);
+            const rawDir = String(c.direction || "-");
+            const dir = rawDir.charAt(0).toUpperCase() + rawDir.slice(1);
             const dirIcon = dir === "Inbound" ? "&#8592;" : dir === "Outbound" ? "&#8594;" : "";
             const user = esc(c.target_user || c.source_user || "-");
             const ts = c.updated_at ? new Date(c.updated_at).toLocaleString() : "-";
@@ -971,17 +1071,19 @@ DASHBOARD_HTML = """<!doctype html>
             const transcripts = c.transcripts || [];
             const lastMsg = transcripts.length > 0 ? esc((transcripts[transcripts.length - 1].text || "").slice(0, 60)) : "<em style='color:var(--muted)'>none</em>";
             return `<tr>
-              <td style="font-family:'JetBrains Mono',monospace;color:var(--primary-2);font-size:0.82rem;">${esc(c.call_id || "-")}</td>
+              <td style="font-family:var(--font-mono);color:var(--primary-2);font-size:0.82rem;">${esc(c.call_id || "-")}</td>
               <td>${user}</td>
-              <td>${dirIcon} ${dir}</td>
-              <td><span class="pill ${cls}">${st}</span></td>
+              <td>${dirIcon} ${esc(dir)}</td>
+              <td><span class="pill ${cls}">${esc(st)}</span></td>
               <td>${duration}</td>
               <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${lastMsg}</td>
-              <td style="font-size:0.8rem;color:var(--muted);">${ts}</td>
+              <td style="font-size:0.8rem;color:var(--muted);">${esc(ts)}</td>
             </tr>`;
           }).join("");
         } catch (e) {
-          tbody.innerHTML = '<tr><td colspan="7" style="color:var(--err);">Failed: ' + e + '</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="7" style="color:var(--err);">Failed: ' + esc(errorText(e)) + '</td></tr>';
+        } finally {
+          historyRefreshInFlight = false;
         }
       }
 
@@ -1019,7 +1121,7 @@ DASHBOARD_HTML = """<!doctype html>
             </div>
           `).join("");
         } catch (e) {
-          grid.innerHTML = '<p style="color:var(--err);">Error: ' + e + '</p>';
+          grid.innerHTML = '<p style="color:var(--err);">Error: ' + esc(errorText(e)) + '</p>';
         }
       }
 
@@ -1040,25 +1142,39 @@ DASHBOARD_HTML = """<!doctype html>
             const summary = esc(rem.summary || rem.event_id || "-");
             const at = rem.remind_at ? new Date(rem.remind_at).toLocaleString() : "-";
             const cancelBtn = st === "scheduled"
-              ? `<button onclick="cancelReminder('${esc(rem.event_id)}')" style="font-size:0.75rem;padding:3px 8px;color:var(--err);">Cancel</button>`
+              ? `<button type="button" class="secondary cancel-reminder" data-event-id="${esc(rem.event_id)}" style="font-size:0.75rem;color:var(--err);">Cancel</button>`
               : "-";
             return `<tr>
               <td>${summary}</td>
-              <td style="font-size:0.85rem;">${at}</td>
-              <td><span class="pill ${cls}">${st}</span></td>
+              <td style="font-size:0.85rem;">${esc(at)}</td>
+              <td><span class="pill ${cls}">${esc(st)}</span></td>
               <td>${cancelBtn}</td>
             </tr>`;
           }).join("");
         } catch (e) {
-          tbody.innerHTML = '<tr><td colspan="4" style="color:var(--err);">Failed: ' + e + '</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="4" style="color:var(--err);">Failed: ' + esc(errorText(e)) + '</td></tr>';
         }
       }
 
       async function cancelReminder(eventId) {
         if (!confirm("Cancel this reminder?")) return;
-        await fetchJson(`/api/v1/reminders/${encodeURIComponent(eventId)}`, { method: "DELETE" }, 5000);
+        const result = await fetchJson(
+          `/api/v1/reminders/${encodeURIComponent(eventId)}`,
+          { method: "DELETE" },
+          5000,
+        );
+        if (!result.ok) {
+          alert("Reminder could not be cancelled.");
+          return;
+        }
         loadReminders();
       }
+      document.getElementById("reminders-body").addEventListener("click", event => {
+        const button = event.target.closest(".cancel-reminder");
+        if (button) cancelReminder(button.dataset.eventId || "");
+      });
+      document.getElementById("history-filter-dir").addEventListener("change", loadCallHistory);
+      document.getElementById("history-filter-status").addEventListener("change", loadCallHistory);
 
       refreshDashboard();
       loadInitialDebugLog();
@@ -1069,8 +1185,12 @@ DASHBOARD_HTML = """<!doctype html>
       loadCallHistory();
       loadSettings();
       loadReminders();
-      setInterval(refreshDashboard, 5000);
-      setInterval(loadCallHistory, 10000);
+      setInterval(() => { if (!document.hidden) refreshDashboard(); }, 5000);
+      setInterval(() => {
+        if (!document.hidden && document.getElementById("history").classList.contains("active")) {
+          loadCallHistory();
+        }
+      }, 10000);
     </script>
   </body>
 </html>

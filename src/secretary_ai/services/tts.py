@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -19,21 +20,29 @@ except Exception:  # pragma: no cover - optional dependency
 
 # Silero is loaded lazily on first use to avoid heavy torch import at startup.
 _silero_model: Any = None
+_silero_load_error: RuntimeError | None = None
 _silero_lock = asyncio.Lock()
 
 
 async def _get_silero_model(settings: Settings) -> Any:
     """Load and cache the Silero TTS model (thread-safe, lazy)."""
-    global _silero_model  # noqa: PLW0603
+    global _silero_model, _silero_load_error  # noqa: PLW0603
     if _silero_model is not None:
         return _silero_model
+    if _silero_load_error is not None:
+        raise _silero_load_error
 
     async with _silero_lock:
         if _silero_model is not None:
             return _silero_model
+        if _silero_load_error is not None:
+            raise _silero_load_error
 
-        loop = asyncio.get_running_loop()
-        model = await loop.run_in_executor(None, _load_silero_sync, settings)
+        try:
+            model = await asyncio.to_thread(_load_silero_sync, settings)
+        except Exception as exc:
+            _silero_load_error = RuntimeError("Silero model failed to load")
+            raise _silero_load_error from exc
         _silero_model = model
         return model
 
@@ -88,7 +97,10 @@ class TTSEngine:
 
         output_path = self._output_path(call_id, "mp3")
         try:
-            voice_name = self._resolve_edge_voice(self.settings.tts_voice)
+            voice_name = self._resolve_edge_voice(
+                self.settings.tts_voice,
+                self.settings.language,
+            )
             communicate = edge_tts.Communicate(
                 text=text,
                 voice=voice_name,
@@ -96,8 +108,12 @@ class TTSEngine:
                 volume=self.settings.tts_volume,
             )
             await communicate.save(str(output_path))
+            if not output_path.is_file() or output_path.stat().st_size == 0:
+                output_path.unlink(missing_ok=True)
+                return None, "generation_failed"
             return str(output_path.resolve()), "generated"
         except Exception:
+            output_path.unlink(missing_ok=True)
             logger.exception("Edge TTS synthesis failed")
             return None, "generation_failed"
 
@@ -127,8 +143,12 @@ class TTSEngine:
                     audio_path=str(output_path),
                 ),
             )
+            if not output_path.is_file() or output_path.stat().st_size == 0:
+                output_path.unlink(missing_ok=True)
+                return await self._synthesize_edge(text, call_id)
             return str(output_path.resolve()), "generated"
         except Exception:
+            output_path.unlink(missing_ok=True)
             logger.warning("Silero synthesis failed, falling back to Edge TTS")
             return await self._synthesize_edge(text, call_id)
 
@@ -139,19 +159,30 @@ class TTSEngine:
     def _output_path(self, call_id: str, ext: str) -> Path:
         root = Path(self.settings.telegram_audio_root) / "generated"
         root.mkdir(parents=True, exist_ok=True)
-        safe_call = call_id.replace("/", "_").replace("\\", "_")
+        safe_call = re.sub(r"[^A-Za-z0-9._-]+", "_", call_id).strip("._")[:80] or "call"
         ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
         return root / f"{safe_call}-{ts}.{ext}"
 
     @staticmethod
-    def _resolve_edge_voice(configured_voice: str | None) -> str:
+    def _resolve_edge_voice(
+        configured_voice: str | None,
+        language: str | None = None,
+    ) -> str:
         voice = (configured_voice or "").strip()
         if not voice:
             return "en-US-AriaNeural"
         polly_aliases = {
             "Polly.Joanna": "en-US-JennyNeural",
         }
-        return polly_aliases.get(voice, voice)
+        voice = polly_aliases.get(voice, voice)
+        language_code = (language or "").split("-", 1)[0].lower()
+        defaults = {
+            "en": "en-GB-SoniaNeural",
+            "ru": "ru-RU-DmitryNeural",
+        }
+        if language_code in defaults and not voice.lower().startswith(f"{language_code}-"):
+            return defaults[language_code]
+        return voice
 
     async def prewarm(self) -> None:
         """Pre-load the TTS model on startup to avoid cold-start latency."""

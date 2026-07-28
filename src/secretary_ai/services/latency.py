@@ -73,12 +73,16 @@ class CallLatencyTimeline:
 
 
 class LatencyTracker:
+    _MAX_TIMELINES = 500
+
     def __init__(self) -> None:
         self._timelines: dict[str, CallLatencyTimeline] = {}
 
     def ensure(self, call_id: str) -> CallLatencyTimeline:
         timeline = self._timelines.get(call_id)
         if timeline is None:
+            if len(self._timelines) >= self._MAX_TIMELINES:
+                self._timelines.pop(next(iter(self._timelines)))
             timeline = CallLatencyTimeline(call_id=call_id)
             self._timelines[call_id] = timeline
         return timeline

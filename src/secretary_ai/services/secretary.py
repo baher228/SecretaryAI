@@ -117,10 +117,12 @@ class SecretaryService:
         self._last_audio_cleanup: datetime | None = None
 
     async def startup(self) -> None:
-        await self.telegram.start()
-        await self.tts.prewarm()
+        await asyncio.gather(
+            self.telegram.start(),
+            self.tts.prewarm(),
+            self.calendar.refresh_cache(),
+        )
         await self._precache_template_audio()
-        await self.calendar.refresh_cache()
         self.memory.prune_short_term(max_age_hours=24)
         self.memory.set_mid_term_upcoming(self.calendar.cache_snapshot(limit=50).get("events", []))
 
@@ -138,15 +140,22 @@ class SecretaryService:
             "reminder_result_busy": t(REMINDER_RESULT_BUSY, lang),
             "reminder_result_partial": t(REMINDER_RESULT_PARTIAL, lang),
         }
-        for key, text in phrases.items():
+        async def _cache(key: str, text: str) -> None:
             if key in self._template_audio_cache:
-                continue
+                return
             try:
                 path, status = await self.tts.synthesize(text, call_id=f"template-{key}")
                 if path and status in {"generated", "cached"}:
                     self._template_audio_cache[key] = path
             except Exception:
                 logger.debug("Failed to pre-cache template %s", key)
+
+        items = list(phrases.items())
+        if self.settings.tts_provider.strip().lower() == "edge_tts":
+            await asyncio.gather(*(_cache(key, text) for key, text in items))
+        else:
+            for key, text in items:
+                await _cache(key, text)
 
     async def shutdown(self) -> None:
         await self._stop_auto_live_task()

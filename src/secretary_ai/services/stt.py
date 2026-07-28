@@ -2,6 +2,7 @@ import asyncio
 import shutil
 from contextlib import suppress
 from pathlib import Path
+from uuid import uuid4
 
 from secretary_ai.core.config import Settings
 
@@ -26,9 +27,13 @@ class STTEngine:
 
     async def transcribe(self, audio_path: str) -> tuple[str, str]:
         path = Path(audio_path)
-        if not path.exists():
+        if not path.is_file():
             return "", "missing_audio_file"
-        if path.stat().st_size <= 0:
+        try:
+            size = path.stat().st_size
+        except OSError:
+            return "", "missing_audio_file"
+        if size <= 0:
             return "", "empty_audio_file"
         if not self.settings.stt_enabled:
             return "", "disabled"
@@ -97,7 +102,7 @@ class STTEngine:
         tail_seconds = max(1.5, float(self.settings.stt_tail_seconds))
         chunks_root = Path(self.settings.telegram_audio_root) / "chunks"
         chunks_root.mkdir(parents=True, exist_ok=True)
-        output_path = chunks_root / f"{source_path.stem}-tail.wav"
+        output_path = chunks_root / f"{source_path.stem}-{uuid4().hex}-tail.wav"
         cmd = [
             self._ffmpeg_path,
             "-hide_banner",
@@ -125,10 +130,14 @@ class STTEngine:
         except asyncio.TimeoutError:
             with suppress(Exception):
                 proc.kill()
+                await proc.wait()
+            output_path.unlink(missing_ok=True)
             return None
         if proc.returncode != 0:
+            output_path.unlink(missing_ok=True)
             return None
         if not output_path.exists() or output_path.stat().st_size <= 0:
+            output_path.unlink(missing_ok=True)
             return None
         return output_path
 

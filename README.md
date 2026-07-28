@@ -11,6 +11,7 @@ AI-powered phone secretary that handles Telegram voice calls autonomously. Uses 
 - **Auto-answer** — picks up inbound Telegram calls and starts the AI loop
 - **Greeting cache** — caches Gemini's first greeting for instant playback on subsequent calls
 - **Control panel** — web UI for monitoring status, call history, and testing API endpoints
+- **Voice app** — installable, low-latency browser call surface that connects directly to Gemini Live
 - **Latency telemetry** — per-call KPIs for answer speed, first response speed, and barge-in stop time
 - **Merged text bot runtime** — optional Telegram text bot runs inside the same FastAPI process
 
@@ -66,7 +67,13 @@ docker compose up --build
 
 The service starts at:
 - **Control panel**: http://127.0.0.1:8000/dashboard
+- **Voice app**: http://127.0.0.1:8000/voice/
 - **API docs**: http://127.0.0.1:8000/docs
+
+For phone or remote access, serve the app over HTTPS and set a long random
+`VOICE_APP_ACCESS_KEY`. The app asks for it once per browser session. The
+Gemini API key always stays on the server; the browser receives a single-use,
+short-lived Live API token.
 
 ### 3. Authenticate Telegram
 

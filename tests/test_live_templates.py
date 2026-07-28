@@ -1,3 +1,5 @@
+import json
+
 from secretary_ai.core.config import Settings
 from secretary_ai.services.live_templates import LiveTemplateMatcher
 
@@ -56,3 +58,15 @@ def test_template_matcher_prioritizes_urgent_keyword(tmp_path) -> None:
     hit = matcher.match("set a reminder urgently right now")
     assert hit is not None
     assert hit.get("id") == "urgent_priority"
+
+
+def test_template_matcher_does_not_rewrite_unchanged_templates(tmp_path) -> None:
+    template_path = tmp_path / "templates.json"
+    settings = Settings(agent_live_template_path=str(template_path), language="en")
+    matcher = LiveTemplateMatcher(settings)
+    compact = json.dumps(matcher.templates, ensure_ascii=False)
+    template_path.write_text(compact, encoding="utf-8")
+
+    LiveTemplateMatcher(settings)
+
+    assert template_path.read_text(encoding="utf-8") == compact

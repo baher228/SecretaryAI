@@ -116,7 +116,18 @@ class MemoryStore:
         if not text:
             return None
 
-        triggers = ("remember that", "remember this", "note that", "write this down", "don't forget", "dont forget")
+        triggers = (
+            "remember that",
+            "remember this",
+            "note that",
+            "write this down",
+            "don't forget",
+            "dont forget",
+            "запомни, что",
+            "запомни что",
+            "запомни",
+            "не забудь",
+        )
         if not any(t in lower for t in triggers):
             return None
 
@@ -140,7 +151,7 @@ class MemoryStore:
         if not query_text:
             return []
 
-        query_tokens = set(re.findall(r"[a-z0-9]+", query_text))
+        query_tokens = set(re.findall(r"\w+", query_text))
         if not query_tokens:
             return []
 
@@ -149,7 +160,7 @@ class MemoryStore:
         matches: list[tuple[int, dict[str, Any]]] = []
         for record in self._fact_cache:
             fact = record["fact"]
-            tokens = set(re.findall(r"[a-z0-9]+", fact.lower()))
+            tokens = set(re.findall(r"\w+", fact.lower()))
             score = len(query_tokens & tokens)
             if score > 0:
                 matches.append((score, record))

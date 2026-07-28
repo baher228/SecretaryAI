@@ -341,7 +341,11 @@ class LiveTemplateMatcher:
                 valid = [item for item in raw if isinstance(item, dict)]
                 if valid:
                     merged = self._merge_with_defaults(valid, defaults)
-                    self._atomic_write(self.path, json.dumps(merged, ensure_ascii=False, indent=2))
+                    if merged != valid:
+                        self._atomic_write(
+                            self.path,
+                            json.dumps(merged, ensure_ascii=False, indent=2),
+                        )
                     return merged
         except Exception:
             pass

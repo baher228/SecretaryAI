@@ -39,13 +39,17 @@ async def build_voice_context(caller_phone: str | None = None) -> str:
         recent_calls = (await s.execute(recent_calls_q)).scalars().all()
 
         open_tasks = (await s.execute(
-            select(Task).where(Task.status == "open").order_by(Task.due_at.asc().nullslast())
+            select(Task)
+            .where(Task.status == "open")
+            .order_by(Task.due_at.asc().nullslast())
+            .limit(20)
         )).scalars().all()
 
         instructions = (await s.execute(
             select(StandingInstruction)
-            .where(StandingInstruction.active == True)
+            .where(StandingInstruction.active)
             .order_by(desc(StandingInstruction.priority))
+            .limit(20)
         )).scalars().all()
 
         notes = (await s.execute(

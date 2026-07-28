@@ -10,6 +10,7 @@ Tracks sent reminders in-memory to avoid duplicates within a session.
 import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
+from html import escape
 from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from aiogram import Bot
@@ -35,7 +36,7 @@ async def _format_event_reminder(event: dict, minutes_until: int) -> str:
     location = event.get("location")
     html_link = event.get("html_link", "")
 
-    parts = [f"⏰ <b>In {minutes_until} minutes:</b> {title}"]
+    parts = [f"⏰ <b>In {minutes_until} minutes:</b> {escape(str(title))}"]
     if start:
         try:
             dt = datetime.fromisoformat(start.replace("Z", "+00:00"))
@@ -44,15 +45,15 @@ async def _format_event_reminder(event: dict, minutes_until: int) -> str:
         except Exception:
             pass
     if location:
-        parts.append(f"📍 {location}")
+        parts.append(f"📍 {escape(str(location))}")
     if html_link:
-        parts.append(f'<a href="{html_link}">Open in Calendar</a>')
+        parts.append(f'<a href="{escape(str(html_link), quote=True)}">Open in Calendar</a>')
     return "\n".join(parts)
 
 
 async def _format_task_reminder(task: Task, minutes_until: int) -> str:
     parts = [f"⏰ <b>Task due in {minutes_until} minutes:</b>"]
-    parts.append(f"📌 {task.description}")
+    parts.append(f"📌 {escape(task.description)}")
     parts.append(f"<i>Task ID {task.id}</i>")
     return "\n".join(parts)
 
