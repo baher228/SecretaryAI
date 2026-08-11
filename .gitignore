@@ -33,3 +33,7 @@ dist/
 .telegram/cache/reminder_state.json
 .telegram/logs/live_debug.jsonl
 .telegram/cache/calendar_events.json
+branch_structure.json
+temp_auto_push.bat
+temp_interactive_push.bat
+.gitignore

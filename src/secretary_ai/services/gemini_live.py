@@ -38,18 +38,21 @@ PLAYBACK_SAMPLE_RATE = 48000
 SEND_AUDIO_MIME = f"audio/pcm;rate={SEND_SAMPLE_RATE}"
 
 WAV_HEADER_SIZE = 44
-MIN_SEND_BYTES = 1600
+SEND_CHUNK_BYTES = 640  # 20 ms at 16 kHz s16le mono
+MIN_SEND_BYTES = 640
+MAX_PENDING_GREETING_CHUNKS = 250  # ~5 s while the greeting finishes
 MAX_TRANSCRIPT_ENTRIES = 200
 TMPFS_DIR = Path("/dev/shm/secretary_ai")
 GREETING_CACHE_DIR = Path(".telegram/cache")
+PLAYBACK_TAIL_PAD_MS = 120
 
 # Sleep intervals (seconds)
-POLL_WAIT_FILE = 0.3
-POLL_WAIT_HEADER = 0.2
-POLL_WAIT_DATA = 0.04
-POLL_SEND_INTERVAL = 0.02
-POLL_SEND_ERROR = 0.3
-POLL_RECEIVE_ERROR = 0.3
+POLL_WAIT_FILE = 0.05
+POLL_WAIT_HEADER = 0.05
+POLL_WAIT_DATA = 0.01
+POLL_SEND_INTERVAL = 0.0
+POLL_SEND_ERROR = 0.2
+POLL_RECEIVE_ERROR = 0.2
 POLL_PLAY_TIMEOUT = 10.0
 
 # Logging cadence
@@ -122,29 +125,108 @@ class GeminiLiveSession:
             api_key=self.settings.gemini_api_key,
         )
 
+    @staticmethod
+    def _ffmpeg_decode_cmd(recording_path: Path, decoded_seconds: float) -> list[str]:
+        cmd = [
+            "ffmpeg",
+            "-v", "error",
+            "-fflags", "nobuffer",
+            "-flags", "low_delay",
+            "-probesize", "32",
+            "-analyzeduration", "0",
+        ]
+        if decoded_seconds > 0:
+            cmd += ["-ss", f"{decoded_seconds:.3f}"]
+        cmd += [
+            "-i", str(recording_path),
+            "-f", "s16le", "-ar", str(SEND_SAMPLE_RATE), "-ac", "1",
+            "pipe:1",
+        ]
+        return cmd
+
     def _live_config(self, caller_hint: str | None = None) -> Any:
         from secretary_ai.core.locales import GEMINI_LIVE_SYSTEM_PROMPT, t
 
         system_prompt = t(GEMINI_LIVE_SYSTEM_PROMPT, self.settings.language)
         if caller_hint:
             system_prompt += f"\n{caller_hint}"
-        return types.LiveConnectConfig(
-            responseModalities=[types.Modality.AUDIO],
-            systemInstruction=system_prompt,
-            speechConfig=types.SpeechConfig(
+        config_kwargs: dict[str, Any] = {
+            "responseModalities": [types.Modality.AUDIO],
+            "systemInstruction": system_prompt,
+            "speechConfig": types.SpeechConfig(
                 voiceConfig=types.VoiceConfig(
                     prebuiltVoiceConfig=types.PrebuiltVoiceConfig(
                         voiceName=self.settings.gemini_live_voice,
                     )
                 )
             ),
-            inputAudioTranscription=types.AudioTranscriptionConfig(),
-            outputAudioTranscription=types.AudioTranscriptionConfig(),
-            contextWindowCompression=types.ContextWindowCompressionConfig(
+            "inputAudioTranscription": types.AudioTranscriptionConfig(),
+            "outputAudioTranscription": types.AudioTranscriptionConfig(),
+            "contextWindowCompression": types.ContextWindowCompressionConfig(
                 triggerTokens=100_000,
                 slidingWindow=types.SlidingWindow(targetTokens=50_000),
             ),
-        )
+        }
+        extras: dict[str, Any] = {}
+        realtime_config = getattr(types, "RealtimeInputConfig", None)
+        automatic_vad = getattr(types, "AutomaticActivityDetection", None)
+        if realtime_config is not None and automatic_vad is not None:
+            start_sensitivity = getattr(types, "StartSensitivity", None)
+            end_sensitivity = getattr(types, "EndSensitivity", None)
+            vad_attempts = (
+                {
+                    "disabled": False,
+                    "prefixPaddingMs": 20,
+                    "silenceDurationMs": 500,
+                    **(
+                        {"startOfSpeechSensitivity": start_sensitivity.START_SENSITIVITY_HIGH}
+                        if start_sensitivity is not None
+                        else {}
+                    ),
+                    **(
+                        {"endOfSpeechSensitivity": end_sensitivity.END_SENSITIVITY_HIGH}
+                        if end_sensitivity is not None
+                        else {}
+                    ),
+                },
+                {
+                    "disabled": False,
+                    "prefix_padding_ms": 20,
+                    "silence_duration_ms": 500,
+                },
+            )
+            vad = None
+            for vad_kwargs in vad_attempts:
+                try:
+                    vad = automatic_vad(**vad_kwargs)
+                    break
+                except TypeError:
+                    continue
+            if vad is not None:
+                realtime_kwargs: dict[str, Any] = {"automaticActivityDetection": vad}
+                activity_handling = getattr(types, "ActivityHandling", None)
+                turn_coverage = getattr(types, "TurnCoverage", None)
+                if activity_handling is not None:
+                    realtime_kwargs["activityHandling"] = (
+                        activity_handling.START_OF_ACTIVITY_INTERRUPTS
+                    )
+                if turn_coverage is not None:
+                    realtime_kwargs["turnCoverage"] = (
+                        turn_coverage.TURN_INCLUDES_ONLY_ACTIVITY
+                    )
+                try:
+                    extras["realtimeInputConfig"] = realtime_config(**realtime_kwargs)
+                except TypeError:
+                    try:
+                        extras["realtime_input_config"] = realtime_config(
+                            automatic_activity_detection=vad
+                        )
+                    except TypeError:
+                        pass
+        try:
+            return types.LiveConnectConfig(**config_kwargs, **extras)
+        except (TypeError, ValueError):
+            return types.LiveConnectConfig(**config_kwargs)
 
     async def run(
         self,
@@ -287,6 +369,32 @@ class GeminiLiveSession:
     # Send loop: recording WAV → Gemini
     # ------------------------------------------------------------------
 
+    async def _send_pcm_chunk(
+        self,
+        session: Any,
+        chunk: bytes,
+        debug_log: DebugLog,
+        chunks_sent: int,
+        decoded_seconds: float,
+    ) -> int:
+        try:
+            await session.send_realtime_input(
+                audio=types.Blob(data=chunk, mimeType=SEND_AUDIO_MIME),
+            )
+        except Exception as exc:
+            debug_log(
+                "gemini_live_send_error",
+                {"error": exc.__class__.__name__, "detail": str(exc)[:200]},
+            )
+            raise
+        chunks_sent += 1
+        if chunks_sent == 1 or chunks_sent % LOG_EVERY_N_CHUNKS == 0:
+            debug_log(
+                "gemini_live_audio_sent",
+                {"chunks": chunks_sent, "decoded_s": f"{decoded_seconds:.1f}"},
+            )
+        return chunks_sent
+
     async def _send_audio_loop(
         self,
         session: Any,
@@ -301,19 +409,42 @@ class GeminiLiveSession:
         We use ffmpeg with ``-ss`` to seek past already-decoded content
         so each invocation only decodes the *new* portion — O(n) total
         instead of the naive O(n²) approach of re-decoding everything.
+
+        Chunks are forwarded as they leave ffmpeg (20 ms) instead of waiting
+        for the whole decode. Audio captured during the greeting is buffered
+        and flushed as soon as that turn completes.
         """
         decoded_seconds = 0.0
         chunks_sent = 0
         last_file_size = 0
+        pending: list[bytes] = []
+        greeting_ready = self._first_turn_complete.is_set()
+        greeting_deadline = asyncio.get_running_loop().time() + 15.0
 
-        # Wait for the greeting turn to finish before forwarding caller
-        # audio — otherwise Gemini interrupts its own greeting mid-sentence.
-        try:
-            await asyncio.wait_for(self._first_turn_complete.wait(), timeout=15.0)
-        except asyncio.TimeoutError:
-            debug_log("gemini_live_send_wait_timeout", {})
+        async def flush_pending() -> None:
+            nonlocal chunks_sent
+            if not pending:
+                return
+            buffered = pending[:]
+            pending.clear()
+            for chunk in buffered:
+                chunks_sent = await self._send_pcm_chunk(
+                    session, chunk, debug_log, chunks_sent, decoded_seconds,
+                )
 
         while not stop_check():
+            if not greeting_ready and (
+                self._first_turn_complete.is_set()
+                or asyncio.get_running_loop().time() >= greeting_deadline
+            ):
+                if not self._first_turn_complete.is_set():
+                    debug_log("gemini_live_send_wait_timeout", {})
+                greeting_ready = True
+                try:
+                    await flush_pending()
+                except Exception:
+                    await asyncio.sleep(POLL_SEND_ERROR)
+
             if not recording_path.exists():
                 await asyncio.sleep(POLL_WAIT_FILE)
                 continue
@@ -330,17 +461,10 @@ class GeminiLiveSession:
                      "decoded_seconds": decoded_seconds},
                 )
                 decoded_seconds = 0.0
+                pending.clear()
 
             last_file_size = file_size
-
-            cmd = ["ffmpeg", "-v", "error"]
-            if decoded_seconds > 0:
-                cmd += ["-ss", f"{decoded_seconds:.3f}"]
-            cmd += [
-                "-i", str(recording_path),
-                "-f", "s16le", "-ar", str(SEND_SAMPLE_RATE), "-ac", "1",
-                "pipe:1",
-            ]
+            cmd = self._ffmpeg_decode_cmd(recording_path, decoded_seconds)
 
             try:
                 proc = await asyncio.create_subprocess_exec(
@@ -348,38 +472,49 @@ class GeminiLiveSession:
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
-                stdout, stderr = await proc.communicate()
             except Exception:
                 await asyncio.sleep(POLL_SEND_ERROR)
                 continue
 
-            if not stdout or len(stdout) < MIN_SEND_BYTES:
-                await asyncio.sleep(POLL_WAIT_DATA)
-                continue
-
-            decoded_seconds += len(stdout) / (SEND_SAMPLE_RATE * 2)
-
-            if chunks_sent == 0:
-                debug_log("gemini_live_send_started", {"pcm_bytes": len(stdout)})
-
+            assert proc.stdout is not None
+            got_audio = False
             try:
-                await session.send_realtime_input(
-                    audio=types.Blob(data=stdout, mimeType=SEND_AUDIO_MIME),
-                )
-                chunks_sent += 1
-                if chunks_sent == 1 or chunks_sent % LOG_EVERY_N_CHUNKS == 0:
-                    debug_log(
-                        "gemini_live_audio_sent",
-                        {"chunks": chunks_sent, "decoded_s": f"{decoded_seconds:.1f}"},
-                    )
+                while not stop_check():
+                    chunk = await proc.stdout.read(SEND_CHUNK_BYTES)
+                    if not chunk:
+                        break
+                    aligned = len(chunk) // 2 * 2
+                    if aligned < 2:
+                        continue
+                    chunk = chunk[:aligned]
+                    decoded_seconds += len(chunk) / (SEND_SAMPLE_RATE * 2)
+                    got_audio = True
+                    if chunks_sent == 0 and greeting_ready:
+                        debug_log("gemini_live_send_started", {"pcm_bytes": len(chunk)})
+                    if greeting_ready or self._first_turn_complete.is_set():
+                        if not greeting_ready:
+                            greeting_ready = True
+                            await flush_pending()
+                        chunks_sent = await self._send_pcm_chunk(
+                            session, chunk, debug_log, chunks_sent, decoded_seconds,
+                        )
+                    else:
+                        pending.append(chunk)
+                        if len(pending) > MAX_PENDING_GREETING_CHUNKS:
+                            pending.pop(0)
             except Exception as exc:
                 debug_log(
                     "gemini_live_send_error",
                     {"error": exc.__class__.__name__, "detail": str(exc)[:200]},
                 )
                 await asyncio.sleep(POLL_SEND_ERROR)
+            finally:
+                if proc.returncode is None:
+                    proc.kill()
+                    await proc.wait()
 
-            await asyncio.sleep(POLL_SEND_INTERVAL)
+            if not got_audio:
+                await asyncio.sleep(POLL_WAIT_DATA)
 
     # ------------------------------------------------------------------
     # Receive loop: Gemini → audio queue + transcripts
@@ -485,6 +620,7 @@ class GeminiLiveSession:
         out_dir.mkdir(parents=True, exist_ok=True)
         should_cache = not greeting_played
         turn_chunks: list[bytes] = []
+        marked_first_audio = False
 
         while not stop_check():
             try:
@@ -511,15 +647,16 @@ class GeminiLiveSession:
                         turn_chunks, out_dir, call_prefix, response_idx,
                         audio_out_callback, debug_log, should_cache,
                     )
-                    if on_first_assistant_audio is not None:
-                        on_first_assistant_audio()
-                        on_first_assistant_audio = None
                     if should_cache:
                         should_cache = False
                     turn_chunks.clear()
                     response_idx += 1
                 continue
 
+            if chunk and not marked_first_audio and on_first_assistant_audio is not None:
+                on_first_assistant_audio()
+                on_first_assistant_audio = None
+                marked_first_audio = True
             turn_chunks.append(chunk)
 
     async def _flush_turn(
@@ -535,8 +672,8 @@ class GeminiLiveSession:
         """Write accumulated PCM chunks as a single WAV and play it."""
         pcm_data = b"".join(chunks)
         pcm_48k = _resample_pcm16(pcm_data, RECEIVE_SAMPLE_RATE, PLAYBACK_SAMPLE_RATE)
-        # Pad 300 ms of silence so py-tgcalls ffmpeg fully drains the tail.
-        pcm_48k += b"\x00" * (2 * PLAYBACK_SAMPLE_RATE * 300 // 1000)
+        # Pad a short silence so py-tgcalls ffmpeg fully drains the tail.
+        pcm_48k += b"\x00" * (2 * PLAYBACK_SAMPLE_RATE * PLAYBACK_TAIL_PAD_MS // 1000)
 
         wav_path = out_dir / f"gemini_{call_prefix}_{response_idx}.wav"
         try:
