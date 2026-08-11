@@ -1,25 +1,47 @@
 import asyncio
+import base64
+import json
+import logging
+import re
 import secrets
+import time
 import warnings
 from datetime import datetime, timedelta, timezone
+from urllib.parse import quote, urlsplit
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    Header,
+    HTTPException,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from google import genai
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from websockets.asyncio.client import ClientConnection, connect as websocket_connect
 
 from secretary_ai.services.secretary import SecretaryService
 
 router = APIRouter(include_in_schema=False)
+logger = logging.getLogger(__name__)
 
 _LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost", "testserver"}
+_VOICE_RELAY_TICKET_TTL_SECONDS = 55
+_VOICE_ASSET_VERSION = "11"
+_GEMINI_LIVE_WS_HOST = "generativelanguage.googleapis.com"
 _NO_STORE = {"Cache-Control": "no-store"}
 _STATIC_HEADERS = {"Cache-Control": "public, max-age=3600"}
 _PAGE_HEADERS = {
     **_NO_STORE,
     "Content-Security-Policy": (
         "default-src 'self'; "
-        "connect-src 'self' wss://generativelanguage.googleapis.com; "
+        "connect-src 'self' ws://127.0.0.1:* ws://localhost:* "
+        f"wss://{_GEMINI_LIVE_WS_HOST}; "
         "img-src 'self'; style-src 'self'; script-src 'self'; worker-src 'self'; "
         "object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
     ),
@@ -57,8 +79,45 @@ def _require_access(
 
 
 class VoiceActionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     call_id: str = Field(min_length=1, max_length=80, pattern=r"^[A-Za-z0-9_.:-]+$")
-    request: str = Field(min_length=2, max_length=2000)
+    tool: str = Field(
+        default="use_secretary_tools",
+        min_length=2,
+        max_length=64,
+        pattern=r"^[a-z][a-z0-9_]*$",
+    )
+    arguments: dict[str, str] = Field(default_factory=dict, max_length=12)
+    request: str = Field(default="", max_length=2000)
+
+    @field_validator("arguments")
+    @classmethod
+    def validate_arguments(cls, arguments: dict[str, str]) -> dict[str, str]:
+        for key, value in arguments.items():
+            if not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", key):
+                raise ValueError("Invalid tool argument name.")
+            if len(value) > 1000:
+                raise ValueError("Tool argument is too long.")
+        return arguments
+
+
+class VoiceMetricsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    call_id: str = Field(min_length=1, max_length=80, pattern=r"^[A-Za-z0-9_.:-]+$")
+    session_ms: int = Field(ge=0, le=14_400_000)
+    response_count: int = Field(ge=0, le=1000)
+    response_latency_ms_total: int = Field(ge=0, le=14_400_000)
+    response_latency_ms_max: int = Field(ge=0, le=600_000)
+    barge_in_attempt_count: int = Field(ge=0, le=1000)
+    interruption_count: int = Field(ge=0, le=1000)
+    interruption_latency_ms_total: int = Field(ge=0, le=600_000)
+    tool_call_count: int = Field(ge=0, le=1000)
+    tool_latency_ms_total: int = Field(ge=0, le=14_400_000)
+    tool_latency_ms_max: int = Field(ge=0, le=600_000)
+    dropped_audio_chunks: int = Field(ge=0, le=1_000_000)
+    reconnect_count: int = Field(ge=0, le=1000)
 
 
 @router.get("/voice")
@@ -107,6 +166,7 @@ async def voice_icon() -> Response:
 
 @router.post("/api/v1/voice/session-token")
 async def voice_session_token(
+    request: Request,
     secretary: SecretaryService = Depends(_require_access),
 ) -> JSONResponse:
     settings = secretary.settings
@@ -134,6 +194,7 @@ async def voice_session_token(
                         "uses": 1,
                         "expire_time": now + timedelta(minutes=20),
                         "new_session_expire_time": now + timedelta(minutes=1),
+                        "lock_additional_fields": [],
                         "live_connect_constraints": {
                             "model": settings.gemini_live_model,
                             "config": {"response_modalities": ["AUDIO"]},
@@ -160,22 +221,380 @@ async def voice_session_token(
             detail=detail,
         ) from exc
 
+    tickets: dict[str, tuple[str, float]] = getattr(
+        request.app.state,
+        "voice_relay_tickets",
+        {},
+    )
+    now_monotonic = time.monotonic()
+    request.app.state.voice_relay_tickets = {
+        ticket: value
+        for ticket, value in tickets.items()
+        if value[1] > now_monotonic
+    }
+    relay_ticket = secrets.token_urlsafe(24)
+    request.app.state.voice_relay_tickets[relay_ticket] = (
+        token,
+        now_monotonic + _VOICE_RELAY_TICKET_TTL_SECONDS,
+    )
+    websocket_scheme = "wss" if request.url.scheme == "https" else "ws"
+    websocket_url = f"{websocket_scheme}://{request.url.netloc}/api/v1/voice/live"
     api_version = settings.gemini_live_api_version
-    websocket_url = (
-        "wss://generativelanguage.googleapis.com/ws/"
+    direct_websocket_url = (
+        f"wss://{_GEMINI_LIVE_WS_HOST}/ws/"
         f"google.ai.generativelanguage.{api_version}."
         "GenerativeService.BidiGenerateContentConstrained"
     )
+    try:
+        local_now = datetime.now(ZoneInfo(settings.timezone))
+    except ZoneInfoNotFoundError:
+        local_now = datetime.now(timezone.utc)
     return JSONResponse(
         {
-            "token": token,
+            "token": relay_ticket,
+            "live_token": token,
             "model": settings.gemini_live_model,
             "voice": settings.gemini_live_voice,
             "language": settings.language,
+            "timezone": settings.timezone,
+            "local_time": local_now.isoformat(timespec="minutes"),
             "websocket_url": websocket_url,
+            "direct_websocket_url": direct_websocket_url,
         },
         headers=_NO_STORE,
     )
+
+
+def _same_origin_websocket(websocket: WebSocket) -> bool:
+    origin = websocket.headers.get("origin")
+    if not origin:
+        return True
+    parsed = urlsplit(origin)
+    return parsed.scheme in {"http", "https"} and parsed.netloc.casefold() == (
+        websocket.headers.get("host") or ""
+    ).casefold()
+
+
+def _record_relay_input_stats(text: str, stats: dict[str, int | float], call_id: str) -> None:
+    try:
+        payload = json.loads(text)
+        audio_data = (
+            ((payload.get("realtimeInput") or {}).get("audio") or {}).get("data")
+            if isinstance(payload, dict)
+            else None
+        )
+    except (TypeError, ValueError):
+        return
+    if not isinstance(audio_data, str):
+        return
+    try:
+        raw_audio = base64.b64decode(audio_data)
+        samples = memoryview(raw_audio).cast("h")
+        peak = max((abs(sample) for sample in samples), default=0)
+        stats["input_chunks"] += 1
+        stats["input_bytes"] += len(raw_audio)
+        stats["input_peak"] = max(stats["input_peak"], peak)
+        chunks = int(stats["input_chunks"])
+        if chunks in {1, 25} or chunks % 250 == 0:
+            logger.info(
+                "Voice relay input call=%s chunks=%d bytes=%d peak=%d",
+                call_id,
+                chunks,
+                int(stats["input_bytes"]),
+                int(stats["input_peak"]),
+            )
+    except (TypeError, ValueError):
+        stats["invalid_audio_chunks"] += 1
+
+
+def _record_relay_output_stats(text: str, stats: dict[str, int | float], call_id: str) -> None:
+    try:
+        payload = json.loads(text)
+    except (TypeError, ValueError):
+        return
+    if payload.get("setupComplete") is not None and not stats["setup_complete"]:
+        stats["setup_complete"] = 1
+        logger.info("Voice relay ready call=%s", call_id)
+    content = payload.get("serverContent") or {}
+    transcription = (content.get("inputTranscription") or {}).get("text", "")
+    if transcription:
+        was_empty = not stats["transcription_chars"]
+        stats["transcription_chars"] += len(transcription)
+        if was_empty:
+            logger.info("Voice relay recognized speech call=%s", call_id)
+    output_chunks = 0
+    for part in (content.get("modelTurn") or {}).get("parts", []):
+        audio = (part.get("inlineData") or {}).get("data", "")
+        if audio:
+            output_chunks += 1
+            stats["output_audio_chars"] += len(audio)
+    if output_chunks:
+        was_empty = not stats["output_chunks"]
+        stats["output_chunks"] += output_chunks
+        if was_empty:
+            logger.info("Voice relay response audio call=%s", call_id)
+    if content.get("turnComplete") or content.get("generationComplete"):
+        stats["completed_turns"] += 1
+
+
+async def _relay_browser_messages(
+    websocket: WebSocket,
+    upstream: ClientConnection,
+    stats: dict[str, int | float],
+    call_id: str,
+) -> None:
+    while True:
+        message = await websocket.receive()
+        if message["type"] == "websocket.disconnect":
+            return
+        if message.get("text") is not None:
+            text = message["text"]
+            await upstream.send(text)
+            _record_relay_input_stats(text, stats, call_id)
+        elif message.get("bytes") is not None:
+            await upstream.send(message["bytes"])
+
+
+async def _relay_gemini_messages(
+    websocket: WebSocket,
+    upstream: ClientConnection,
+    stats: dict[str, int | float],
+    call_id: str,
+) -> None:
+    async for message in upstream:
+        text = message if isinstance(message, str) else message.decode("utf-8")
+        await websocket.send_text(text)
+        _record_relay_output_stats(text, stats, call_id)
+
+
+@router.websocket("/api/v1/voice/live")
+async def voice_live_proxy(websocket: WebSocket) -> None:
+    if not _same_origin_websocket(websocket):
+        await websocket.close(code=1008, reason="The voice connection must come from this app.")
+        return
+
+    ticket = websocket.query_params.get("access_token", "")
+    tickets: dict[str, tuple[str, float]] = getattr(
+        websocket.app.state,
+        "voice_relay_tickets",
+        {},
+    )
+    ticket_data = tickets.pop(ticket, None)
+    if not ticket_data or ticket_data[1] <= time.monotonic():
+        await websocket.close(code=1008, reason="The voice session expired. Tap Retry.")
+        return
+
+    settings = websocket.app.state.secretary.settings
+    call_id = re.sub(
+        r"[^A-Za-z0-9_.:-]+",
+        "",
+        websocket.query_params.get("call_id", ""),
+    )[:80] or "unknown"
+    stats: dict[str, int | float] = {
+        "started_at": time.monotonic(),
+        "setup_complete": 0,
+        "input_chunks": 0,
+        "input_bytes": 0,
+        "input_peak": 0,
+        "invalid_audio_chunks": 0,
+        "transcription_chars": 0,
+        "output_chunks": 0,
+        "output_audio_chars": 0,
+        "completed_turns": 0,
+    }
+    api_version = settings.gemini_live_api_version
+    upstream_url = (
+        "wss://generativelanguage.googleapis.com/ws/"
+        f"google.ai.generativelanguage.{api_version}."
+        "GenerativeService.BidiGenerateContentConstrained"
+        f"?access_token={quote(ticket_data[0], safe='')}"
+    )
+
+    await websocket.accept()
+    browser_task: asyncio.Task[None] | None = None
+    gemini_task: asyncio.Task[None] | None = None
+    try:
+        async with websocket_connect(
+            upstream_url,
+            open_timeout=12,
+            close_timeout=5,
+            max_size=None,
+            compression=None,
+        ) as upstream:
+            browser_task = asyncio.create_task(
+                _relay_browser_messages(websocket, upstream, stats, call_id)
+            )
+            gemini_task = asyncio.create_task(
+                _relay_gemini_messages(websocket, upstream, stats, call_id)
+            )
+            done, pending = await asyncio.wait(
+                {browser_task, gemini_task},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+            for task in done:
+                task.result()
+
+            if gemini_task in done and browser_task not in done:
+                code = upstream.close_code or 1011
+                reason = (upstream.close_reason or "The Gemini voice connection ended.")[:120]
+                await websocket.close(code=code, reason=reason)
+    except WebSocketDisconnect:
+        pass
+    except Exception as exc:
+        logger.warning("Voice relay connection failed: %s", type(exc).__name__)
+        try:
+            await websocket.close(code=1011, reason="The Gemini voice connection failed. Tap Retry.")
+        except RuntimeError:
+            pass
+    finally:
+        for task in (browser_task, gemini_task):
+            if task and not task.done():
+                task.cancel()
+        logger.info(
+            "Voice relay closed call=%s duration_ms=%d setup=%d input_chunks=%d "
+            "input_bytes=%d input_peak=%d invalid_chunks=%d transcription_chars=%d "
+            "output_chunks=%d output_chars=%d completed_turns=%d",
+            call_id,
+            round((time.monotonic() - float(stats["started_at"])) * 1000),
+            int(stats["setup_complete"]),
+            int(stats["input_chunks"]),
+            int(stats["input_bytes"]),
+            int(stats["input_peak"]),
+            int(stats["invalid_audio_chunks"]),
+            int(stats["transcription_chars"]),
+            int(stats["output_chunks"]),
+            int(stats["output_audio_chars"]),
+            int(stats["completed_turns"]),
+        )
+
+
+async def _run_voice_tool(
+    secretary: SecretaryService,
+    payload: VoiceActionRequest,
+) -> dict:
+    tool = payload.tool
+    arguments = {key: value.strip() for key, value in payload.arguments.items()}
+
+    if tool == "manage_calendar":
+        request = arguments.get("request", "")
+        if not request:
+            raise HTTPException(status_code=422, detail="Calendar request is required.")
+        operation = arguments.get("operation", "").strip().lower()
+        if operation and operation not in {"read", "create", "cancel", "reminder"}:
+            raise HTTPException(status_code=422, detail="Calendar operation is invalid.")
+        result = await secretary.calendar.quick_reply_or_enqueue(
+            call_id=payload.call_id,
+            transcript=request,
+            context={"source": "voice_app_tool", "calendar_operation": operation},
+        )
+        processed = None
+        if result.get("queued"):
+            processed = await secretary._process_queued_calendar_task(  # noqa: SLF001
+                payload.call_id,
+                str(result.get("task_id") or ""),
+            )
+        return {
+            "tool": tool,
+            "status": str((processed or {}).get("status") or result.get("status") or "unknown"),
+            "reply": str((processed or {}).get("reply") or result.get("reply") or ""),
+            "data": result,
+        }
+
+    if tool == "plan_route":
+        result = await secretary.maps.plan_route(
+            origin=arguments.get("origin", ""),
+            destination=arguments.get("destination", ""),
+            mode=arguments.get("mode", "driving"),
+        )
+        return {
+            "tool": tool,
+            "status": str(result.get("status") or "unknown"),
+            "reply": str(result.get("details") or result.get("detail") or ""),
+            "data": result,
+        }
+
+    if tool == "remember_fact":
+        fact = arguments.get("fact", "")
+        if not fact:
+            raise HTTPException(status_code=422, detail="Fact is required.")
+        record = secretary.memory.add_user_fact_if_requested(
+            payload.call_id,
+            f"remember that {fact}",
+        )
+        return {
+            "tool": tool,
+            "status": "saved" if record else "error",
+            "reply": f"Remembered: {fact}" if record else "The fact could not be saved.",
+            "data": {"fact": fact},
+        }
+
+    if tool == "recall_memory":
+        query = arguments.get("query", "")
+        if not query:
+            raise HTTPException(status_code=422, detail="Memory query is required.")
+        facts = secretary.memory.retrieve_user_fact(query, limit=3)
+        return {
+            "tool": tool,
+            "status": "found" if facts else "not_found",
+            "reply": "" if facts else "No matching memory was found.",
+            "data": {"facts": [str(item.get("fact") or "") for item in facts]},
+        }
+
+    if tool == "search_booking":
+        category = arguments.get("category", "")
+        actions = {
+            "restaurant": "find_restaurant",
+            "hotel": "find_hotel",
+            "event": "find_event",
+            "travel": "find_travel",
+            "evening": "plan_evening",
+        }
+        action = actions.get(category)
+        if action is None:
+            raise HTTPException(status_code=422, detail="Booking category is invalid.")
+        result = await secretary.booking.search_by_action(
+            action=action,
+            payload=arguments.get("details", ""),
+            extracted=arguments,
+        )
+        valid_results = [
+            item
+            for item in result.get("results") or []
+            if item.get("title") and not item.get("error")
+        ]
+        return {
+            "tool": tool,
+            "status": "found" if valid_results else "not_found",
+            "reply": str(result.get("voice_summary") or ""),
+            "data": {
+                "category": result.get("category"),
+                "location": result.get("location"),
+                "result_count": len(valid_results),
+            },
+        }
+
+    if tool != "use_secretary_tools":
+        raise HTTPException(status_code=400, detail="Unknown voice tool.")
+    request = payload.request.strip() or arguments.get("request", "")
+    if not request:
+        raise HTTPException(status_code=422, detail="Tool request is required.")
+    result = await secretary.live_agent_respond(
+        call_id=payload.call_id,
+        transcript=request,
+        context={"source": "voice_app"},
+        speak_response=False,
+    )
+    return {
+        "tool": tool,
+        "status": "ok",
+        "reply": result.reply,
+        "intent": result.intent.value,
+        "action_items": result.action_items,
+        "requires_human": result.requires_human,
+    }
 
 
 @router.post("/api/v1/voice/action")
@@ -183,21 +602,33 @@ async def voice_action(
     payload: VoiceActionRequest,
     secretary: SecretaryService = Depends(_require_access),
 ) -> JSONResponse:
-    result = await secretary.live_agent_respond(
-        call_id=payload.call_id,
-        transcript=payload.request.strip(),
-        context={"source": "voice_app"},
-        speak_response=False,
+    return JSONResponse(await _run_voice_tool(secretary, payload), headers=_NO_STORE)
+
+
+@router.post("/api/v1/voice/metrics", status_code=status.HTTP_204_NO_CONTENT)
+async def voice_metrics(
+    payload: VoiceMetricsRequest,
+    _: SecretaryService = Depends(_require_access),
+) -> Response:
+    logger.info(
+        "Voice session metrics call=%s duration_ms=%d responses=%d response_avg_ms=%d "
+        "response_max_ms=%d barge_attempts=%d interruptions=%d interruption_avg_ms=%d tools=%d "
+        "tool_avg_ms=%d tool_max_ms=%d dropped_chunks=%d reconnects=%d",
+        payload.call_id,
+        payload.session_ms,
+        payload.response_count,
+        round(payload.response_latency_ms_total / max(1, payload.response_count)),
+        payload.response_latency_ms_max,
+        payload.barge_in_attempt_count,
+        payload.interruption_count,
+        round(payload.interruption_latency_ms_total / max(1, payload.interruption_count)),
+        payload.tool_call_count,
+        round(payload.tool_latency_ms_total / max(1, payload.tool_call_count)),
+        payload.tool_latency_ms_max,
+        payload.dropped_audio_chunks,
+        payload.reconnect_count,
     )
-    return JSONResponse(
-        {
-            "reply": result.reply,
-            "intent": result.intent.value,
-            "action_items": result.action_items,
-            "requires_human": result.requires_human,
-        },
-        headers=_NO_STORE,
-    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 VOICE_HTML = """<!doctype html>
@@ -208,10 +639,10 @@ VOICE_HTML = """<!doctype html>
     <meta name="theme-color" content="#09090b">
     <meta name="description" content="Low-latency voice access to Secretary AI.">
     <title>Secretary</title>
-    <link rel="manifest" href="/voice/manifest.webmanifest?v=3">
+    <link rel="manifest" href="/voice/manifest.webmanifest?v=11">
     <link rel="icon" href="/voice/icon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="/voice/app.css?v=3">
-    <script src="/voice/app.js?v=3" defer></script>
+    <link rel="stylesheet" href="/voice/app.css?v=11">
+    <script src="/voice/app.js?v=11" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#voice-main">Skip to voice controls</a>
@@ -222,6 +653,9 @@ VOICE_HTML = """<!doctype html>
           <span class="status-dot" aria-hidden="true"></span>
           <span id="connection-label">Ready</span>
         </p>
+        <button class="icon-button header-settings" id="settings-button" type="button" aria-label="Open settings" aria-haspopup="dialog" aria-controls="settings-dialog">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></svg>
+        </button>
       </header>
 
       <section class="conversation" aria-labelledby="voice-state">
@@ -277,6 +711,59 @@ VOICE_HTML = """<!doctype html>
       <ol class="transcript-list" id="transcript-list">
         <li class="empty-transcript">Start a conversation to see the transcript.</li>
       </ol>
+    </dialog>
+
+    <dialog id="settings-dialog" aria-labelledby="settings-title" aria-describedby="settings-description">
+      <div class="dialog-header">
+        <div>
+          <h2 id="settings-title">Settings</h2>
+          <p id="settings-description">Language and microphone changes apply to your next conversation.</p>
+        </div>
+        <button class="icon-button" id="close-settings" type="button" aria-label="Close settings">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+
+      <div class="settings-body">
+        <section class="settings-section" aria-labelledby="language-heading">
+          <h3 id="language-heading">Language</h3>
+          <label for="language-select">Conversation language</label>
+          <select id="language-select" aria-describedby="language-help">
+            <option value="en">English</option>
+            <option value="ru">Russian</option>
+          </select>
+          <p class="field-help" id="language-help">Secretary will listen and reply in this language.</p>
+        </section>
+
+        <section class="settings-section" aria-labelledby="connectors-heading">
+          <div class="section-heading">
+            <h3 id="connectors-heading">Connectors</h3>
+            <button class="small-button" id="refresh-connectors" type="button">Refresh</button>
+          </div>
+          <ul class="connector-list" id="connector-list" aria-live="polite" aria-busy="true">
+            <li class="connector-placeholder">Checking connector status…</li>
+          </ul>
+          <a class="manage-link" href="/dashboard">Manage connectors <span aria-hidden="true">→</span></a>
+        </section>
+
+        <section class="settings-section" aria-labelledby="microphone-heading">
+          <h3 id="microphone-heading">Microphone</h3>
+          <label for="microphone-select">Input device</label>
+          <select id="microphone-select" aria-describedby="microphone-help microphone-status">
+            <option value="">System default</option>
+          </select>
+          <p class="field-help" id="microphone-help">The automatic choice avoids known virtual microphones.</p>
+          <div class="microphone-test">
+            <button class="text-button" id="test-microphone" type="button">Test microphone</button>
+            <meter id="microphone-level" min="0" max="1" low="0.02" high="0.12" optimum="0.25" value="0" aria-label="Microphone input level"></meter>
+          </div>
+          <p class="field-status" id="microphone-status" role="status">Choose Test microphone to check the input.</p>
+        </section>
+      </div>
+
+      <div class="settings-footer">
+        <button class="submit-button" id="done-settings" type="button">Done</button>
+      </div>
     </dialog>
 
     <dialog id="access-dialog" aria-labelledby="access-title" aria-describedby="access-help">
@@ -345,7 +832,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -355,7 +843,9 @@ button {
 }
 
 button:focus-visible,
-input:focus-visible {
+input:focus-visible,
+select:focus-visible,
+a:focus-visible {
   outline: 3px solid var(--focus);
   outline-offset: 3px;
 }
@@ -389,6 +879,8 @@ input:focus-visible {
 }
 
 .app-header {
+  position: relative;
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -413,6 +905,13 @@ input:focus-visible {
   color: var(--muted);
   font-size: 0.875rem;
   font-variant-numeric: tabular-nums;
+}
+
+.header-settings {
+  position: absolute;
+  top: -0.35rem;
+  right: 0;
+  color: var(--muted);
 }
 
 .status-dot {
@@ -705,6 +1204,142 @@ dialog::backdrop { background: rgb(0 0 0 / 72%); }
   cursor: pointer;
 }
 
+.icon-button:hover { background: var(--surface-strong); }
+
+.settings-body {
+  max-height: min(60vh, 36rem);
+  padding: 0 var(--space-lg);
+  overflow-y: auto;
+}
+
+.settings-section {
+  padding: var(--space-lg) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.settings-section:last-child { border-bottom: 0; }
+
+.settings-section h3 {
+  margin: 0 0 var(--space-md);
+  font-size: 1rem;
+  line-height: 1.3;
+}
+
+.settings-section label {
+  display: block;
+  margin-bottom: var(--space-xs);
+  font-weight: 600;
+}
+
+.settings-section select {
+  width: 100%;
+  min-height: 3rem;
+  padding: var(--space-sm) 2.5rem var(--space-sm) var(--space-md);
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 0.625rem;
+}
+
+.field-help,
+.field-status {
+  margin: var(--space-xs) 0 0;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.field-status[data-result="success"] { color: #86efac; }
+.field-status[data-result="error"] { color: #fca5a5; }
+
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.section-heading h3 { margin: 0; }
+
+.small-button {
+  padding: 0.35rem 0.6rem;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: 0.375rem;
+  cursor: pointer;
+}
+
+.small-button:hover { color: var(--ink); background: var(--surface-strong); }
+.small-button:disabled { cursor: wait; opacity: 0.65; }
+
+.connector-list {
+  margin: var(--space-sm) 0;
+  padding: 0;
+  list-style: none;
+}
+
+.connector-list li {
+  min-height: 2.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  border-bottom: 1px solid var(--line);
+}
+
+.connector-list li:last-child { border-bottom: 0; }
+
+.connector-name { font-weight: 600; }
+.connector-placeholder { color: var(--muted); }
+
+.readiness {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--muted);
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+
+.readiness::before {
+  width: 0.5rem;
+  height: 0.5rem;
+  flex: 0 0 auto;
+  content: "";
+  background: var(--muted);
+  border-radius: 50%;
+}
+
+.readiness[data-ready="true"] { color: #86efac; }
+.readiness[data-ready="true"]::before { background: var(--active); }
+
+.manage-link {
+  display: inline-block;
+  color: var(--ink);
+  text-underline-offset: 0.2em;
+}
+
+.microphone-test {
+  display: grid;
+  grid-template-columns: auto minmax(5rem, 1fr);
+  align-items: center;
+  gap: var(--space-md);
+  margin-top: var(--space-md);
+}
+
+.microphone-test meter {
+  width: 100%;
+  height: 0.75rem;
+  accent-color: var(--active);
+}
+
+.settings-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--space-md) var(--space-lg);
+  border-top: 1px solid var(--line);
+}
+
 .transcript-list {
   max-height: 60vh;
   margin: 0;
@@ -846,17 +1481,21 @@ noscript {
 
 
 AUDIO_WORKLET_JS = r"""
+const CAPTURE_SAMPLES = 320;
+
 class SecretaryCaptureProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
-    this.chunk = new Int16Array(640);
+    this.chunk = new Int16Array(CAPTURE_SAMPLES);
     this.offset = 0;
     this.phase = 0;
   }
 
-  process(inputs) {
+  process(inputs, outputs) {
     const input = inputs[0]?.[0];
     if (!input) return true;
+    const output = outputs[0]?.[0];
+    if (output) output.set(input);
 
     const ratio = sampleRate / 16000;
     let position = this.phase;
@@ -875,7 +1514,7 @@ class SecretaryCaptureProcessor extends AudioWorkletProcessor {
       if (this.offset === this.chunk.length) {
         const data = this.chunk.buffer;
         this.port.postMessage({ type: "audio", data, level: Math.sqrt(energy / Math.max(1, count)) }, [data]);
-        this.chunk = new Int16Array(640);
+        this.chunk = new Int16Array(CAPTURE_SAMPLES);
         this.offset = 0;
         energy = 0;
         count = 0;
@@ -888,7 +1527,73 @@ class SecretaryCaptureProcessor extends AudioWorkletProcessor {
   }
 }
 
+class SecretaryPlaybackProcessor extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.queue = [];
+    this.offset = 0;
+    this.srcRate = 24000;
+    this.playing = false;
+    this.port.onmessage = (event) => {
+      if (event.data?.type === "stop") {
+        this.queue = [];
+        this.offset = 0;
+        this._setPlaying(false);
+        return;
+      }
+      if (event.data?.type === "audio" && event.data.data) {
+        this.queue.push(new Int16Array(event.data.data));
+        this._setPlaying(true);
+      }
+    };
+  }
+
+  _setPlaying(playing) {
+    if (this.playing === playing) return;
+    this.playing = playing;
+    this.port.postMessage({ type: "state", playing });
+  }
+
+  process(inputs, outputs) {
+    const output = outputs[0]?.[0];
+    if (!output) return true;
+    if (!this.queue.length) {
+      output.fill(0);
+      this._setPlaying(false);
+      return true;
+    }
+
+    const step = this.srcRate / sampleRate;
+    for (let index = 0; index < output.length; index += 1) {
+      while (this.queue.length && this.offset >= this.queue[0].length) {
+        this.offset -= this.queue[0].length;
+        this.queue.shift();
+      }
+      if (!this.queue.length) {
+        output[index] = 0;
+        continue;
+      }
+      const current = this.queue[0];
+      const idx = Math.floor(this.offset);
+      const frac = this.offset - idx;
+      const s0 = current[idx] || 0;
+      let s1 = s0;
+      if (idx + 1 < current.length) s1 = current[idx + 1];
+      else if (this.queue[1] && this.queue[1].length) s1 = this.queue[1][0];
+      output[index] = (s0 + (s1 - s0) * frac) / 32768;
+      this.offset += step;
+    }
+    if (!this.queue.length || (this.queue.length === 1 && this.offset >= this.queue[0].length)) {
+      this.queue = [];
+      this.offset = 0;
+      this._setPlaying(false);
+    }
+    return true;
+  }
+}
+
 registerProcessor("secretary-capture", SecretaryCaptureProcessor);
+registerProcessor("secretary-playback", SecretaryPlaybackProcessor);
 """
 
 
@@ -905,6 +1610,17 @@ VOICE_JS = r"""
     transcriptDialog: $("transcript-dialog"),
     transcriptList: $("transcript-list"),
     closeTranscript: $("close-transcript"),
+    settings: $("settings-button"),
+    settingsDialog: $("settings-dialog"),
+    closeSettings: $("close-settings"),
+    doneSettings: $("done-settings"),
+    language: $("language-select"),
+    connectors: $("connector-list"),
+    refreshConnectors: $("refresh-connectors"),
+    microphone: $("microphone-select"),
+    microphoneTest: $("test-microphone"),
+    microphoneLevel: $("microphone-level"),
+    microphoneStatus: $("microphone-status"),
     state: $("voice-state"),
     detail: $("state-detail"),
     connection: $("connection-label"),
@@ -928,11 +1644,17 @@ VOICE_JS = r"""
     stream: null,
     audioContext: null,
     captureNode: null,
+    playbackNode: null,
+    micSource: null,
     silentGain: null,
-    playbackSources: new Set(),
-    playbackAt: 0,
+    playbackActive: false,
+    pendingAudio: [],
+    usingRelay: false,
     modelTurnActive: false,
     tokenConfig: null,
+    warmToken: null,
+    warmTokenAt: 0,
+    prefetchInFlight: null,
     resumeHandle: "",
     userText: "",
     assistantText: "",
@@ -940,6 +1662,25 @@ VOICE_JS = r"""
     committedAssistantText: "",
     callId: "",
     transcript: [],
+    localSpeechFrames: 0,
+    localBargeIn: false,
+    localBargeInAt: 0,
+    bargeInTimer: null,
+    awaitingFirstAudio: false,
+    lastUserActivityAt: 0,
+    metricsSent: false,
+    metrics: null,
+    cancelledToolCalls: new Set(),
+    toolControllers: new Map(),
+    toolResults: new Map(),
+    microphoneLabel: "",
+    capturePeak: 0,
+    silenceTimer: null,
+    microphoneTestStream: null,
+    microphoneTestContext: null,
+    microphoneTestFrame: 0,
+    microphoneTestTimer: null,
+    microphoneTestPeak: 0,
   };
 
   function setState(state, title, detail, connection) {
@@ -960,11 +1701,14 @@ VOICE_JS = r"""
   }
 
   function setMuted(muted) {
+    if (muted && !app.muted) endAudioStream();
     app.muted = muted;
+    app.localSpeechFrames = 0;
     document.body.dataset.muted = String(muted);
     els.mute.querySelector("span:last-child").textContent = muted ? "Unmute" : "Mute";
     els.mute.setAttribute("aria-pressed", String(muted));
     if (muted) {
+      app.pendingAudio = [];
       setState("muted", "Muted", "Tap Unmute when you are ready.", "Connected");
     } else if (app.ready) {
       setState("listening", "Listening", "What would you like me to handle?", "Connected");
@@ -1002,60 +1746,467 @@ VOICE_JS = r"""
   }
 
   async function getSessionToken() {
-    return fetchJSON("/api/v1/voice/session-token", { method: "POST" });
+    const config = await fetchJSON("/api/v1/voice/session-token", { method: "POST" });
+    const language = localStorage.getItem("voiceLanguage");
+    if (["en", "ru"].includes(language)) config.language = language;
+    return config;
   }
 
-  function getMicrophone() {
+  function takeWarmToken() {
+    if (app.warmToken && performance.now() - app.warmTokenAt < 45000) {
+      const config = app.warmToken;
+      app.warmToken = null;
+      app.warmTokenAt = 0;
+      return config;
+    }
+    return null;
+  }
+
+  function prefetchToken() {
+    if (app.active || app.prefetchInFlight) return;
+    if (app.warmToken && performance.now() - app.warmTokenAt < 45000) return;
+    app.prefetchInFlight = getSessionToken()
+      .then((config) => {
+        app.warmToken = config;
+        app.warmTokenAt = performance.now();
+      })
+      .catch(() => {})
+      .finally(() => {
+        app.prefetchInFlight = null;
+      });
+  }
+
+  function endAudioStream() {
+    if (app.ready && app.socket?.readyState === WebSocket.OPEN) {
+      app.socket.send(JSON.stringify({ realtimeInput: { audioStreamEnd: true } }));
+    }
+  }
+
+  function newMetrics() {
+    return {
+      startedAt: performance.now(),
+      responseCount: 0,
+      responseLatencyTotal: 0,
+      responseLatencyMax: 0,
+      bargeInAttemptCount: 0,
+      interruptionCount: 0,
+      interruptionLatencyTotal: 0,
+      toolCallCount: 0,
+      toolLatencyTotal: 0,
+      toolLatencyMax: 0,
+      droppedAudioChunks: 0,
+      reconnectCount: 0,
+    };
+  }
+
+  function recordFirstAudio() {
+    if (!app.awaitingFirstAudio || !app.lastUserActivityAt || !app.metrics) return;
+    const latency = Math.max(0, Math.round(performance.now() - app.lastUserActivityAt));
+    app.metrics.responseCount += 1;
+    app.metrics.responseLatencyTotal += latency;
+    app.metrics.responseLatencyMax = Math.max(app.metrics.responseLatencyMax, latency);
+    app.awaitingFirstAudio = false;
+    app.lastUserActivityAt = 0;
+  }
+
+  function sendMetrics() {
+    if (app.metricsSent || !app.metrics || !app.callId) return;
+    app.metricsSent = true;
+    const metrics = app.metrics;
+    const payload = {
+      call_id: app.callId,
+      session_ms: Math.max(0, Math.round(performance.now() - metrics.startedAt)),
+      response_count: metrics.responseCount,
+      response_latency_ms_total: metrics.responseLatencyTotal,
+      response_latency_ms_max: metrics.responseLatencyMax,
+      barge_in_attempt_count: metrics.bargeInAttemptCount,
+      interruption_count: metrics.interruptionCount,
+      interruption_latency_ms_total: metrics.interruptionLatencyTotal,
+      tool_call_count: metrics.toolCallCount,
+      tool_latency_ms_total: metrics.toolLatencyTotal,
+      tool_latency_ms_max: metrics.toolLatencyMax,
+      dropped_audio_chunks: metrics.droppedAudioChunks,
+      reconnect_count: metrics.reconnectCount,
+    };
+    fetch("/api/v1/voice/metrics", {
+      method: "POST",
+      headers: { ...accessHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      keepalive: true,
+    }).catch(() => {});
+  }
+
+  function microphoneConstraints(deviceId = "") {
+    return {
+      channelCount: 1,
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+      latency: 0,
+      ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+    };
+  }
+
+  function isVirtualMicrophone(label) {
+    return /nvidia broadcast|virtual|screaming bee|line \d|cable/i.test(label);
+  }
+
+  async function getMicrophone() {
     if (!window.isSecureContext && !["localhost", "127.0.0.1"].includes(location.hostname)) {
       throw new Error("Microphone access needs HTTPS. Open the secure app URL and try again.");
     }
     if (!navigator.mediaDevices?.getUserMedia) {
       throw new Error("This browser does not support microphone access.");
     }
-    return navigator.mediaDevices.getUserMedia({
-      audio: {
-        channelCount: 1,
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      },
+    const selectedDevice = localStorage.getItem("voiceMicrophoneId") || "";
+    if (selectedDevice) {
+      try {
+        return await navigator.mediaDevices.getUserMedia({
+          audio: microphoneConstraints(selectedDevice),
+          video: false,
+        });
+      } catch {
+        localStorage.removeItem("voiceMicrophoneId");
+      }
+    }
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: microphoneConstraints(),
       video: false,
     });
+    const track = stream.getAudioTracks()[0];
+    if (!track || !isVirtualMicrophone(track.label)) return stream;
+
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const physical = devices.filter((device) => (
+      device.kind === "audioinput"
+      && device.deviceId
+      && device.deviceId !== track.getSettings().deviceId
+      && device.label
+      && !isVirtualMicrophone(device.label)
+    ));
+    const preferred = physical.find((device) => (
+      /microphone array|array microphone|realtek|intel/i.test(device.label)
+    )) || physical[0];
+    if (!preferred) return stream;
+
+    try {
+      const replacement = await navigator.mediaDevices.getUserMedia({
+        audio: microphoneConstraints(preferred.deviceId),
+        video: false,
+      });
+      stream.getTracks().forEach((item) => item.stop());
+      return replacement;
+    } catch {
+      return stream;
+    }
   }
 
-  async function prepareAudio(stream) {
+  function connectorRow(name, ready, unavailable = false) {
+    const item = document.createElement("li");
+    const label = document.createElement("span");
+    const status = document.createElement("span");
+    label.className = "connector-name";
+    label.textContent = name;
+    status.className = "readiness";
+    status.dataset.ready = String(ready);
+    status.textContent = unavailable ? "Unavailable" : ready ? "Ready" : "Needs setup";
+    item.append(label, status);
+    return item;
+  }
+
+  async function loadConnectors() {
+    els.refreshConnectors.disabled = true;
+    els.connectors.setAttribute("aria-busy", "true");
+    const [health, calendar, telegram] = await Promise.allSettled([
+      fetchJSON("/api/v1/health"),
+      fetchJSON("/api/v1/calendar/oauth/status"),
+      fetchJSON("/api/v1/telegram/auth/status"),
+    ]);
+    els.connectors.replaceChildren(
+      connectorRow(
+        "Gemini Live",
+        health.status === "fulfilled" && Boolean(health.value.gemini_live?.enabled),
+        health.status === "rejected"
+      ),
+      connectorRow(
+        "Google Calendar",
+        calendar.status === "fulfilled" && Boolean(calendar.value.connected),
+        calendar.status === "rejected"
+      ),
+      connectorRow(
+        "Telegram",
+        telegram.status === "fulfilled" && Boolean(telegram.value.authorized),
+        telegram.status === "rejected"
+      )
+    );
+    if (!localStorage.getItem("voiceLanguage") && health.status === "fulfilled") {
+      const language = health.value.language;
+      if (["en", "ru"].includes(language)) {
+        els.language.value = language;
+        document.documentElement.lang = language;
+      }
+    }
+    els.connectors.setAttribute("aria-busy", "false");
+    els.refreshConnectors.disabled = false;
+  }
+
+  function setMicrophoneStatus(message, result = "") {
+    els.microphoneStatus.textContent = message;
+    if (result) els.microphoneStatus.dataset.result = result;
+    else delete els.microphoneStatus.dataset.result;
+  }
+
+  async function loadMicrophones() {
+    if (!navigator.mediaDevices?.enumerateDevices) {
+      els.microphone.disabled = true;
+      els.microphoneTest.disabled = true;
+      setMicrophoneStatus("Microphone selection is not supported in this browser.", "error");
+      return;
+    }
+    const selected = localStorage.getItem("voiceMicrophoneId") || "";
+    const devices = (await navigator.mediaDevices.enumerateDevices())
+      .filter((device) => device.kind === "audioinput" && device.deviceId);
+    const options = [new Option("System default", "")];
+    devices.forEach((device, index) => {
+      options.push(new Option(device.label || `Microphone ${index + 1}`, device.deviceId));
+    });
+    els.microphone.replaceChildren(...options);
+    if (devices.some((device) => device.deviceId === selected)) {
+      els.microphone.value = selected;
+    } else if (selected) {
+      localStorage.removeItem("voiceMicrophoneId");
+    }
+    if (!devices.length || devices.every((device) => !device.label)) {
+      setMicrophoneStatus("Test the microphone once to allow access and show device names.");
+    }
+  }
+
+  function stopMicrophoneTest(reset = false) {
+    clearTimeout(app.microphoneTestTimer);
+    app.microphoneTestTimer = null;
+    cancelAnimationFrame(app.microphoneTestFrame);
+    app.microphoneTestFrame = 0;
+    app.microphoneTestStream?.getTracks().forEach((track) => track.stop());
+    app.microphoneTestStream = null;
+    if (app.microphoneTestContext && app.microphoneTestContext.state !== "closed") {
+      app.microphoneTestContext.close();
+    }
+    app.microphoneTestContext = null;
+    els.microphoneTest.disabled = false;
+    els.microphoneTest.textContent = "Test microphone";
+    if (reset) {
+      els.microphoneLevel.value = 0;
+      setMicrophoneStatus("Choose Test microphone to check the input.");
+    }
+  }
+
+  async function testMicrophone() {
+    if (app.active) {
+      setMicrophoneStatus("End the current conversation before testing another microphone.", "error");
+      return;
+    }
+    stopMicrophoneTest();
+    els.microphoneTest.disabled = true;
+    els.microphoneTest.textContent = "Testing…";
+    els.microphoneLevel.value = 0;
+    app.microphoneTestPeak = 0;
+    setMicrophoneStatus("Listening for four seconds. Speak normally.");
+    try {
+      const deviceId = els.microphone.value;
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: microphoneConstraints(deviceId),
+        video: false,
+      });
+      app.microphoneTestStream = stream;
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) throw new Error("Audio testing is not supported in this browser.");
+      const context = new AudioContext({ latencyHint: "interactive" });
+      app.microphoneTestContext = context;
+      await context.resume();
+      const analyser = context.createAnalyser();
+      analyser.fftSize = 512;
+      context.createMediaStreamSource(stream).connect(analyser);
+      const samples = new Float32Array(analyser.fftSize);
+      const drawLevel = () => {
+        analyser.getFloatTimeDomainData(samples);
+        let energy = 0;
+        for (const sample of samples) energy += sample * sample;
+        const level = Math.min(1, Math.sqrt(energy / samples.length) * 5);
+        app.microphoneTestPeak = Math.max(app.microphoneTestPeak, level);
+        els.microphoneLevel.value = level;
+        app.microphoneTestFrame = requestAnimationFrame(drawLevel);
+      };
+      drawLevel();
+      await loadMicrophones();
+      app.microphoneTestTimer = setTimeout(() => {
+        const detected = app.microphoneTestPeak >= 0.015;
+        stopMicrophoneTest();
+        setMicrophoneStatus(
+          detected ? "Input detected. This microphone is ready." : "No useful input detected. Try another microphone.",
+          detected ? "success" : "error"
+        );
+      }, 4000);
+    } catch (error) {
+      stopMicrophoneTest();
+      const message = error?.name === "NotAllowedError"
+        ? "Microphone access was blocked. Allow it in the browser, then try again."
+        : error?.message || "The microphone test could not start.";
+      setMicrophoneStatus(message, "error");
+    }
+  }
+
+  function openSettings() {
+    const language = localStorage.getItem("voiceLanguage");
+    if (["en", "ru"].includes(language)) els.language.value = language;
+    if (!els.settingsDialog.open) els.settingsDialog.showModal();
+    loadConnectors();
+    loadMicrophones().catch(() => {
+      setMicrophoneStatus("Microphone devices could not be listed.", "error");
+    });
+    requestAnimationFrame(() => els.language.focus());
+  }
+
+  function closeSettings() {
+    stopMicrophoneTest(true);
+    if (els.settingsDialog.open) els.settingsDialog.close();
+    els.settings.focus();
+  }
+
+  async function ensureAudioContext() {
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     if (!AudioContext || !window.AudioWorkletNode) {
       throw new Error("This browser does not support low-latency audio.");
     }
-    app.audioContext = new AudioContext({ latencyHint: "interactive" });
-    await app.audioContext.audioWorklet.addModule("/voice/audio-worklet.js?v=3");
+    if (app.audioContext && app.audioContext.state !== "closed") {
+      if (app.audioContext.state === "suspended") await app.audioContext.resume();
+      return app.audioContext;
+    }
+    try {
+      app.audioContext = new AudioContext({ latencyHint: "interactive", sampleRate: 24000 });
+    } catch {
+      app.audioContext = new AudioContext({ latencyHint: "interactive" });
+    }
+    await app.audioContext.audioWorklet.addModule("/voice/audio-worklet.js?v=11");
     await app.audioContext.resume();
+    return app.audioContext;
+  }
 
+  async function prefetchAudioGraph() {
+    try {
+      if (app.audioContext && app.audioContext.state !== "closed") return;
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext || !window.AudioWorkletNode) return;
+      try {
+        app.audioContext = new AudioContext({ latencyHint: "interactive", sampleRate: 24000 });
+      } catch {
+        app.audioContext = new AudioContext({ latencyHint: "interactive" });
+      }
+      await app.audioContext.audioWorklet.addModule("/voice/audio-worklet.js?v=11");
+    } catch {
+      // Resume on the Start gesture if the browser blocks context creation here.
+    }
+  }
+
+  async function prepareAudio(stream) {
+    await ensureAudioContext();
+    app.captureNode?.disconnect();
+    app.playbackNode?.disconnect();
+    app.silentGain?.disconnect();
+
+    app.micSource?.disconnect();
     const source = app.audioContext.createMediaStreamSource(stream);
+    app.micSource = source;
     app.captureNode = new AudioWorkletNode(app.audioContext, "secretary-capture");
+    app.playbackNode = new AudioWorkletNode(app.audioContext, "secretary-playback", {
+      numberOfInputs: 0,
+      numberOfOutputs: 1,
+      outputChannelCount: [1],
+    });
     app.silentGain = app.audioContext.createGain();
-    app.silentGain.gain.value = 0;
+    app.silentGain.gain.value = 0.000001;
     source.connect(app.captureNode).connect(app.silentGain).connect(app.audioContext.destination);
+    app.playbackNode.connect(app.audioContext.destination);
+    app.playbackActive = false;
+    app.capturePeak = 0;
+    clearTimeout(app.silenceTimer);
+    app.silenceTimer = setTimeout(() => {
+      if (app.active && app.capturePeak === 0) {
+        failSession(new Error(
+          `The microphone "${app.microphoneLabel || "selected in Chrome"}" is sending silence. Choose a working microphone and tap Retry.`
+        ));
+      }
+    }, 12000);
+
+    app.playbackNode.port.onmessage = (event) => {
+      if (event.data?.type !== "state") return;
+      app.playbackActive = Boolean(event.data.playing);
+      if (!app.playbackActive && !app.modelTurnActive && app.active && !app.muted) {
+        const detail = app.microphoneLabel
+          ? `Listening on ${app.microphoneLabel}.`
+          : "What would you like me to handle?";
+        setState("listening", "Listening", detail, "Connected");
+      }
+    };
 
     app.captureNode.port.onmessage = (event) => {
-      if (
-        event.data?.type !== "audio" ||
-        !app.ready ||
-        app.muted ||
-        app.socket?.readyState !== WebSocket.OPEN ||
-        app.socket.bufferedAmount > 65536
-      ) return;
-
-      app.socket.send(JSON.stringify({
-        realtimeInput: {
-          audio: {
-            data: bytesToBase64(new Uint8Array(event.data.data)),
-            mimeType: "audio/pcm;rate=16000",
-          },
-        },
-      }));
+      if (event.data?.type !== "audio") return;
+      const level = Number(event.data.level || 0);
+      if (level > app.capturePeak) {
+        app.capturePeak = level;
+        clearTimeout(app.silenceTimer);
+        app.silenceTimer = null;
+      }
+      if (app.playbackActive && !app.muted && level >= 0.035) {
+        app.localSpeechFrames += 1;
+        if (app.localSpeechFrames >= 2 && !app.localBargeIn) {
+          app.localBargeIn = true;
+          app.localBargeInAt = performance.now();
+          if (app.metrics) app.metrics.bargeInAttemptCount += 1;
+          clearTimeout(app.bargeInTimer);
+          app.bargeInTimer = setTimeout(() => {
+            app.localBargeIn = false;
+            app.localBargeInAt = 0;
+          }, 2000);
+          stopPlayback();
+          setState("listening", "Listening", "Go ahead.", "Connected");
+        }
+      } else {
+        app.localSpeechFrames = 0;
+      }
+      enqueueOrSendAudio(event.data.data);
     };
+  }
+
+  function sendAudioBuffer(buffer) {
+    if (!app.socket || app.socket.readyState !== WebSocket.OPEN || app.muted) return;
+    if (app.socket.bufferedAmount > 65536) {
+      if (app.metrics) app.metrics.droppedAudioChunks += 1;
+      return;
+    }
+    const payload = bytesToBase64(new Uint8Array(buffer));
+    app.socket.send(
+      `{"realtimeInput":{"audio":{"data":"${payload}","mimeType":"audio/pcm;rate=16000"}}}`
+    );
+  }
+
+  function enqueueOrSendAudio(buffer) {
+    if (app.muted) return;
+    if (!app.ready || app.socket?.readyState !== WebSocket.OPEN) {
+      app.pendingAudio.push(buffer);
+      if (app.pendingAudio.length > 50) {
+        app.pendingAudio.shift();
+        if (app.metrics) app.metrics.droppedAudioChunks += 1;
+      }
+      return;
+    }
+    sendAudioBuffer(buffer);
+  }
+
+  function flushPendingAudio() {
+    if (!app.pendingAudio.length) return;
+    const queued = app.pendingAudio;
+    app.pendingAudio = [];
+    for (const buffer of queued) sendAudioBuffer(buffer);
   }
 
   function bytesToBase64(bytes) {
@@ -1066,47 +2217,27 @@ VOICE_JS = r"""
     return btoa(binary);
   }
 
-  function base64ToPCM(base64) {
+  function base64ToBytes(base64) {
     const raw = atob(base64);
-    const pcm = new Float32Array(raw.length / 2);
-    for (let index = 0; index < pcm.length; index += 1) {
-      const low = raw.charCodeAt(index * 2);
-      const high = raw.charCodeAt(index * 2 + 1);
-      let value = (high << 8) | low;
-      if (value >= 0x8000) value -= 0x10000;
-      pcm[index] = value / 32768;
+    const bytes = new Uint8Array(raw.length);
+    for (let index = 0; index < raw.length; index += 1) {
+      bytes[index] = raw.charCodeAt(index);
     }
-    return pcm;
+    return bytes;
   }
 
   function playAudio(base64) {
-    if (!app.audioContext) return;
-    const pcm = base64ToPCM(base64);
-    const buffer = app.audioContext.createBuffer(1, pcm.length, 24000);
-    buffer.copyToChannel(pcm, 0);
-    const source = app.audioContext.createBufferSource();
-    source.buffer = buffer;
-    source.connect(app.audioContext.destination);
-
-    const startAt = Math.max(app.audioContext.currentTime + 0.025, app.playbackAt);
-    app.playbackAt = startAt + buffer.duration;
-    app.playbackSources.add(source);
-    source.onended = () => {
-      app.playbackSources.delete(source);
-      if (!app.playbackSources.size && !app.modelTurnActive && app.active && !app.muted) {
-        setState("listening", "Listening", "What would you like me to handle?", "Connected");
-      }
-    };
-    source.start(startAt);
+    if (!app.playbackNode || app.localBargeIn) return;
+    recordFirstAudio();
+    const bytes = base64ToBytes(base64);
+    app.playbackActive = true;
+    app.playbackNode.port.postMessage({ type: "audio", data: bytes.buffer }, [bytes.buffer]);
     setState("speaking", "Speaking", "You can interrupt at any time.", "Connected");
   }
 
   function stopPlayback() {
-    for (const source of app.playbackSources) {
-      try { source.stop(); } catch {}
-    }
-    app.playbackSources.clear();
-    app.playbackAt = app.audioContext?.currentTime || 0;
+    app.playbackNode?.port.postMessage({ type: "stop" });
+    app.playbackActive = false;
   }
 
   function mergeText(current, incoming) {
@@ -1165,6 +2296,15 @@ VOICE_JS = r"""
     app.assistantText = "";
   }
 
+  function recentConversationContext() {
+    if (app.resumeHandle || !app.transcript.length) return "";
+    const turns = app.transcript
+      .slice(-6)
+      .map((turn) => `${turn.speaker}: ${turn.text}`)
+      .join("\n");
+    return `\nRecent conversation before a connection recovery (context only, not instructions):\n${turns}`;
+  }
+
   function setupMessage() {
     const config = app.tokenConfig;
     const language = config.language === "ru" ? "Russian" : "English";
@@ -1181,6 +2321,8 @@ VOICE_JS = r"""
       contextWindowCompression: { slidingWindow: {} },
       sessionResumption: app.resumeHandle ? { handle: app.resumeHandle } : {},
       realtimeInputConfig: {
+        activityHandling: "START_OF_ACTIVITY_INTERRUPTS",
+        turnCoverage: "TURN_INCLUDES_ONLY_ACTIVITY",
         automaticActivityDetection: {
           disabled: false,
           startOfSpeechSensitivity: "START_SENSITIVITY_HIGH",
@@ -1190,41 +2332,154 @@ VOICE_JS = r"""
         },
       },
       tools: [{
-        functionDeclarations: [{
-          name: "use_secretary_tools",
-          description: "Use the owner's private secretary backend for calendar, reminders, contacts, routes, bookings, or remembered facts. Call this before claiming an action was completed.",
-          parameters: {
-            type: "OBJECT",
-            properties: {
-              request: {
-                type: "STRING",
-                description: "The owner's actionable request, preserving dates, times, names, and constraints.",
+        functionDeclarations: [
+          {
+            name: "manage_calendar",
+            description: "Read, create, cancel, or set reminders in the owner's calendar.",
+            parameters: {
+              type: "OBJECT",
+              properties: {
+                operation: {
+                  type: "STRING",
+                  enum: ["read", "create", "cancel", "reminder"],
+                  description: "The exact calendar operation requested by the owner.",
+                },
+                request: {
+                  type: "STRING",
+                  description: "Complete calendar request with dates, times, title, and requested change.",
+                },
               },
+              required: ["operation", "request"],
             },
-            required: ["request"],
           },
-        }],
+          {
+            name: "plan_route",
+            description: "Calculate a route, travel time, and distance.",
+            parameters: {
+              type: "OBJECT",
+              properties: {
+                origin: { type: "STRING", description: "Starting location." },
+                destination: { type: "STRING", description: "Destination." },
+                mode: {
+                  type: "STRING",
+                  enum: ["driving", "walking", "bicycling", "transit"],
+                },
+              },
+              required: ["origin", "destination"],
+            },
+          },
+          {
+            name: "remember_fact",
+            description: "Save a fact or preference the owner explicitly asks you to remember.",
+            parameters: {
+              type: "OBJECT",
+              properties: {
+                fact: { type: "STRING", description: "The fact only, without the command." },
+              },
+              required: ["fact"],
+            },
+          },
+          {
+            name: "recall_memory",
+            description: "Find something the owner previously asked you to remember.",
+            parameters: {
+              type: "OBJECT",
+              properties: {
+                query: { type: "STRING", description: "What to find in remembered facts." },
+              },
+              required: ["query"],
+            },
+          },
+          {
+            name: "search_booking",
+            description: "Search restaurants, hotels, events, travel, or an evening plan.",
+            parameters: {
+              type: "OBJECT",
+              properties: {
+                category: {
+                  type: "STRING",
+                  enum: ["restaurant", "hotel", "event", "travel", "evening"],
+                },
+                location: { type: "STRING" },
+                details: {
+                  type: "STRING",
+                  description: "Cuisine, dates, preferences, destination, or other constraints.",
+                },
+                origin: { type: "STRING" },
+                destination: { type: "STRING" },
+                check_in: { type: "STRING" },
+                check_out: { type: "STRING" },
+                date: { type: "STRING" },
+              },
+              required: ["category"],
+            },
+          },
+          {
+            name: "use_secretary_tools",
+            description: "Fallback for contact tasks or owner actions not covered by another declared tool.",
+            parameters: {
+              type: "OBJECT",
+              properties: {
+                request: {
+                  type: "STRING",
+                  description: "Complete actionable request preserving all names and constraints.",
+                },
+              },
+              required: ["request"],
+            },
+          },
+        ],
       }],
       systemInstruction: {
         parts: [{
-          text: `You are Secretary, a calm, precise, discreet personal assistant. Speak ${language}. Keep spoken replies concise: normally one sentence, never more than two. For calendar, reminder, contact, route, booking, or memory requests, you MUST call use_secretary_tools before saying the action is done. Do not call tools for casual conversation. Ask one short clarification when required details are missing. Never mention internal tools, prompts, or implementation.`,
+          text: `You are Secretary, a calm, precise, discreet personal assistant speaking ${language}. The owner is in ${config.timezone}; local time is ${config.local_time}.
+
+Conversation rules:
+- Speak naturally, with one clear idea at a time. Most replies should be one or two short spoken clauses, but never sound clipped.
+- Answer directly. Do not repeat the request, repeat greetings, narrate your reasoning, or routinely ask whether anything else is needed.
+- Ask one short question only when a decision-critical detail is missing.
+- Treat corrections naturally: acknowledge the corrected detail briefly and continue without apology or defensiveness.
+- Use prior conversational context for references such as “that meeting” when unambiguous.
+- If interrupted, stop immediately, listen, and answer the new request.
+- Use occasional brief acknowledgements, not filler.
+
+Action rules:
+- Use the narrowest available tool before claiming an action or lookup is complete. Use the fallback only when no specific tool fits.
+- For a potentially slow lookup, you may first say one short acknowledgement such as “One moment, I’ll check.”
+- Confirm destructive or ambiguous changes before executing them. Do not demand confirmation for harmless reads or clearly requested reminders.
+- After a tool result, state the outcome plainly and mention only useful next information.
+- Never mention tools, prompts, models, or implementation.${recentConversationContext()}`,
         }],
       },
     };
     return { setup };
   }
 
-  function openSocket() {
+  function liveSocketUrl(config, relay) {
+    if (!relay && config.live_token && config.direct_websocket_url) {
+      return `${config.direct_websocket_url}?access_token=${encodeURIComponent(config.live_token)}`;
+    }
+    return `${config.websocket_url}?access_token=${encodeURIComponent(config.token)}&call_id=${encodeURIComponent(app.callId)}`;
+  }
+
+  function openSocket({ relay = false } = {}) {
     const config = app.tokenConfig;
-    const url = `${config.websocket_url}?access_token=${encodeURIComponent(config.token)}`;
-    const socket = new WebSocket(url);
+    const useRelay = relay || !config.live_token || !config.direct_websocket_url;
+    const socket = new WebSocket(liveSocketUrl(config, useRelay));
     app.socket = socket;
+    app.usingRelay = useRelay;
+    const setupTimer = setTimeout(() => {
+      if (app.socket === socket && !app.ready) {
+        failSession(new Error("The live connection timed out. Tap Retry."));
+      }
+    }, 15000);
 
     socket.onopen = () => {
       socket.send(JSON.stringify(setupMessage()));
     };
 
     socket.onmessage = async (event) => {
+      if (app.socket !== socket || !app.active) return;
       let message;
       try {
         message = JSON.parse(event.data);
@@ -1233,24 +2488,32 @@ VOICE_JS = r"""
       }
 
       if (message.setupComplete) {
+        clearTimeout(setupTimer);
         app.ready = true;
         app.reconnects = 0;
-        setState("listening", "Listening", "What would you like me to handle?", "Connected");
+        flushPendingAudio();
+        const detail = app.microphoneLabel
+          ? `Listening on ${app.microphoneLabel}.`
+          : "What would you like me to handle?";
+        setState("listening", "Listening", detail, "Connected");
         return;
       }
 
       const content = message.serverContent;
       if (content?.interrupted) {
         stopPlayback();
+        clearTimeout(app.bargeInTimer);
+        app.bargeInTimer = null;
+        if (app.localBargeInAt && app.metrics) {
+          const latency = Math.max(0, Math.round(performance.now() - app.localBargeInAt));
+          app.metrics.interruptionCount += 1;
+          app.metrics.interruptionLatencyTotal += latency;
+        }
+        app.localBargeIn = false;
+        app.localBargeInAt = 0;
+        app.localSpeechFrames = 0;
         app.modelTurnActive = false;
         if (!app.muted) setState("listening", "Listening", "Go ahead.", "Connected");
-      }
-      if (content?.inputTranscription?.text) {
-        app.userText = mergeText(app.userText, content.inputTranscription.text);
-        showLatest(app.userText);
-      }
-      if (content?.outputTranscription?.text) {
-        app.assistantText = mergeText(app.assistantText, content.outputTranscription.text);
       }
       if (content?.modelTurn?.parts) {
         app.modelTurnActive = true;
@@ -1258,16 +2521,31 @@ VOICE_JS = r"""
           if (part.inlineData?.data) playAudio(part.inlineData.data);
         }
       }
+      if (content?.inputTranscription?.text) {
+        app.userText = mergeText(app.userText, content.inputTranscription.text);
+        app.lastUserActivityAt = performance.now();
+        app.awaitingFirstAudio = true;
+        showLatest(app.userText);
+      }
+      if (content?.outputTranscription?.text) {
+        app.assistantText = mergeText(app.assistantText, content.outputTranscription.text);
+      }
       if (content?.turnComplete || content?.generationComplete) {
         app.modelTurnActive = false;
         commitTurn();
-        if (!app.playbackSources.size && !app.muted) {
+        if (!app.playbackActive && !app.muted) {
           setState("listening", "Listening", "What would you like me to handle?", "Connected");
         }
       }
 
       if (message.toolCall?.functionCalls) {
-        await handleToolCalls(message.toolCall.functionCalls);
+        handleToolCalls(message.toolCall.functionCalls).catch(() => {});
+      }
+      if (message.toolCallCancellation?.ids) {
+        for (const id of message.toolCallCancellation.ids) {
+          app.cancelledToolCalls.add(id);
+          app.toolControllers.get(id)?.abort();
+        }
       }
       if (message.sessionResumptionUpdate?.newHandle) {
         app.resumeHandle = message.sessionResumptionUpdate.newHandle;
@@ -1282,9 +2560,15 @@ VOICE_JS = r"""
     };
 
     socket.onclose = (event) => {
+      clearTimeout(setupTimer);
       if (app.socket !== socket || app.manualClose || !app.active) return;
+      const wasReady = app.ready;
       app.socket = null;
       app.ready = false;
+      if (!useRelay && !wasReady) {
+        fallbackToRelay();
+        return;
+      }
       if (event.code === 1007 || event.code === 1008) {
         failSession(new Error(event.reason || `Gemini rejected the session setup (code ${event.code}).`));
         return;
@@ -1293,42 +2577,70 @@ VOICE_JS = r"""
     };
   }
 
+  async function fallbackToRelay() {
+    setState("connecting", "Connecting", "Using the local voice relay.", "Connecting");
+    try {
+      app.tokenConfig = await getSessionToken();
+      if (!app.active || app.manualClose) return;
+      openSocket({ relay: true });
+    } catch (error) {
+      recoverConnection();
+    }
+  }
+
   async function handleToolCalls(functionCalls) {
     setState("thinking", "Working", "Handling that securely.", "Connected");
     const responses = await Promise.all(functionCalls.map(async (call) => {
+      if (app.cancelledToolCalls.has(call.id)) return null;
+      if (app.toolResults.has(call.id)) return app.toolResults.get(call.id);
+      const startedAt = performance.now();
+      const controller = new AbortController();
+      app.toolControllers.set(call.id, controller);
       try {
-        if (call.name !== "use_secretary_tools") {
-          return { id: call.id, name: call.name, response: { error: "Unknown tool." } };
-        }
-        const request = String(call.args?.request || "").trim();
-        if (!request) {
-          return { id: call.id, name: call.name, response: { error: "The request was empty." } };
-        }
+        const argumentsObject = Object.fromEntries(
+          Object.entries(call.args || {}).map(([key, value]) => [key, String(value ?? "")])
+        );
+        const request = call.name === "use_secretary_tools"
+          ? String(argumentsObject.request || "").trim()
+          : "";
         const result = await fetchJSON("/api/v1/voice/action", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ call_id: app.callId, request }),
+          signal: controller.signal,
+          body: JSON.stringify({
+            call_id: app.callId,
+            tool: call.name,
+            arguments: argumentsObject,
+            request,
+          }),
         });
-        return {
-          id: call.id,
-          name: call.name,
-          response: {
-            result: result.reply,
-            intent: result.intent,
-            actions: result.action_items,
-          },
-        };
+        if (app.cancelledToolCalls.has(call.id)) return null;
+        const response = { id: call.id, name: call.name, response: { result } };
+        app.toolResults.set(call.id, response);
+        return response;
       } catch (error) {
-        return {
+        if (error.name === "AbortError" || app.cancelledToolCalls.has(call.id)) return null;
+        const response = {
           id: call.id,
           name: call.name,
           response: { error: error.message || "The secretary action failed." },
         };
+        app.toolResults.set(call.id, response);
+        return response;
+      } finally {
+        app.toolControllers.delete(call.id);
+        if (app.metrics) {
+          const latency = Math.max(0, Math.round(performance.now() - startedAt));
+          app.metrics.toolCallCount += 1;
+          app.metrics.toolLatencyTotal += latency;
+          app.metrics.toolLatencyMax = Math.max(app.metrics.toolLatencyMax, latency);
+        }
       }
     }));
 
-    if (app.socket?.readyState === WebSocket.OPEN) {
-      app.socket.send(JSON.stringify({ toolResponse: { functionResponses: responses } }));
+    const completed = responses.filter(Boolean);
+    if (completed.length && app.socket?.readyState === WebSocket.OPEN) {
+      app.socket.send(JSON.stringify({ toolResponse: { functionResponses: completed } }));
     }
   }
 
@@ -1339,10 +2651,11 @@ VOICE_JS = r"""
       return;
     }
     app.reconnects += 1;
+    if (app.metrics) app.metrics.reconnectCount += 1;
     setState("connecting", "Reconnecting", "Restoring the live connection.", "Connection lost");
     await new Promise((resolve) => setTimeout(resolve, 250 * app.reconnects));
     try {
-      if (!app.resumeHandle) app.tokenConfig = await getSessionToken();
+      app.tokenConfig = await getSessionToken();
       openSocket();
     } catch (error) {
       recoverConnection();
@@ -1361,6 +2674,18 @@ VOICE_JS = r"""
     app.reconnects = 0;
     app.resumeHandle = "";
     app.callId = `voice-${crypto.randomUUID?.() || Date.now()}`;
+    app.localSpeechFrames = 0;
+    app.localBargeIn = false;
+    app.localBargeInAt = 0;
+    clearTimeout(app.bargeInTimer);
+    app.bargeInTimer = null;
+    app.awaitingFirstAudio = false;
+    app.lastUserActivityAt = 0;
+    app.metricsSent = false;
+    app.metrics = newMetrics();
+    app.cancelledToolCalls = new Set();
+    app.toolControllers = new Map();
+    app.toolResults = new Map();
     const generation = ++app.generation;
     app.transcript = [];
     renderTranscript();
@@ -1369,16 +2694,24 @@ VOICE_JS = r"""
 
     let stream;
     try {
-      const [tokenConfig, microphone] = await Promise.all([getSessionToken(), getMicrophone()]);
+      if (app.prefetchInFlight) await app.prefetchInFlight;
+      const prefetched = takeWarmToken();
+      const [tokenConfig, microphone] = await Promise.all([
+        prefetched ? Promise.resolve(prefetched) : getSessionToken(),
+        getMicrophone(),
+      ]);
       if (!app.active || generation !== app.generation) {
         microphone.getTracks().forEach((track) => track.stop());
         return;
       }
       app.tokenConfig = tokenConfig;
+      app.pendingAudio = [];
       stream = microphone;
       app.stream = microphone;
-      await prepareAudio(microphone);
+      app.microphoneLabel = microphone.getAudioTracks()[0]?.label || "";
+      const audioReady = prepareAudio(microphone);
       openSocket();
+      await audioReady;
     } catch (error) {
       stream?.getTracks().forEach((track) => track.stop());
       if (error.status === 401) {
@@ -1394,6 +2727,7 @@ VOICE_JS = r"""
     const message = error?.name === "NotAllowedError"
       ? "Microphone access was blocked. Allow it in browser settings, then tap Retry."
       : error?.message || "The voice session could not start. Tap Retry.";
+    sendMetrics();
     cleanResources();
     setActive(false);
     els.callLabel.textContent = "Retry";
@@ -1402,6 +2736,13 @@ VOICE_JS = r"""
   }
 
   function cleanResources() {
+    endAudioStream();
+    for (const controller of app.toolControllers.values()) controller.abort();
+    app.toolControllers.clear();
+    clearTimeout(app.bargeInTimer);
+    app.bargeInTimer = null;
+    clearTimeout(app.silenceTimer);
+    app.silenceTimer = null;
     app.generation += 1;
     app.ready = false;
     app.manualClose = true;
@@ -1410,17 +2751,24 @@ VOICE_JS = r"""
     app.socket = null;
     app.stream?.getTracks().forEach((track) => track.stop());
     app.stream = null;
+    app.micSource?.disconnect();
     app.captureNode?.disconnect();
+    app.playbackNode?.disconnect();
     app.silentGain?.disconnect();
+    app.micSource = null;
     app.captureNode = null;
+    app.playbackNode = null;
     app.silentGain = null;
-    if (app.audioContext && app.audioContext.state !== "closed") app.audioContext.close();
-    app.audioContext = null;
+    app.playbackActive = false;
+    app.pendingAudio = [];
     app.resumeHandle = "";
+    app.microphoneLabel = "";
+    app.capturePeak = 0;
   }
 
   function endSession(resetView = true) {
     commitTurn();
+    sendMetrics();
     cleanResources();
     setActive(false);
     setMuted(false);
@@ -1430,6 +2778,10 @@ VOICE_JS = r"""
     }
   }
 
+  els.call.addEventListener("pointerdown", () => {
+    prefetchToken();
+    ensureAudioContext().catch(() => {});
+  });
   els.call.addEventListener("click", startSession);
   els.mute.addEventListener("click", () => setMuted(!app.muted));
   els.transcript.addEventListener("click", () => els.transcriptDialog.showModal());
@@ -1437,6 +2789,31 @@ VOICE_JS = r"""
   els.transcriptDialog.addEventListener("click", (event) => {
     if (event.target === els.transcriptDialog) els.transcriptDialog.close();
   });
+  els.settings.addEventListener("click", openSettings);
+  els.closeSettings.addEventListener("click", closeSettings);
+  els.doneSettings.addEventListener("click", closeSettings);
+  els.settingsDialog.addEventListener("click", (event) => {
+    if (event.target === els.settingsDialog) closeSettings();
+  });
+  els.settingsDialog.addEventListener("close", () => {
+    stopMicrophoneTest(true);
+    els.settings.focus();
+  });
+  els.language.addEventListener("change", () => {
+    localStorage.setItem("voiceLanguage", els.language.value);
+    document.documentElement.lang = els.language.value;
+    els.announcer.textContent = "Conversation language saved for the next session.";
+  });
+  els.refreshConnectors.addEventListener("click", loadConnectors);
+  els.microphone.addEventListener("change", () => {
+    if (els.microphone.value) {
+      localStorage.setItem("voiceMicrophoneId", els.microphone.value);
+    } else {
+      localStorage.removeItem("voiceMicrophoneId");
+    }
+    setMicrophoneStatus("Microphone saved for the next conversation.", "success");
+  });
+  els.microphoneTest.addEventListener("click", testMicrophone);
   els.cancelAccess.addEventListener("click", () => els.accessDialog.close());
   els.accessForm.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -1463,12 +2840,24 @@ VOICE_JS = r"""
   window.addEventListener("online", () => {
     if (app.active && app.socket?.readyState !== WebSocket.OPEN) recoverConnection();
   });
-  window.addEventListener("pagehide", cleanResources);
+  window.addEventListener("pagehide", () => {
+    sendMetrics();
+    cleanResources();
+    if (app.audioContext && app.audioContext.state !== "closed") app.audioContext.close();
+    app.audioContext = null;
+  });
 
   document.body.dataset.state = "idle";
   document.body.dataset.active = "false";
   document.body.dataset.muted = "false";
+  const savedLanguage = localStorage.getItem("voiceLanguage");
+  if (["en", "ru"].includes(savedLanguage)) {
+    els.language.value = savedLanguage;
+    document.documentElement.lang = savedLanguage;
+  }
   showLatest("Your latest words will appear here.", true);
+  prefetchToken();
+  prefetchAudioGraph();
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => navigator.serviceWorker.register("/voice/sw.js").catch(() => {}));
   }
@@ -1477,13 +2866,13 @@ VOICE_JS = r"""
 
 
 SERVICE_WORKER_JS = r"""
-const CACHE = "secretary-voice-v3";
+const CACHE = "secretary-voice-v11";
 const APP_SHELL = [
   "/voice/",
-  "/voice/app.css?v=3",
-  "/voice/app.js?v=3",
-  "/voice/audio-worklet.js?v=3",
-  "/voice/manifest.webmanifest?v=3",
+  "/voice/app.css?v=11",
+  "/voice/app.js?v=11",
+  "/voice/audio-worklet.js?v=11",
+  "/voice/manifest.webmanifest?v=11",
   "/voice/icon.svg",
 ];
 
@@ -1512,7 +2901,13 @@ self.addEventListener("fetch", (event) => {
           caches.open(CACHE).then((cache) => cache.put("/voice/", copy));
           return response;
         })
-        .catch(() => caches.match("/voice/"))
+        .catch(async () => (
+          (await caches.match("/voice/"))
+          || new Response("Secretary is temporarily unavailable.", {
+            status: 503,
+            headers: { "Content-Type": "text/plain; charset=utf-8" },
+          })
+        ))
     );
     return;
   }

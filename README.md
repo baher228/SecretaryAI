@@ -23,6 +23,7 @@ AI-powered phone secretary that handles Telegram voice calls autonomously. Uses 
 - **OpenAI API key** — for text chat and agent reasoning ([get one here](https://platform.openai.com/api-keys))
 - **Google Calendar** (optional) — service account JSON for calendar integration
 - **Google Maps API key** (optional) — for ETA/distance lookups
+- **FFmpeg + FFprobe** — required for Telegram media when running outside Docker
 
 ## Quick Start
 
@@ -74,6 +75,13 @@ For phone or remote access, serve the app over HTTPS and set a long random
 `VOICE_APP_ACCESS_KEY`. The app asks for it once per browser session. The
 Gemini API key always stays on the server; the browser receives a single-use,
 short-lived Live API token.
+
+The voice app uses 20 ms audio chunks, a playback AudioWorklet, a direct
+Gemini Live WebSocket when possible, server-side turn detection, immediate
+local barge-in, session resumption, and typed calendar/route/memory/booking
+tools. At session end it logs aggregate latency, interruption, tool, dropped
+audio, and reconnect counts. It never includes audio or transcript content in
+those metrics.
 
 ### 3. Authenticate Telegram
 
@@ -201,6 +209,10 @@ ruff check src/
 # Run locally (without Docker)
 uvicorn secretary_ai.main:app --host 0.0.0.0 --port 8000 --app-dir src
 ```
+
+On Windows, make sure `ffmpeg.exe` and `ffprobe.exe` are on `PATH`. If Edge
+TTS is temporarily unreachable, the app automatically falls back to the local
+Windows SAPI voice.
 
 ## Stack
 
